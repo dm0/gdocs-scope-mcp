@@ -1,13 +1,15 @@
 """Convert markdown (with HTML) into google requests"""
+from typing import Iterable
+import re
 from bs4.element import PageElement, NavigableString
 
 from functools import lru_cache
 
 import mistune
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Tag
 
 # isort: split
-from models import GoogleDocumentParagraph, GoogleDocumentParagraphStyle, GoogleDocumentNamedStyleType, GoogleDocumentTextStyle, GoogleDocumentBaselineOffset, GoogleDocumentTextRun
+from models import GoogleDocumentParagraph, GoogleDocumentParagraphStyle, GoogleDocumentNamedStyleType, GoogleDocumentTextStyle, GoogleDocumentBaselineOffset, GoogleDocumentTextRun, GoogleDocumentAlignment
 
 
 @lru_cache
@@ -66,15 +68,60 @@ def _collect_styles(element: PageElement, stop: PageElement) -> GoogleDocumentTe
 
 
 def _convert_page_elements(
-    elements: list[PageElement], paragraph: GoogleDocumentParagraph
+    elements: Iterable[PageElement], paragraph: GoogleDocumentParagraph
 ) -> list[GoogleDocumentParagraph]:
+    added = []
+    last = paragraph
     for element in elements:
         if isinstance(element, NavigableString):
+            content = str(element)
             paragraph.elements.append(GoogleDocumentTextRun(
-                content=str(element),
+                content=content,
+                start_index=last.start_index + len(last),
                 text_style=_collect_styles(element, element)
             ))
-    return []
+            continue
+        if isinstance(element, Tag):
+            if element.name == 'p':
+                align = GoogleDocumentAlignment.START
+
+                if element.has_attr('style') and 'text-align' in element['style']:
+                    if 'center' in element['style']:
+                        align = GoogleDocumentAlignment.CENTER
+                    elif 'right' in element['style']:
+                        align = GoogleDocumentAlignment.END
+                    elif 'justify' in element['style']:
+                        align = GoogleDocumentAlignment.JUSTIFIED
+
+                added.append(GoogleDocumentParagraph(
+                    start_index=last.start_index + len(last),
+                    elements=[],
+                    paragraph_style=GoogleDocumentParagraphStyle(
+                        named_style_type=GoogleDocumentNamedStyleType.NORMAL_TEXT,
+                        alignment=align
+                    )
+                ))
+            elif match := re.match(r'h(?P<level>\d+)', element.name):
+                # FIXME: Implement
+                added.append(GoogleDocumentParagraph(
+                    start_index=last.start_index + len(last),
+                    elements=[],
+                    paragraph_style=GoogleDocumentParagraphStyle(
+                        named_style_type=GoogleDocumentNamedStyleType.from_level(int(match['level']))
+                    )
+                ))
+            # FIXME: Implement other supported elements
+            last = added[-1] if added else paragraph
+            added.extend(_convert_page_elements(
+                element.children,
+                last
+            ))
+            continue
+        # Unsupported element kind
+        # TODO: Log this
+        print(f'Skipped: {element}')
+        continue
+    return added
 
 
 def html_to_requests(html: str, start: int = 1):
@@ -91,9 +138,11 @@ def html_to_requests(html: str, start: int = 1):
         )
     ]
 
+    paragraphs.extend(_convert_page_elements(bs.contents, paragraphs[-1]))
+    return [p for p in paragraphs if len(p)]
+
     # Iterate through top-level block elements
     for element in bs.contents:
-        if isinstance()
         if element.name in ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6']:
             block_start = current_index
 
@@ -176,3 +225,27 @@ def html_to_requests(html: str, start: int = 1):
 def markdown_to_requests(markdown: str, start: int = 1):
     html = markdown_to_html(markdown)
     return html_to_requests(html, start)
+
+
+if __name__ == '__main__':
+    import argparse
+    import rich
+
+    console = rich.get_console()
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('md')
+
+    args = parser.parse_args()
+
+    console.print('HTML:')
+    html = markdown_to_html(args.md)
+    console.print(html)
+
+    console.print('REQUESTS:')
+    requests = html_to_requests(html)
+    console.print(requests)
+
+    console.print('MD:')
+    for r in requests:
+        console.print(r.to_markdown(None))

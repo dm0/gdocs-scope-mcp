@@ -1,9 +1,18 @@
 import re
 from abc import abstractmethod
+from collections.abc import Generator, Sequence
 from enum import Enum
-from typing import Annotated, Union, Literal, Generator, Sequence
+from typing import Annotated, Literal, Union
+
+from pydantic import (
+    BaseModel,
+    BeforeValidator,
+    Discriminator,
+    Field,
+    PlainSerializer,
+    field_validator,
+)
 from typing_extensions import Self
-from pydantic import BaseModel, Field, Discriminator, BeforeValidator, field_validator, PlainSerializer
 
 HEADING_LEVELS = {
     "TITLE": "Title",
@@ -415,6 +424,9 @@ class GoogleDocumentStructuralElement(GoogleDocumentRepresentableBase):
     def to_text(self, doc: 'GoogleDocument') -> str:
         return ""
 
+    def __len__(self) -> int:
+        return 0
+
 
 class GoogleDocumentLink(BaseModel, populate_by_name=True):
     url: str | None = None  # The only supported link type - external
@@ -486,6 +498,9 @@ class GoogleDocumentTextRun(GoogleDocumentStructuralElement):
 
     def to_text(self, doc: 'GoogleDocument') -> str:
         return self.content.replace("\u000b", "\n")
+
+    def __len__(self) -> int:
+        return len(self.content)
 
 
 class GoogleDocumentHorizontalRule(GoogleDocumentStructuralElement):
@@ -565,9 +580,11 @@ class GoogleDocumentParagraph(GoogleDocumentStructuralElement):
     def to_markdown(self, doc: 'GoogleDocument') -> str:
         style = self.paragraph_style
         text = "".join([el.to_markdown(doc) for el in self.elements])
-        if style.heading_id:
+        if style.heading_id or style.named_style_type.level < 8:
             prefix = "#" * (style.named_style_type.level + 1)
-            return f"{prefix} <a id={style.heading_id}></a>{text}\n\n"
+            if style.heading_id is not None:
+                return f"{prefix} <a id={style.heading_id}></a>{text}\n\n"
+            return f"{prefix} {text}\n\n"
         if self.bullet:
             list_props = doc.lists[self.bullet.list_id]
             level = self.bullet.nesting_level
@@ -593,6 +610,9 @@ class GoogleDocumentParagraph(GoogleDocumentStructuralElement):
     def to_text(self, doc: 'GoogleDocument') -> str:
         text = "".join([el.to_text(doc) for el in self.elements])
         return f"{text}\n\n"
+
+    def __len__(self) -> int:
+        return sum([len(el) for el in self.elements])
 
 
 def _unnest_document_content(data: dict) -> dict:
