@@ -33,6 +33,3 @@ Repository = "https://github.com/dbuxton/google-docs-mcp"
 
 [tool.setuptools]
 py-modules = ["server", "auth_setup", "docs_edit", "models"]
-
-[tool.ruff.lint.flake8-quotes]
-inline-quotes = "double"
