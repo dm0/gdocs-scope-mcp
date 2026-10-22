@@ -127,7 +127,20 @@ Token is saved to `~/.google-docs-mcp/token.json` by default. Override with `--o
 }
 ```
 
-**Local checkout during development:**
+### Local development
+
+`pyproject.toml` is the source of truth for dependencies, package modules, and
+command-line entry points. From the repository directory, install and run with:
+
+```bash
+uv sync
+uv run google-docs-mcp
+```
+
+Alternatively, install an editable checkout with `pip install -e .` in a virtual
+environment. Add or update dependencies in `pyproject.toml`.
+
+**MCP client configuration for a local checkout:**
 ```json
 {
   "mcpServers": {

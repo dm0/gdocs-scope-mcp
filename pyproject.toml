@@ -18,7 +18,9 @@ dependencies = [
     "fastmcp>=2.0.0",
     "pydantic~=2.13",
     "mistune~=3.2",
-    "beautifulsoup4~=4.15"
+    "beautifulsoup4~=4.15",
+    "rich",
+    "typing-extensions",
 ]
 
 [project.scripts]
@@ -32,4 +34,4 @@ Homepage = "https://github.com/dbuxton/google-docs-mcp"
 Repository = "https://github.com/dbuxton/google-docs-mcp"
 
 [tool.setuptools]
-py-modules = ["server", "auth_setup", "docs_edit", "models"]
+py-modules = ["server", "auth_setup", "docs_edit", "models", "md2requests"]
