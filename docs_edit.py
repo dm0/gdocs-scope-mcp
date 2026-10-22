@@ -35,10 +35,11 @@ Python API:
 """
 
 from __future__ import annotations
+from md2requests import markdown_to_requests
+from itertools import chain
 
 import argparse
 import json
-import logging
 import os
 import re
 import subprocess
@@ -51,7 +52,16 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-log = logging.getLogger("docs_edit")
+from fastmcp.utilities.logging import get_logger
+
+# isort: split
+from models import (
+    DocumentSection, GoogleDocument, GoogleDocumentParagraph,
+    GoogleDocumentTextRun, GoogleDocumentNamedStyleType, DocumentOutline,
+    DocumentTree, DocumentSubset, DocumentParagraph, InsertSucceedResponse, EditFailedResponse, SearchResult, ReplaceSucceedResponse
+)
+
+log = get_logger("docs_edit")
 
 # ---------------------------------------------------------------------------
 # Auth helpers
@@ -377,7 +387,6 @@ class Paragraph:
     end: int     # End of paragraph (exclusive)
     runs: list[TextRun]
 
-
 @dataclass
 class InlineStyleSpan:
     start: int
@@ -423,6 +432,85 @@ def _extract_paragraphs(doc: dict) -> list[Paragraph]:
             runs=runs,
         ))
     return paragraphs
+
+
+# def _paragraph_to_md(item: dict[str, ]):
+
+
+def _parse_document_tree(doc: dict) -> DocumentTree:
+    """Extract document hierarchy from a Docs API response."""
+
+    # Dummy section if there is text before headings
+    last: DocumentSection = DocumentSection(
+        title="",
+        id="",
+        level=GoogleDocumentNamedStyleType.NORMAL_TEXT.compact,
+        paragraphs=[
+            DocumentParagraph(start_index=0, end_index=0, text='', markdown='')
+        ]
+    )
+    top_level: list[DocumentSection] = [last]
+
+    google_doc = GoogleDocument.model_validate(doc)
+
+    headings = {}
+
+
+    for elem in google_doc.body.content:
+        if not isinstance(elem, GoogleDocumentParagraph):
+            last.paragraphs[-1].markdown += elem.to_markdown(google_doc)
+            last.paragraphs[-1].text += elem.to_text(google_doc)
+            last.paragraphs[-1].end_index = elem.end_index
+            continue
+        paragraph = DocumentParagraph(
+            start_index=elem.start_index,
+            end_index=elem.end_index,
+            text=elem.to_text(google_doc),
+            markdown=elem.to_markdown(google_doc)
+        )
+        if elem.paragraph_style.heading_id is None:
+            last.paragraphs.append(paragraph)
+            continue
+
+        section = DocumentSection(
+            title=paragraph.text,
+            id=elem.paragraph_style.heading_id,
+            level=elem.paragraph_style.named_style_type.compact,
+            ancestor_ids = [],
+            paragraphs=[paragraph],
+            sections=[]
+        )
+
+        headings[section.id] = section
+
+        # Nest under correct parent
+        parent = last
+        # Traverse up
+        if parent.level_index > section.level_index:
+            while parent and parent.level_index >= section.level_index:
+                parent = parent.parent
+        # The same level => use sibling parent
+        elif parent.level_index == section.level_index:
+            parent = parent.parent
+
+        section.parent = parent
+        if parent is not None:
+            parent.sections.append(section)
+            section.ancestor_ids = [*parent.ancestor_ids, parent.id]
+        else:
+            top_level.append(section)
+
+        last = section
+    # Remove dummy section if empty
+    if not top_level[0].markdown:
+        top_level = top_level[1:]
+    return DocumentTree(
+        sections=top_level,
+        headings=headings,
+        title=google_doc.title,
+        revision_id=google_doc.revision_id,
+        document_id=google_doc.document_id
+    )
 
 
 def _build_full_text_map(paragraphs: list[Paragraph]) -> tuple[str, list[tuple[int, int, int]]]:
@@ -502,9 +590,14 @@ def _parse_rich_text(text: str) -> list[RichParagraph]:
     Parse a small markdown-like subset into paragraph/list/style instructions.
 
     Supported block forms:
-      # Heading 1
-      ## Heading 2
-      ### Heading 3
+      # Title
+      ## Subtitle
+      ### Heading 1
+      #### Heading 2
+      ##### Heading 3
+      ###### Heading 4
+      ####### Heading 5
+      ######## Heading 6
       - bullet item
       * bullet item
       1. numbered item
@@ -513,20 +606,22 @@ def _parse_rich_text(text: str) -> list[RichParagraph]:
     lines = text.split("\n")
     paragraphs: list[RichParagraph] = []
 
+    heading_map = {
+        f"{'#'  * (style.level + 1)} ": style.value
+        for style in reversed(GoogleDocumentNamedStyleType)
+        if style.level < 8
+    }
+
     for raw_line in lines:
         line = raw_line
-        style = "NORMAL_TEXT"
+        style = GoogleDocumentNamedStyleType.NORMAL_TEXT.value
         bullet_preset: Optional[str] = None
 
-        if line.startswith("### "):
-            style = "HEADING_3"
-            line = line[4:]
-        elif line.startswith("## "):
-            style = "HEADING_2"
-            line = line[3:]
-        elif line.startswith("# "):
-            style = "HEADING_1"
-            line = line[2:]
+        for prefix, h_style in heading_map.items():
+            if line.startswith(prefix):
+                style = h_style
+                line = line[len(prefix):]
+                break
         else:
             bullet_match = re.match(r"^\s*[-*]\s+(.+)$", line)
             numbered_match = re.match(r"^\s*\d+[.)]\s+(.+)$", line)
@@ -596,16 +691,15 @@ def _build_insert_requests(
             cursor += 1
 
     for para, start, end, paragraph_end in paragraph_positions:
-        if para.style != "NORMAL_TEXT":
-            requests.append(
-                {
-                    "updateParagraphStyle": {
-                        "range": {"startIndex": start, "endIndex": max(end, start)},
-                        "paragraphStyle": {"namedStyleType": para.style},
-                        "fields": "namedStyleType",
-                    }
+        requests.append(
+            {
+                "updateParagraphStyle": {
+                    "range": {"startIndex": start, "endIndex": max(end, start)},
+                    "paragraphStyle": {"namedStyleType": para.style},
+                    "fields": "namedStyleType",
                 }
-            )
+            }
+        )
 
         for span in para.inline_styles:
             if span.end <= span.start:
@@ -682,35 +776,66 @@ def _render_comment_with_anchor_text(comment: str, anchor_text: str) -> str:
 # Core operations
 # ---------------------------------------------------------------------------
 
-def get(doc_id: str) -> dict:
+def read(
+    doc_id: str, heading_ids: list[str] | None = None
+) -> DocumentSubset:
     """
-    Fetch a Google Doc and return structured representation.
-
-    Returns:
-        {
-          "title": "Document Title",
-          "paragraphs": [
-            {"text": "...", "style": "HEADING_1", "start": 0, "end": 45}
-          ],
-          "plain_text": "full document text..."
-        }
+    Read Google document or its parts including all nested headings.
     """
     service = _get_service("docs", "v1")
     doc = _get_document(service, doc_id)
-    paragraphs = _extract_paragraphs(doc)
-    return {
-        "title": doc.get("title", ""),
-        "paragraphs": [
-            {
-                "text": p.text,
-                "style": p.style,
-                "start": p.start,
-                "end": p.end,
-            }
-            for p in paragraphs
-        ],
-        "plain_text": "\n".join(p.text for p in paragraphs),
-    }
+
+    google_doc = _parse_document_tree(doc)
+
+    if heading_ids is None:
+        items = [
+            section.subtree_markdown()
+            for section in google_doc.sections
+        ]
+    else:
+        items = [
+            item.subtree_markdown()
+            for section in google_doc.sections
+            for item in section.subtree()
+            if item.id in heading_ids
+        ]
+
+    return DocumentSubset(
+        subset_md=items,
+        selected_headings=heading_ids,
+        partial=heading_ids is not None,
+        title=google_doc.title,
+        revision_id=google_doc.revision_id,
+        document_id=google_doc.document_id,
+    )
+
+
+def get_tree(doc_id: str) -> DocumentOutline:
+    """
+    Fetch a Google Doc and return structured representation.
+    """
+    service = _get_service("docs", "v1")
+    doc = _get_document(service, doc_id)
+
+    tree = _parse_document_tree(doc)
+    flat_items = list(tree.descendants())
+
+    return DocumentOutline(
+        sections=flat_items,
+        title = tree.title,
+        revision_id=tree.revision_id,
+        document_id=tree.document_id
+    )
+
+
+def get_full_tree(doc_id: str) -> DocumentTree:
+    """
+    Fetch a Google Doc and return structured representation.
+    """
+    service = _get_service("docs", "v1")
+    doc = _get_document(service, doc_id)
+
+    return _parse_document_tree(doc)
 
 
 def search_replace(
@@ -718,8 +843,9 @@ def search_replace(
     find: str,
     replace: str,
     occurrence: int = 1,
+    heading_id: str | None = None,
     regex: bool = False,
-) -> dict:
+) -> ReplaceSucceedResponse | EditFailedResponse:
     """
     Find text in a document and replace a specific occurrence.
 
@@ -727,7 +853,9 @@ def search_replace(
         doc_id:     Google Doc ID
         find:       Text to find (or regex pattern if regex=True)
         replace:    Replacement text
-        occurrence: Which occurrence to replace (1-based). 0 = replace all.
+        occurrence: Which occurrence to replace (1-based). 0 = replace all
+                    only supported if regex=False and heading_id is None.
+        heading_id: Scope search to this heading and all nested subheadings.
         regex:      Treat `find` as a regular expression
 
     Returns:
@@ -736,7 +864,7 @@ def search_replace(
     service = _get_service("docs", "v1")
 
     # Replace-all: use the native replaceAllText API (fast, atomic)
-    if occurrence == 0 and not regex:
+    if occurrence == 0 and not regex and heading_id is None:
         result = service.documents().batchUpdate(
             documentId=doc_id,
             body={
@@ -753,41 +881,51 @@ def search_replace(
             .get("replaceAllText", {})
             .get("occurrencesChanged", 0)
         )
-        return {"ok": True, "replaced": find, "occurrences_changed": count}
+        return ReplaceSucceedResponse(replaced=find, occurrences_changed=count)
 
     # Targeted occurrence: find index manually
     doc = _get_document(service, doc_id)
-    paragraphs = _extract_paragraphs(doc)
-    full_text, text_map = _build_full_text_map(paragraphs)
-
-    # Build list of (ft_start, ft_end) tuples
-    if regex:
-        matches = [(m.start(), m.end()) for m in re.finditer(find, full_text)]
-    else:
-        matches = []
-        search_from = 0
-        while True:
-            pos = full_text.find(find, search_from)
-            if pos == -1:
-                break
-            matches.append((pos, pos + len(find)))
-            search_from = pos + 1
-
-    if not matches:
-        raise ValueError(f"Text not found in document: {find!r}")
-
-    target_idx = occurrence - 1
-    if target_idx >= len(matches):
-        raise ValueError(
-            f"Occurrence {occurrence} not found. Document has {len(matches)} occurrence(s) of {find!r}"
+    tree = _parse_document_tree(doc)
+    haystack = tree if heading_id is None else tree.headings.get(heading_id, None)
+    if haystack is None:
+        return EditFailedResponse(
+            description=f"Heading with id '{heading_id}' was not "
+                         "found in the document",
+            suggested_action="Run docs_get_tree to verify the exact heading id"
         )
 
-    ft_start, ft_end = matches[target_idx]
+    found = (
+        haystack.find_first(find, False, regex)
+        if occurrence == 1
+        else haystack.find_all(find, False, regex)
+    )
+    if not found:
+        where = 'document' if heading_id is None else 'requested heading'
+        return EditFailedResponse(
+            description=f"A paragraph containing '{find}' was not "
+                        f"found in the {where}",
+            suggested_action="Run docs_read to verify the exact text to search for"
+        )
 
-    doc_start = _full_text_pos_to_doc_index(ft_start, text_map)
-    doc_end = _full_text_pos_to_doc_index(ft_end - 1, text_map) + 1
+    if isinstance(found, SearchResult):
+        found = [found]
 
-    old_text = full_text[ft_start:ft_end]
+
+    target_idx = occurrence - 1
+    if target_idx >= len(found):
+        where = 'Document' if heading_id is None else 'Requested heading'
+        return EditFailedResponse(
+            description=f"Occurrence {occurrence} not found. {where} has "
+                        f"{len(found)} occurrence(s) of {find!r}",
+            suggested_action="Run docs_read to verify the exact occurrence number"
+        )
+
+    target = found[target_idx]
+
+    doc_start = target.paragraph.start_index + target.start_index
+    doc_end = target.paragraph.start_index + target.end_index
+
+    old_text = target.paragraph.text[target.start_index:target.end_index]
 
     # Apply: delete old text, then insert replacement at same position
     requests = []
@@ -819,35 +957,43 @@ def search_replace(
         body={"requests": requests},
     ).execute()
 
-    return {
-        "ok": True,
-        "replaced": old_text,
-        "at_index": doc_start,
-        "occurrences_found": len(matches),
-    }
+    return ReplaceSucceedResponse(
+        replaced=old_text, at_index=doc_start, occurrences_found=len(found))
 
 
-def insert_after(doc_id: str, anchor: str, text: str, rich: bool = True) -> dict:
+def insert_after(
+    doc_id: str, anchor: str, text: str,
+    heading_id: str | None = None, rich: bool = True
+) -> InsertSucceedResponse | EditFailedResponse:
     """
     Insert text as a new paragraph after the paragraph containing `anchor`.
 
     The inserted text becomes a separate paragraph (newline appended automatically).
+    The search can be scoped to the specified heading (and nested subheadings).
     """
     service = _get_service("docs", "v1")
     doc = _get_document(service, doc_id)
-    paragraphs = _extract_paragraphs(doc)
+    tree = _parse_document_tree(doc)
 
-    target = None
-    for p in paragraphs:
-        if anchor.lower() in p.text.lower():
-            target = p
-            break
+    haystack = tree if heading_id is None else tree.headings.get(heading_id, None)
+    if haystack is None:
+        return EditFailedResponse(
+            description=f"Heading with id '{heading_id}' was not "
+                         "found in the document",
+            suggested_action="Run docs_get_tree to verify the exact heading id"
+        )
 
-    if target is None:
-        raise ValueError(f"No paragraph containing anchor: {anchor!r}")
+    found = haystack.find_first(anchor, False)
+    if found is None:
+        where = 'document' if heading_id is None else 'requested heading'
+        return EditFailedResponse(
+            description=f"A paragraph containing anchor '{anchor}' was not "
+                        f"found in the {where}",
+            suggested_action="Run docs_read to verify the exact anchor text"
+        )
 
     # Insert after the end of the paragraph (doc end index includes the \n)
-    insert_index = target.end - 1  # position of the terminating \n
+    insert_index = found.paragraph.end_index
 
     requests, inserted_text = _build_insert_requests(
         insert_index,
@@ -860,34 +1006,48 @@ def insert_after(doc_id: str, anchor: str, text: str, rich: bool = True) -> dict
         body={"requests": requests},
     ).execute()
 
-    return {
-        "ok": True,
-        "inserted_after": target.text[:80],
-        "at_index": insert_index,
-        "rich": rich,
-        "inserted_text": inserted_text[:200],
-    }
+    return InsertSucceedResponse(
+        anchor=found.paragraph.text,
+        insert_position="before",
+        at_index=insert_index,
+        rich=rich,
+        inserted_text=inserted_text
+    )
 
 
-def insert_before(doc_id: str, anchor: str, text: str, rich: bool = True) -> dict:
+def insert_before(
+    doc_id: str, anchor: str, text: str,
+    heading_id: str | None = None, rich: bool = True
+) -> InsertSucceedResponse | EditFailedResponse:
     """
-    Insert text as a new paragraph before the paragraph containing `anchor`.
+    Insert text as a new paragraph after the paragraph containing `anchor`.
+
+    The inserted text becomes a separate paragraph (newline appended automatically).
+    The search can be scoped to the specified heading (and nested subheadings).
     """
     service = _get_service("docs", "v1")
     doc = _get_document(service, doc_id)
-    paragraphs = _extract_paragraphs(doc)
+    tree = _parse_document_tree(doc)
 
-    target = None
-    for p in paragraphs:
-        if anchor.lower() in p.text.lower():
-            target = p
-            break
+    haystack = tree if heading_id is None else tree.headings.get(heading_id, None)
+    if haystack is None:
+        return EditFailedResponse(
+            description=f"Heading with id '{heading_id}' was not "
+                         "found in the document",
+            suggested_action="Run docs_get_tree to verify the exact heading id"
+        )
 
-    if target is None:
-        raise ValueError(f"No paragraph containing anchor: {anchor!r}")
+    found = haystack.find_first(anchor, False)
+    if found is None:
+        where = 'document' if heading_id is None else 'requested heading'
+        return EditFailedResponse(
+            description=f"A paragraph containing anchor '{anchor}' was not "
+                        f"found in the {where}",
+            suggested_action="Run docs_read to verify the exact anchor text"
+        )
 
     # Insert at the start of the paragraph
-    insert_index = target.start
+    insert_index = found.paragraph.start_index
 
     requests, inserted_text = _build_insert_requests(
         insert_index,
@@ -900,13 +1060,13 @@ def insert_before(doc_id: str, anchor: str, text: str, rich: bool = True) -> dic
         body={"requests": requests},
     ).execute()
 
-    return {
-        "ok": True,
-        "inserted_before": target.text[:80],
-        "at_index": insert_index,
-        "rich": rich,
-        "inserted_text": inserted_text[:200],
-    }
+    return InsertSucceedResponse(
+        anchor=found.paragraph.text,
+        insert_position="after",
+        at_index=insert_index,
+        rich=rich,
+        inserted_text=inserted_text
+    )
 
 
 def delete_paragraph(doc_id: str, anchor: str) -> dict:
@@ -973,18 +1133,15 @@ def append(doc_id: str, text: str, rich: bool = True) -> dict:
         prefix="\n",
         rich=rich,
     )
+    requests = markdown_to_requests(text, start=insert_index)
     service.documents().batchUpdate(
         documentId=doc_id,
         body={"requests": requests},
     ).execute()
 
-    return {
-        "ok": True,
-        "appended": text[:80],
-        "at_index": insert_index,
-        "rich": rich,
-        "inserted_text": inserted_text[:200],
-    }
+    requests.append({'insert_index': insert_index, 'last_elem': last_elem})
+
+    return requests
 
 
 def batch_replace(doc_id: str, replacements: list[dict]) -> dict:
@@ -1328,7 +1485,7 @@ def main():
 
     try:
         if args.command == "get":
-            result = get(args.doc_id)
+            result = read(args.doc_id)
         elif args.command == "search_replace":
             result = search_replace(
                 args.doc_id, args.find, args.replace, args.occurrence, args.regex

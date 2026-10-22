@@ -39,13 +39,22 @@ import json
 import logging
 import os
 import sys
-from typing import Optional
+
+from models import (
+    DocumentOutline,
+    DocumentSubset,
+    DocumentTree,
+    EditFailedResponse,
+    InsertSucceedResponse,
+    ReplaceSucceedResponse,
+)
 
 # Add the docs-edit script to path (if running from the repo alongside that skill)
 # Or copy docs_edit.py here — we bundle a copy for standalone use.
 sys.path.insert(0, os.path.dirname(__file__))
 
 from fastmcp import FastMCP
+
 import docs_edit
 
 logging.basicConfig(level=logging.WARNING, stream=sys.stderr)
@@ -56,13 +65,14 @@ mcp = FastMCP(
 Surgical Google Docs editing — search by text, never by character index.
 
 EDITING TOOLS:
-  docs_get               Read document structure (paragraphs + plain text)
-  docs_search_replace    Find and replace (occurrence-targeted or all)
-  docs_insert_after      Insert paragraph after anchor text
-  docs_insert_before     Insert paragraph before anchor text
-  docs_delete_paragraph  Delete paragraphs matching anchor text
-  docs_append            Append paragraph at end of document
-  docs_batch_replace     Multiple replacements atomically (one API call)
+    docs_get_tree          Read hierarchical document tree (headings)
+    docs_read              Read document contents (paragraphs + plain)
+    docs_search_replace    Find and replace text (occurrence-targeted or all)
+    docs_insert_after      Insert text after a specified paragraph anchor text
+    docs_insert_before     Insert text before a specified paragraph anchor text
+    docs_delete_paragraph  Delete a paragraph matching the specified anchor text
+    docs_append            Append paragraph at the end of a document or heading section
+    docs_batch_replace     Multiple replacements atomically (one API call)
 
 COMMENT TOOLS:
   docs_add_comment       Add comment anchored to specific text
@@ -75,31 +85,71 @@ DOCUMENT MANAGEMENT:
   docs_list              List recent docs (optional search query)
   docs_create            Create a new document
 
-TYPICAL WORKFLOW:
-  1. docs_get — read document to understand structure
-  2. docs_search_replace / docs_insert_after / etc. — make targeted edits
-  3. docs_get — verify changes
+SURGICAL GOOGLE DOCS EDITING WORKFLOW:
+  1. Always run 'docs_get_tree' first to inspect the structural outline and
+     gather heading IDs.
+  2. Use 'docs_read' with specific 'heading_ids' to fetch content chunks
+     instead of downloading massive documents all at once.
+  3. Identify section scopes using the HTML heading ID tags (<a id="...">) and
+     choose distinct text phrases within those sections as editing anchors.
+  4. docs_search_replace / docs_insert_after / etc. — make targeted edits
+  5. docs_get_tree / docs_read — verify changes
   For review: docs_add_comment → docs_read_comments → docs_resolve_comment
 
 All edits preserve version history. Use short, distinctive anchor_text
-(a few unique words) for reliable text matching.
+(a few unique words) for reliable text matching and combine with heading ids
+to further reduce the scope.
 """.strip(),
 )
 
 
-@mcp.tool
-def docs_get(doc_id: str) -> str:
-    """
-    Read a Google Doc and return its structure as JSON.
+# @mcp.tool
+# def docs_full_tree(doc_id: str) -> DocumentTree:
+#     """
+#     Fetch a Google Doc and return structured representation.
 
-    Returns title, list of paragraphs (with text, style, start/end indices),
-    and the full plain text. Use this before editing to understand the document.
+#     Use this tool FIRST when encountering a document to locate target sections
+#     via their heading IDs, avoiding the need to read a massive document all at
+#     once.
+
+#     Args:
+#         doc_id: Google Doc ID (from the URL: /document/d/{DOC_ID}/edit)
+#     """
+#     return docs_edit.get_full_tree(doc_id)
+
+
+@mcp.tool
+def docs_get_tree(doc_id: str) -> DocumentOutline:
+    """
+    Fetch the structural outline (headings only) of a Google Doc as a JSON array.
+
+    Use this tool FIRST when encountering a document to locate target sections
+    via their heading IDs, avoiding the need to read a massive document all at
+    once.
 
     Args:
         doc_id: Google Doc ID (from the URL: /document/d/{DOC_ID}/edit)
     """
-    result = docs_edit.get(doc_id)
-    return json.dumps(result, indent=2)
+    return docs_edit.get_tree(doc_id)
+
+
+@mcp.tool
+def docs_read(doc_id: str, heading_ids: list[str] | None = None) -> DocumentSubset:
+    """
+    Read a Google document's content converted to Markdown.
+
+    You can read the entire document, or isolate specific sections by passing
+    a list of target heading_ids. Isolating sections reduces token usage on
+    large files.
+
+    Args:
+        doc_id: Google Doc ID from the URL.
+        heading_ids: Optional list of heading IDs to fetch.
+            Pass null or omit this field entirely to read the whole document.
+    """
+    if isinstance(heading_ids, str):
+        heading_ids = [heading_ids]
+    return docs_edit.read(doc_id, heading_ids)
 
 
 @mcp.tool
@@ -108,67 +158,82 @@ def docs_search_replace(
     find: str,
     replace: str,
     occurrence: int = 1,
+    heading_id: str | None = None,
     regex: bool = False,
-) -> str:
+) -> ReplaceSucceedResponse | EditFailedResponse:
     """
-    Find text in a Google Doc and replace a specific occurrence.
+    Find text and replace.
 
-    Preserves document history — uses real batchUpdate, not delete-and-rewrite.
+    Preserves history using batchUpdate.
+    Replace-all (occurrence=0) is only supported if regex=False and heading_id
+    is None.
 
     Args:
         doc_id:     Google Doc ID
         find:       Text to search for (or regex pattern if regex=True)
         replace:    Text to replace it with
-        occurrence: Which occurrence to replace. 1 = first (default), 2 = second,
-                    0 = replace ALL occurrences.
+        occurrence: Occurrence number to replace, 1-base.
+                    1 = first , 2 = second, etc. Use 0 to replace ALL
+                    occurrences. Replace all is only supported in non regular
+                    expression mode (regex=False) and heading_id is None.
+        heading_id: Restrict search and replaced to this heading and its
+                    subheadings. Use docs_get_tree to find heading IDs.
         regex:      If True, treat `find` as a Python regular expression
 
     Returns:
         JSON with: ok, replaced (original text), at_index, occurrences_found
     """
-    result = docs_edit.search_replace(doc_id, find, replace, occurrence, regex)
-    return json.dumps(result, indent=2)
+    return docs_edit.search_replace(
+        doc_id, find, replace, occurrence, heading_id, regex)
 
 
 @mcp.tool
-def docs_insert_after(doc_id: str, anchor: str, text: str, rich: bool = True) -> str:
+def docs_insert_after(
+    doc_id: str, anchor: str, text: str,
+    heading_id: str | None = None, rich: bool = True
+) -> InsertSucceedResponse | EditFailedResponse:
     """
     Insert a new paragraph immediately after the paragraph containing `anchor`.
 
     The anchor is matched case-insensitively as a substring of the paragraph.
 
+    The search can be scoped to the specified heading and nested subheadings.
+
     Rich formatting is ON by default. Set rich=False to insert literal text.
 
     Supported rich subset:
-      - # / ## / ### headings
+      - # / ## / ### / ... headings
       - - item / * item bullet lists
       - 1. item / 1) item numbered lists
       - **bold**, *italic*, ***bold italic***
 
     Args:
         doc_id: Google Doc ID
-        anchor: Text to search for to find the target paragraph
+        anchor: A unique, distinctive string of text within the target
+            paragraph. Choose a longer phrase to avoid accidental matches.
         text:   Text to insert as the new paragraph
+        heading_id: Narrow down search to this heading and subheadings
         rich:   If True (default), interpret simple markdown-like formatting natively
-
-    Returns:
-        JSON with: ok, inserted_after (matched paragraph preview), at_index
     """
-    result = docs_edit.insert_after(doc_id, anchor, text, rich=rich)
-    return json.dumps(result, indent=2)
+    return docs_edit.insert_after(doc_id, anchor, text, heading_id=heading_id, rich=rich)
 
 
 @mcp.tool
-def docs_insert_before(doc_id: str, anchor: str, text: str, rich: bool = True) -> str:
+def docs_insert_before(
+    doc_id: str, anchor: str, text: str,
+    heading_id: str | None = None, rich: bool = True
+) -> InsertSucceedResponse | EditFailedResponse:
     """
     Insert a new paragraph immediately before the paragraph containing `anchor`.
 
     The anchor is matched case-insensitively as a substring of the paragraph.
 
+    The search can be scoped to the specified heading and nested subheadings.
+
     Rich formatting is ON by default. Set rich=False to insert literal text.
 
     Supported rich subset:
-      - # / ## / ### headings
+      - # / ## / ### / ... headings
       - - item / * item bullet lists
       - 1. item / 1) item numbered lists
       - **bold**, *italic*, ***bold italic***
@@ -177,13 +242,10 @@ def docs_insert_before(doc_id: str, anchor: str, text: str, rich: bool = True) -
         doc_id: Google Doc ID
         anchor: Text to search for to find the target paragraph
         text:   Text to insert as the new paragraph
+        heading_id: Narrow down search to this heading and subheadings
         rich:   If True (default), interpret simple markdown-like formatting natively
-
-    Returns:
-        JSON with: ok, inserted_before (matched paragraph preview), at_index
     """
-    result = docs_edit.insert_before(doc_id, anchor, text, rich=rich)
-    return json.dumps(result, indent=2)
+    return docs_edit.insert_before(doc_id, anchor, text, rich=rich)
 
 
 @mcp.tool
@@ -206,7 +268,7 @@ def docs_delete_paragraph(doc_id: str, anchor: str) -> str:
 
 
 @mcp.tool
-def docs_append(doc_id: str, text: str, rich: bool = True) -> str:
+def docs_append(doc_id: str, text: str, rich: bool = True) -> list[dict]:
     """
     Append a new paragraph at the end of a Google Doc.
 
@@ -227,7 +289,7 @@ def docs_append(doc_id: str, text: str, rich: bool = True) -> str:
         JSON with: ok, appended (text preview), at_index
     """
     result = docs_edit.append(doc_id, text, rich=rich)
-    return json.dumps(result, indent=2)
+    return result
 
 
 @mcp.tool
@@ -470,6 +532,24 @@ def docs_list(query: str = "", limit: int = 20) -> str:
     creds = docs_edit._load_creds()
     drive = build("drive", "v3", credentials=creds)
 
+    use_drive = os.environ.get("GOOGLE_DOCS_USE_DRIVE", "false").lower() == "true"
+    drive_id = os.environ.get("GOOGLE_DOCS_DRIVE_ID", None)
+    drive_kwargs: dict[str, str | bool] = {}
+    if drive_id is not None:
+        use_drive = True
+        drive_kwargs = {
+            **drive_kwargs,
+            "corpora": "drive",
+            "driveId": drive_id
+        }
+    if use_drive:
+        drive_kwargs = {
+            **drive_kwargs,
+            "supportsAllDrives": True,
+            "includeItemsFromAllDrives": True
+        }
+
+
     q = 'mimeType="application/vnd.google-apps.document" and trashed=false'
     if query:
         q += f' and fullText contains "{query}"'
@@ -479,6 +559,7 @@ def docs_list(query: str = "", limit: int = 20) -> str:
         pageSize=min(limit, 100),
         fields="files(id, name, modifiedTime, webViewLink)",
         orderBy="modifiedTime desc",
+        **drive_kwargs
     ).execute()
 
     files = results.get("files", [])
