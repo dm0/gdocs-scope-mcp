@@ -8,10 +8,10 @@ Works in three modes:
   3. Code exchange  — you already have an auth code, just exchange it
 
 Usage:
-    python3 auth_setup.py --credentials ~/credentials.json
-    python3 auth_setup.py --credentials ~/credentials.json --headless
-    python3 auth_setup.py --credentials ~/credentials.json --code "4/0Afr..."
-    GOOGLE_DOCS_MCP_CLIENT_ID=... GOOGLE_DOCS_MCP_CLIENT_SECRET=... python3 auth_setup.py
+    google-docs-mcp-auth --credentials ~/credentials.json
+    google-docs-mcp-auth --credentials ~/credentials.json --headless
+    google-docs-mcp-auth --credentials ~/credentials.json --code "4/0Afr..."
+    GOOGLE_DOCS_MCP_CLIENT_ID=... GOOGLE_DOCS_MCP_CLIENT_SECRET=... google-docs-mcp-auth
 
 Get credentials.json:
     https://console.cloud.google.com/
@@ -242,19 +242,19 @@ def main():
         epilog="""
 Examples:
   # Normal (local browser opens automatically):
-  python3 auth_setup.py --credentials ~/credentials.json
+  google-docs-mcp-auth --credentials ~/credentials.json
 
   # Or use env vars instead of a credentials file:
-  GOOGLE_DOCS_MCP_CLIENT_ID=... GOOGLE_DOCS_MCP_CLIENT_SECRET=... python3 auth_setup.py
+  GOOGLE_DOCS_MCP_CLIENT_ID=... GOOGLE_DOCS_MCP_CLIENT_SECRET=... google-docs-mcp-auth
 
   # Headless / remote server (prints URL, paste back redirect):
-  python3 auth_setup.py --credentials ~/credentials.json --headless
+  google-docs-mcp-auth --credentials ~/credentials.json --headless
 
   # Already have an auth code:
-  python3 auth_setup.py --credentials ~/credentials.json --code "4/0Afr..."
+  google-docs-mcp-auth --credentials ~/credentials.json --code "4/0Afr..."
 
   # Custom token output path:
-  python3 auth_setup.py --credentials ~/credentials.json --out ~/my-token.json
+  google-docs-mcp-auth --credentials ~/credentials.json --out ~/my-token.json
         """,
     )
     parser.add_argument(

@@ -26,9 +26,9 @@ Auth (in priority order):
   6. GOG_KEYRING_PASSWORD env var    — auto-export from gog CLI
 
 Setup:
-  python3 auth_setup.py --credentials ~/credentials.json
-  python3 auth_setup.py --credentials ~/credentials.json --headless  # no browser
-  GOOGLE_DOCS_MCP_CLIENT_ID=... GOOGLE_DOCS_MCP_CLIENT_SECRET=... python3 auth_setup.py
+  google-docs-mcp-auth --credentials ~/credentials.json
+  google-docs-mcp-auth --credentials ~/credentials.json --headless  # no browser
+  GOOGLE_DOCS_MCP_CLIENT_ID=... GOOGLE_DOCS_MCP_CLIENT_SECRET=... google-docs-mcp-auth
 
 Transport: stdio (Claude Desktop / OpenClaw MCP config)
 """
@@ -40,7 +40,10 @@ import logging
 import os
 import sys
 
-from models import (
+from fastmcp import FastMCP
+
+from . import docs_edit
+from .models import (
     DocumentOutline,
     DocumentSubset,
     DocumentTree,
@@ -48,14 +51,6 @@ from models import (
     InsertSucceedResponse,
     ReplaceSucceedResponse,
 )
-
-# Add the docs-edit script to path (if running from the repo alongside that skill)
-# Or copy docs_edit.py here — we bundle a copy for standalone use.
-sys.path.insert(0, os.path.dirname(__file__))
-
-from fastmcp import FastMCP
-
-import docs_edit
 
 logging.basicConfig(level=logging.WARNING, stream=sys.stderr)
 

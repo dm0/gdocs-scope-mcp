@@ -140,6 +140,22 @@ uv run google-docs-mcp
 Alternatively, install an editable checkout with `pip install -e .` in a virtual
 environment. Add or update dependencies in `pyproject.toml`.
 
+The Python package lives in `src/google_docs_mcp/`; tests live in `tests/`.
+`uv sync` installs the package in editable mode and includes the development
+dependencies. Run the tests with:
+
+```bash
+uv run pytest
+```
+
+For pip-based development, install the editable package and pytest with
+`pip install -e . pytest`.
+
+The server can also be started with `uv run -m google_docs_mcp`. Existing
+`google-docs-mcp` and legacy `google-drive-mcp` commands remain available.
+Reinstall existing editable `uv tool` installations after this layout change
+so their package paths and command entry points are refreshed.
+
 **MCP client configuration for a local checkout:**
 ```json
 {
@@ -370,7 +386,7 @@ docs_add_comment(
 > A probe helper is included for this workstream:
 >
 > ```bash
-> python3 appscript_probe.py inspect-comment-api --doc-id <DOC_ID>
+> uv run -m google_docs_mcp.appscript_probe inspect-comment-api --doc-id <DOC_ID>
 > ```
 >
 > The probe now creates an API-executable deployment automatically. If account-level Apps Script access is still disabled, it stops with the settings-page message. If execution fails with a permission error, the next blocker is the shared standard Google Cloud project requirement documented at <https://developers.google.com/apps-script/guides/cloud-platform-projects>.

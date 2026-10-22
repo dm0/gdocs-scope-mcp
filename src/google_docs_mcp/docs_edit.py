@@ -6,13 +6,10 @@ Edits Google Docs in-place using real batchUpdate requests, preserving
 document history, comments, and suggestions. LLMs never touch indices.
 
 Usage (CLI):
-    docs_edit.py get <docId>
-    docs_edit.py search_replace <docId> --find "old" --replace "new" [--occurrence 1] [--regex]
-    docs_edit.py insert_after <docId> --anchor "paragraph text" --text "new text" [--plain]
-    docs_edit.py insert_before <docId> --anchor "paragraph text" --text "new text" [--plain]
-    docs_edit.py delete_paragraph <docId> --anchor "paragraph text"
-    docs_edit.py append <docId> --text "text to append" [--plain]
-    docs_edit.py batch_replace <docId> --replacements '[{"find":"a","replace":"b"}]'
+    uv run -m google_docs_mcp.docs_edit <command> <docId> [options]
+
+Commands: get, search_replace, insert_after, insert_before,
+          delete_paragraph, append, batch_replace.
 
 Rich mode is ON by default and supports a small markdown-like subset:
     # / ## / ### headings
@@ -30,12 +27,11 @@ Auth (in priority order):
 Legacy GOOGLE_DRIVE_MCP_* env var aliases still work.
 
 Python API:
-    from docs_edit import get, search_replace, insert_after, insert_before,
+    from google_docs_mcp.docs_edit import read, search_replace, insert_after, insert_before,
                           delete_paragraph, append, batch_replace
 """
 
 from __future__ import annotations
-from md2requests import markdown_to_requests
 from itertools import chain
 
 import argparse
@@ -55,7 +51,8 @@ from typing import Optional
 from fastmcp.utilities.logging import get_logger
 
 # isort: split
-from models import (
+from .md2requests import markdown_to_requests
+from .models import (
     DocumentSection, GoogleDocument, GoogleDocumentParagraph,
     GoogleDocumentTextRun, GoogleDocumentNamedStyleType, DocumentOutline,
     DocumentTree, DocumentSubset, DocumentParagraph, InsertSucceedResponse, EditFailedResponse, SearchResult, ReplaceSucceedResponse
@@ -160,7 +157,7 @@ def _load_token() -> dict:
 
     raise RuntimeError(
         'No Google credentials found.\n'
-        'Run: python3 auth_setup.py --credentials ~/credentials.json\n'
+        'Run: google-docs-mcp-auth --credentials ~/credentials.json\n'
         'Or set GOOGLE_DOCS_MCP_TOKEN to your token file path '
         '(legacy GOOGLE_DRIVE_MCP_TOKEN also works).'
     )
@@ -191,7 +188,7 @@ def _load_creds():
 
     if not client_id or not client_secret:
         raise RuntimeError(
-            'No OAuth client credentials found. Re-run auth_setup.py to generate a self-contained token, '
+            'No OAuth client credentials found. Re-run google-docs-mcp-auth to generate a self-contained token, '
             f'or set {CLIENT_ID_ENV_VAR} and {CLIENT_SECRET_ENV_VAR} '
             '(legacy GOOGLE_DRIVE_MCP_* aliases also work).'
         )

@@ -9,3 +9,5 @@ build/
 credentials.json
 token*.json
 .DS_Store
+.venv/
+.pytest_cache/

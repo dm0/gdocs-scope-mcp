@@ -25,7 +25,7 @@ Prerequisites:
   project is not enough for remote execution.
 
 Usage:
-    python3 appscript_probe.py inspect-comment-api --doc-id <DOC_ID>
+    uv run -m google_docs_mcp.appscript_probe inspect-comment-api --doc-id <DOC_ID>
 """
 
 from __future__ import annotations
@@ -37,7 +37,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-import docs_edit
+from . import docs_edit
 
 APPS_SCRIPT_SETTINGS_URL = 'https://script.google.com/home/usersettings'
 CLOUD_PROJECTS_GUIDE_URL = 'https://developers.google.com/apps-script/guides/cloud-platform-projects'

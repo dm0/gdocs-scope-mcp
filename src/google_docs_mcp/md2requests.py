@@ -9,7 +9,7 @@ from bs4 import BeautifulSoup, Tag
 from bs4.element import NavigableString, PageElement
 
 # isort: split
-from models import (
+from .models import (
     GoogleDocumentAlignment,
     GoogleDocumentBaselineOffset,
     GoogleDocumentNamedStyleType,
