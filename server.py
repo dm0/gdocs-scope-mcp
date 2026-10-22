@@ -34,21 +34,27 @@ Transport: stdio (Claude Desktop / OpenClaw MCP config)
 """
 
 from __future__ import annotations
-from models import (
-    DocumentOutline, DocumentSubset, DocumentTree, InsertSucceedResponse,
-    EditFailedResponse, ReplaceSucceedResponse
-)
 
 import json
 import logging
 import os
 import sys
 
+from models import (
+    DocumentOutline,
+    DocumentSubset,
+    DocumentTree,
+    EditFailedResponse,
+    InsertSucceedResponse,
+    ReplaceSucceedResponse,
+)
+
 # Add the docs-edit script to path (if running from the repo alongside that skill)
 # Or copy docs_edit.py here — we bundle a copy for standalone use.
 sys.path.insert(0, os.path.dirname(__file__))
 
 from fastmcp import FastMCP
+
 import docs_edit
 
 logging.basicConfig(level=logging.WARNING, stream=sys.stderr)
@@ -262,7 +268,7 @@ def docs_delete_paragraph(doc_id: str, anchor: str) -> str:
 
 
 @mcp.tool
-def docs_append(doc_id: str, text: str, rich: bool = True) -> str:
+def docs_append(doc_id: str, text: str, rich: bool = True) -> list[dict]:
     """
     Append a new paragraph at the end of a Google Doc.
 
@@ -283,7 +289,7 @@ def docs_append(doc_id: str, text: str, rich: bool = True) -> str:
         JSON with: ok, appended (text preview), at_index
     """
     result = docs_edit.append(doc_id, text, rich=rich)
-    return json.dumps(result, indent=2)
+    return result
 
 
 @mcp.tool

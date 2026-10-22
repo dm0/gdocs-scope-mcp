@@ -35,6 +35,7 @@ Python API:
 """
 
 from __future__ import annotations
+from md2requests import markdown_to_requests
 from itertools import chain
 
 import argparse
@@ -1132,18 +1133,15 @@ def append(doc_id: str, text: str, rich: bool = True) -> dict:
         prefix="\n",
         rich=rich,
     )
+    requests = markdown_to_requests(text, start=insert_index)
     service.documents().batchUpdate(
         documentId=doc_id,
         body={"requests": requests},
     ).execute()
 
-    return {
-        "ok": True,
-        "appended": text[:80],
-        "at_index": insert_index,
-        "rich": rich,
-        "inserted_text": inserted_text[:200],
-    }
+    requests.append({'insert_index': insert_index, 'last_elem': last_elem})
+
+    return requests
 
 
 def batch_replace(doc_id: str, replacements: list[dict]) -> dict:

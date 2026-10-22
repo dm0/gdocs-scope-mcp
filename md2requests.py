@@ -1,15 +1,23 @@
 """Convert markdown (with HTML) into google requests"""
-from typing import Iterable
+from rich.syntax import Syntax
 import re
-from bs4.element import PageElement, NavigableString
-
+from collections.abc import Iterable
 from functools import lru_cache
 
 import mistune
 from bs4 import BeautifulSoup, Tag
+from bs4.element import NavigableString, PageElement
 
 # isort: split
-from models import GoogleDocumentParagraph, GoogleDocumentParagraphStyle, GoogleDocumentNamedStyleType, GoogleDocumentTextStyle, GoogleDocumentBaselineOffset, GoogleDocumentTextRun, GoogleDocumentAlignment
+from models import (
+    GoogleDocumentAlignment,
+    GoogleDocumentBaselineOffset,
+    GoogleDocumentNamedStyleType,
+    GoogleDocumentParagraph,
+    GoogleDocumentParagraphStyle,
+    GoogleDocumentTextRun,
+    GoogleDocumentTextStyle,
+)
 
 
 @lru_cache
@@ -75,15 +83,22 @@ def _convert_page_elements(
     for element in elements:
         if isinstance(element, NavigableString):
             content = str(element)
-            paragraph.elements.append(GoogleDocumentTextRun(
+            start_index = last.start_index + len(last)
+            element = GoogleDocumentTextRun(
                 content=content,
-                start_index=last.start_index + len(last),
+                start_index=start_index,
                 text_style=_collect_styles(element, element)
-            ))
+            )
+            if not len(element):
+                continue
+            end_index = start_index + len(element)
+            element.end_index = end_index
+            last.elements.append(element)
+            last.end_index = end_index
             continue
         if isinstance(element, Tag):
             if element.name == 'p':
-                align = GoogleDocumentAlignment.START
+                align = GoogleDocumentAlignment.ALIGNMENT_UNSPECIFIED
 
                 if element.has_attr('style') and 'text-align' in element['style']:
                     if 'center' in element['style']:
@@ -124,11 +139,11 @@ def _convert_page_elements(
     return added
 
 
-def html_to_requests(html: str, start: int = 1):
+def html_to_gpars(
+    html: str, start: int = 0
+) -> list[GoogleDocumentParagraph]:
     bs = BeautifulSoup(html, 'html.parser')
-    requests = []
     current_index = start
-    block_start = current_index
     paragraphs: list[GoogleDocumentParagraph] = [
         GoogleDocumentParagraph(
             start_index=current_index,
@@ -139,96 +154,74 @@ def html_to_requests(html: str, start: int = 1):
     ]
 
     paragraphs.extend(_convert_page_elements(bs.contents, paragraphs[-1]))
-    return [p for p in paragraphs if len(p)]
+    return paragraphs
 
-    # Iterate through top-level block elements
-    for element in bs.contents:
-        if element.name in ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6']:
-            block_start = current_index
 
-            # 1. Process all inline elements inside this block to extract raw text
-            block_text = ""
-            inline_runs = [] # Keep track of style locations relative to block_text
-
-            for child in element.descendants:
-                if isinstance(child, str):
-                    # Track where this text run will land in absolute coordinates
-                    run_start = current_index + len(block_text)
-                    block_text += child
-                    run_end = current_index + len(block_text)
-
-                    # Inspect parents up to the block element to collect inline styles
-                    styles = {}
-                    parent = child.parent
-                    while parent and parent != element:
-                        if parent.name in ['b', 'strong']: styles['bold'] = True
-                        if parent.name in ['i', 'em']: styles['italic'] = True
-                        if parent.name == 'u': styles['underline'] = True
-                        if parent.name == 's': styles['strikethrough'] = True
-                        if parent.name == 'sup': styles['baselineOffset'] = 'SUPERSCRIPT'
-                        if parent.name == 'sub': styles['baselineOffset'] = 'SUBSCRIPT'
-                        parent = parent.parent
-
-                    if styles:
-                        inline_runs.append({'start': run_start, 'end': run_end, 'styles': styles})
-
-            # Google Docs blocks must end with a newline character
-            block_text += "\n"
-
-            # 2. Generate Text Insertion Request
-            requests.append({
-                "insertText": {
-                    "location": {"index": block_start},
-                    "text": block_text
-                }
-            })
-
-            # 3. Generate TextStyle Requests for the inline formatting
-            for run in inline_runs:
-                requests.append({
-                    "updateTextStyle": {
-                        "range": {"startIndex": run['start'], "endIndex": run['end']},
-                        "textStyle": run['styles'],
-                        "fields": ",".join(run['styles'].keys())
+def gpars_to_requests(
+    paragraphs: list[GoogleDocumentParagraph]
+):
+    requests = []
+    offset = 0
+    for p in paragraphs:
+        if not len(p):
+            continue
+        text_style_requests = []
+        text = '\n'
+        offset += 1
+        for element in p.elements:
+            if isinstance(element, GoogleDocumentTextRun):
+                text += element.content
+                style = element.text_style.model_dump(
+                    mode='json',  by_alias=True,
+                    exclude_defaults=True, exclude_unset=True
+                )
+                if not len(style):
+                    continue
+                text_style_requests.append({
+                    'updateTextStyle': {
+                        'range': {
+                            'startIndex': element.start_index + offset,
+                            'endIndex': element.end_index + offset
+                        },
+                        'textStyle': style,
+                        'fields': ','.join(style.keys())
                     }
                 })
-
-            # 4. Generate Paragraph Style Requests (Alignment & Heading Level)
-            p_style = {}
-            if element.name.startswith('h'):
-                p_style['namedStyleType'] = f"HEADING_{element.name[1]}"
-
-            if element.has_attr('style') and 'text-align' in element['style']:
-                if 'center' in element['style']: p_style['alignment'] = 'CENTER'
-                elif 'right' in element['style']: p_style['alignment'] = 'END'
-                elif 'justify' in element['style']: p_style['alignment'] = 'JUSTIFIED'
-
-            if p_style:
-                requests.append({
-                    "updateParagraphStyle": {
-                        "range": {"startIndex": block_start, "endIndex": block_start + len(block_text)},
-                        "paragraphStyle": p_style,
-                        "fields": ",".join(p_style.keys())
-                    }
-                })
-
-            # Update global index tracker
-            current_index += len(block_text)
-
-        elif element.name == 'table':
-            # Fallback to your Table processing logic here
-            # (Requires the separate fetch-and-reverse-fill step discussed previously)
-            pass
-
+        requests.append({
+            'insertText': {
+                'location': {
+                    'index': p.start_index + offset - 1
+                },
+                'text': text
+            }
+        })
+        style = p.paragraph_style.model_dump(
+            mode='json', by_alias=True,
+            exclude_defaults=True, exclude_unset=True
+        )
+        requests.append({
+            'updateParagraphStyle': {
+                'range': {
+                    'startIndex': p.start_index + offset,
+                    'endIndex': p.end_index + offset
+                },
+                'paragraphStyle': style,
+                'fields': ','.join(style.keys())
+            }
+        })
+        requests.extend(text_style_requests)
     return requests
 
-def markdown_to_requests(markdown: str, start: int = 1):
+
+def markdown_to_requests(markdown: str, start: int = 0):
     html = markdown_to_html(markdown)
-    return html_to_requests(html, start)
+    gpars = html_to_gpars(html, start)
+    return gpars_to_requests(gpars)
 
 
 if __name__ == '__main__':
     import argparse
+
     import rich
 
     console = rich.get_console()
@@ -240,12 +233,20 @@ if __name__ == '__main__':
 
     console.print('HTML:')
     html = markdown_to_html(args.md)
-    console.print(html)
+    console.print(Syntax(html, 'html'))
 
-    console.print('REQUESTS:')
-    requests = html_to_requests(html)
-    console.print(requests)
+    console.print('PARAGRAPHS:')
+    gpars = html_to_gpars(html)
+    for r in gpars:
+        console.print(r.model_dump(
+            mode='json', exclude_defaults=True, exclude_unset=True, by_alias=True
+        ))
 
     console.print('MD:')
+    md = ''.join([r.to_markdown(None) for r in gpars])
+    console.print(Syntax(md, 'md'))
+
+    console.print('REQUESTS:')
+    requests = gpars_to_requests(gpars)
     for r in requests:
-        console.print(r.to_markdown(None))
+        console.print(r)
