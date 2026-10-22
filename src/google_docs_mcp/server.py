@@ -43,6 +43,7 @@ import sys
 from fastmcp import FastMCP
 
 from . import docs_edit
+from .diagnostics import ServerInfo, capture_server_info
 from .models import (
     DocumentOutline,
     DocumentSubset,
@@ -51,13 +52,19 @@ from .models import (
     InsertSucceedResponse,
     ReplaceSucceedResponse,
 )
+from .tool_logging import ToolCallLoggingMiddleware, configure_logging
 
-logging.basicConfig(level=logging.WARNING, stream=sys.stderr)
+SERVER_INFO = capture_server_info()
 
 mcp = FastMCP(
     name='google-docs-mcp',
+    version=SERVER_INFO.package_version,
+    middleware=[ToolCallLoggingMiddleware()],
     instructions="""
 Surgical Google Docs editing — search by text, never by character index.
+
+DIAGNOSTICS:
+    server_info            Read process identity and startup source fingerprint
 
 EDITING TOOLS:
     docs_get_tree          Read hierarchical document tree (headings)
@@ -111,6 +118,19 @@ to further reduce the scope.
 #         doc_id: Google Doc ID (from the URL: /document/d/{DOC_ID}/edit)
 #     """
 #     return docs_edit.get_full_tree(doc_id)
+
+
+@mcp.tool(
+    title='Server info',
+    annotations={
+        'readOnlyHint': True,
+        'destructiveHint': False,
+        'openWorldHint': False,
+    },
+)
+def server_info() -> ServerInfo:
+    """Return startup identity and source fingerprint without Google access."""
+    return SERVER_INFO
 
 
 @mcp.tool
@@ -601,6 +621,9 @@ def docs_create(title: str, initial_text: str = '') -> str:
 
 
 def main():
+    configure_logging()
+    # Our logger has its own handler; this default is for third-party loggers.
+    logging.basicConfig(level=logging.WARNING, stream=sys.stderr)
     mcp.run(transport='stdio')
 
 

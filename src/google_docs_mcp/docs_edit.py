@@ -36,6 +36,7 @@ from itertools import chain
 
 import argparse
 import json
+import logging
 import os
 import re
 import subprocess
@@ -48,8 +49,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-from fastmcp.utilities.logging import get_logger
-
 # isort: split
 from .md2requests import markdown_to_requests
 from .models import (
@@ -58,7 +57,7 @@ from .models import (
     DocumentTree, DocumentSubset, DocumentParagraph, InsertSucceedResponse, EditFailedResponse, SearchResult, ReplaceSucceedResponse
 )
 
-log = get_logger('docs_edit')
+log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Auth helpers

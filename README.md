@@ -156,6 +156,46 @@ The server can also be started with `uv run -m google_docs_mcp`. Existing
 Reinstall existing editable `uv tool` installations after this layout change
 so their package paths and command entry points are refreshed.
 
+### Server diagnostics and logging
+
+The read-only `server_info()` tool returns the installed package version,
+SHA-256 source fingerprint, process ID, startup time (UTC), package path,
+Python executable/version, and FastMCP version. It does not require Google
+credentials. The same package version is advertised during MCP initialization.
+
+Identity is captured when the server module loads. Editing source files in an
+editable installation does not change a running server's reported fingerprint;
+restart it to load those edits. Compare the fingerprint to identify source
+changes and the process ID/startup time to identify a new server process.
+
+Tool calls log their name, duration in milliseconds, and success or failure to
+stderr. Successful calls use `INFO`; raised errors use `ERROR` with a traceback.
+Each line includes the process ID; `DEBUG` also logs when a call starts.
+Edit responses with `ok: false` also log at `ERROR`, including their failure
+description. Cancelled calls use `WARNING`. Arguments and returned document
+contents are not included in our tool-call log messages.
+
+Set `GOOGLE_DOCS_MCP_LOG_LEVEL` to `DEBUG`, `INFO` (default), `WARNING`, `ERROR`,
+or `CRITICAL`. For example:
+
+```bash
+GOOGLE_DOCS_MCP_LOG_LEVEL=DEBUG uv run google-docs-mcp
+```
+
+For a Codex STDIO connection, add the variable to the server's environment:
+
+```toml
+[mcp_servers.google_docs.env]
+GOOGLE_DOCS_MCP_TOKEN = "/home/you/.google-docs-mcp/token.json"
+GOOGLE_DOCS_MCP_LOG_LEVEL = "INFO"
+```
+
+Restart the MCP server after changing its environment. Use `INFO` to observe
+successful calls; `WARNING` and higher suppress them. Our package has a separate
+logger/handler, so this setting does not turn on verbose third-party logs.
+Stdout remains reserved for MCP protocol traffic. Codex captures the server's
+stderr in its logs.
+
 **MCP client configuration for a local checkout:**
 ```json
 {
