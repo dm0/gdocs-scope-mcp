@@ -60,7 +60,7 @@ import docs_edit
 logging.basicConfig(level=logging.WARNING, stream=sys.stderr)
 
 mcp = FastMCP(
-    name="google-docs-mcp",
+    name='google-docs-mcp',
     instructions="""
 Surgical Google Docs editing — search by text, never by character index.
 
@@ -390,23 +390,23 @@ def docs_reply_to_comment(doc_id: str, comment_id: str, reply: str) -> str:
     """
     from googleapiclient.discovery import build
     creds = docs_edit._load_creds()
-    drive = build("drive", "v3", credentials=creds)
+    drive = build('drive', 'v3', credentials=creds)
     result = drive.replies().create(
         fileId=doc_id,
         commentId=comment_id,
-        body={"content": reply},
-        fields="id,content,createdTime",
+        body={'content': reply},
+        fields='id,content,createdTime',
     ).execute()
     return json.dumps({
-        "ok": True,
-        "reply_id": result.get("id"),
-        "comment_id": comment_id,
-        "content": result.get("content"),
+        'ok': True,
+        'reply_id': result.get('id'),
+        'comment_id': comment_id,
+        'content': result.get('content'),
     }, indent=2)
 
 
 @mcp.tool
-def docs_resolve_comment(doc_id: str, comment_id: str, reply: str = "") -> str:
+def docs_resolve_comment(doc_id: str, comment_id: str, reply: str = '') -> str:
     """
     Resolve (close) a comment on a Google Doc, optionally with a final reply.
 
@@ -420,23 +420,23 @@ def docs_resolve_comment(doc_id: str, comment_id: str, reply: str = "") -> str:
     """
     from googleapiclient.discovery import build
     creds = docs_edit._load_creds()
-    drive = build("drive", "v3", credentials=creds)
+    drive = build('drive', 'v3', credentials=creds)
 
     if reply:
         drive.replies().create(
             fileId=doc_id,
             commentId=comment_id,
-            body={"content": reply},
-            fields="id",
+            body={'content': reply},
+            fields='id',
         ).execute()
 
     drive.comments().update(
         fileId=doc_id,
         commentId=comment_id,
-        body={"resolved": True},
-        fields="id,resolved",
+        body={'resolved': True},
+        fields='id,resolved',
     ).execute()
-    return json.dumps({"ok": True, "comment_id": comment_id, "resolved": True}, indent=2)
+    return json.dumps({'ok': True, 'comment_id': comment_id, 'resolved': True}, indent=2)
 
 
 @mcp.tool
@@ -453,9 +453,9 @@ def docs_delete_comment(doc_id: str, comment_id: str) -> str:
     """
     from googleapiclient.discovery import build
     creds = docs_edit._load_creds()
-    drive = build("drive", "v3", credentials=creds)
+    drive = build('drive', 'v3', credentials=creds)
     drive.comments().delete(fileId=doc_id, commentId=comment_id).execute()
-    return json.dumps({"ok": True, "comment_id": comment_id}, indent=2)
+    return json.dumps({'ok': True, 'comment_id': comment_id}, indent=2)
 
 
 @mcp.tool
@@ -479,45 +479,45 @@ def docs_read_comments(doc_id: str, include_resolved: bool = False) -> str:
     import json as _json
 
     creds = docs_edit._load_creds()
-    drive = build("drive", "v3", credentials=creds)
+    drive = build('drive', 'v3', credentials=creds)
 
     resp = drive.comments().list(
         fileId=doc_id,
-        fields="comments(id,content,anchor,resolved,deleted,author,createdTime,quotedFileContent)",
+        fields='comments(id,content,anchor,resolved,deleted,author,createdTime,quotedFileContent)',
         pageSize=100,
     ).execute()
 
     results = []
-    for c in resp.get("comments", []):
-        if not include_resolved and (c.get("deleted") or c.get("resolved")):
+    for c in resp.get('comments', []):
+        if not include_resolved and (c.get('deleted') or c.get('resolved')):
             continue
-        anchor = c.get("anchor") or ""
+        anchor = c.get('anchor') or ''
         named_range_id = None
         if anchor:
             try:
                 a = _json.loads(anchor)
-                for part in a.get("a", []):
-                    if part.get("t") == "r":
-                        named_range_id = part.get("v")
+                for part in a.get('a', []):
+                    if part.get('t') == 'r':
+                        named_range_id = part.get('v')
             except Exception:
                 pass
         results.append({
-            "id": c["id"],
-            "content": c.get("content", ""),
-            "author": c.get("author", {}).get("displayName", "?"),
-            "anchored": bool(anchor),
-            "named_range_id": named_range_id,
-            "quoted_text": (c.get("quotedFileContent") or {}).get("value", ""),
-            "resolved": c.get("resolved", False),
-            "deleted": c.get("deleted", False),
-            "created": c.get("createdTime", ""),
+            'id': c['id'],
+            'content': c.get('content', ''),
+            'author': c.get('author', {}).get('displayName', '?'),
+            'anchored': bool(anchor),
+            'named_range_id': named_range_id,
+            'quoted_text': (c.get('quotedFileContent') or {}).get('value', ''),
+            'resolved': c.get('resolved', False),
+            'deleted': c.get('deleted', False),
+            'created': c.get('createdTime', ''),
         })
 
-    return json.dumps({"count": len(results), "comments": results}, indent=2)
+    return json.dumps({'count': len(results), 'comments': results}, indent=2)
 
 
 @mcp.tool
-def docs_list(query: str = "", limit: int = 20) -> str:
+def docs_list(query: str = '', limit: int = 20) -> str:
     """
     List Google Docs from Drive, optionally filtered by a search query.
 
@@ -530,23 +530,23 @@ def docs_list(query: str = "", limit: int = 20) -> str:
     """
     from googleapiclient.discovery import build
     creds = docs_edit._load_creds()
-    drive = build("drive", "v3", credentials=creds)
+    drive = build('drive', 'v3', credentials=creds)
 
-    use_drive = os.environ.get("GOOGLE_DOCS_USE_DRIVE", "false").lower() == "true"
-    drive_id = os.environ.get("GOOGLE_DOCS_DRIVE_ID", None)
+    use_drive = os.environ.get('GOOGLE_DOCS_USE_DRIVE', 'false').lower() == 'true'
+    drive_id = os.environ.get('GOOGLE_DOCS_DRIVE_ID', None)
     drive_kwargs: dict[str, str | bool] = {}
     if drive_id is not None:
         use_drive = True
         drive_kwargs = {
             **drive_kwargs,
-            "corpora": "drive",
-            "driveId": drive_id
+            'corpora': 'drive',
+            'driveId': drive_id
         }
     if use_drive:
         drive_kwargs = {
             **drive_kwargs,
-            "supportsAllDrives": True,
-            "includeItemsFromAllDrives": True
+            'supportsAllDrives': True,
+            'includeItemsFromAllDrives': True
         }
 
 
@@ -557,17 +557,17 @@ def docs_list(query: str = "", limit: int = 20) -> str:
     results = drive.files().list(
         q=q,
         pageSize=min(limit, 100),
-        fields="files(id, name, modifiedTime, webViewLink)",
-        orderBy="modifiedTime desc",
+        fields='files(id, name, modifiedTime, webViewLink)',
+        orderBy='modifiedTime desc',
         **drive_kwargs
     ).execute()
 
-    files = results.get("files", [])
+    files = results.get('files', [])
     return json.dumps(files, indent=2)
 
 
 @mcp.tool
-def docs_create(title: str, initial_text: str = "") -> str:
+def docs_create(title: str, initial_text: str = '') -> str:
     """
     Create a new Google Doc with an optional initial paragraph of text.
 
@@ -581,33 +581,33 @@ def docs_create(title: str, initial_text: str = "") -> str:
     creds = docs_edit._load_creds()
     from googleapiclient.discovery import build
 
-    service = build("docs", "v1", credentials=creds)
-    doc = service.documents().create(body={"title": title}).execute()
-    doc_id = doc["documentId"]
+    service = build('docs', 'v1', credentials=creds)
+    doc = service.documents().create(body={'title': title}).execute()
+    doc_id = doc['documentId']
 
     if initial_text:
         service.documents().batchUpdate(
             documentId=doc_id,
             body={
-                "requests": [{
-                    "insertText": {
-                        "location": {"index": 1},
-                        "text": initial_text,
+                'requests': [{
+                    'insertText': {
+                        'location': {'index': 1},
+                        'text': initial_text,
                     }
                 }]
             },
         ).execute()
 
     return json.dumps({
-        "id": doc_id,
-        "title": title,
-        "webViewLink": f"https://docs.google.com/document/d/{doc_id}/edit",
+        'id': doc_id,
+        'title': title,
+        'webViewLink': f'https://docs.google.com/document/d/{doc_id}/edit',
     }, indent=2)
 
 
 def main():
-    mcp.run(transport="stdio")
+    mcp.run(transport='stdio')
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
