@@ -9,6 +9,7 @@ from typing import Annotated, Literal, Union
 from pydantic import (
     BaseModel,
     BeforeValidator,
+    ConfigDict,
     Discriminator,
     Field,
     PlainSerializer,
@@ -461,6 +462,128 @@ class ReplaceSucceedResponse(BaseModel):
         int | None,
         Field(description='Number of occurances that were replaced'),
     ] = None
+
+
+class DeleteParagraphResponse(BaseModel):
+    """Report deleted paragraphs using bounded text previews."""
+
+    ok: Literal[True] = True
+    deleted_count: int
+    deleted: Annotated[
+        list[str],
+        Field(
+            description='Deleted paragraph previews, up to 80 '
+            'characters each, in reverse document order'
+        ),
+    ]
+
+
+class BatchReplaceChange(BaseModel):
+    """Describe one replacement while preserving the existing with field."""
+
+    model_config = ConfigDict(serialize_by_alias=True)
+
+    replaced: str
+    replacement: Annotated[str, Field(alias='with')]
+    at_index: int
+
+
+class BatchReplaceResponse(BaseModel):
+    """Report the changes applied by one replacement batch."""
+
+    ok: Literal[True] = True
+    applied: int
+    changes: Annotated[
+        list[BatchReplaceChange],
+        Field(description='Applied changes in document order'),
+    ]
+
+
+class AddCommentResponse(BaseModel):
+    """Report a created comment and its optional bookmark navigation data."""
+
+    ok: Literal[True] = True
+    comment_id: str | None
+    anchored_to: str
+    at_index: int
+    named_range_id: str
+    comment_content: str
+    bookmark_id: str | None
+    bookmark_url: str | None
+    apps_script_id: str | None
+
+
+class ReplyCommentResponse(BaseModel):
+    """Identify a newly posted comment reply."""
+
+    ok: Literal[True] = True
+    reply_id: str | None
+    comment_id: str
+    content: str | None
+
+
+class ResolveCommentResponse(BaseModel):
+    """Confirm resolution of a document comment."""
+
+    ok: Literal[True] = True
+    comment_id: str
+    resolved: Literal[True] = True
+
+
+class DeleteCommentResponse(BaseModel):
+    """Identify the deleted comment."""
+
+    ok: Literal[True] = True
+    comment_id: str
+
+
+class DocumentComment(BaseModel):
+    """Expose comment text, anchor metadata, author, and resolution state."""
+
+    id: str
+    content: str
+    author: str
+    anchored: bool
+    named_range_id: str | None
+    quoted_text: str
+    resolved: bool
+    deleted: bool
+    created: str
+
+
+class ReadCommentsResponse(BaseModel):
+    """Return comments from the fetched page with a count of included items."""
+
+    count: int
+    comments: list[DocumentComment]
+
+
+class DocumentListItem(BaseModel):
+    """Describe a document found in Drive using its existing field names."""
+
+    model_config = ConfigDict(serialize_by_alias=True)
+
+    id: str
+    name: str
+    modified_time: Annotated[str | None, Field(alias='modifiedTime')] = None
+    web_view_link: Annotated[str | None, Field(alias='webViewLink')] = None
+
+
+class ListDocumentsResponse(BaseModel):
+    """Return a typed document list and the number of returned items."""
+
+    count: int
+    documents: list[DocumentListItem]
+
+
+class CreateDocumentResponse(BaseModel):
+    """Identify a newly created document and provide its browser URL."""
+
+    model_config = ConfigDict(serialize_by_alias=True)
+
+    id: str
+    title: str
+    web_view_link: Annotated[str, Field(alias='webViewLink')]
 
 
 class GoogleDocumentRepresentableBase(BaseModel, populate_by_name=True):

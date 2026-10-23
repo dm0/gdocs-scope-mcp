@@ -43,20 +43,41 @@ import sys
 
 from fastmcp import FastMCP
 from googleapiclient.discovery import build
+from pydantic import BaseModel, TypeAdapter
 
 from . import docs_edit
 from .diagnostics import ServerInfo, capture_server_info
 from .models import (
+    AddCommentResponse,
     AppendSucceedResponse,
+    BatchReplaceResponse,
+    CreateDocumentResponse,
+    DeleteCommentResponse,
+    DeleteParagraphResponse,
     DocumentOutline,
     DocumentSubset,
     EditFailedResponse,
     InsertSucceedResponse,
+    ListDocumentsResponse,
+    ReadCommentsResponse,
     ReplaceSucceedResponse,
+    ReplyCommentResponse,
+    ResolveCommentResponse,
 )
 from .tool_logging import ToolCallLoggingMiddleware, configure_logging
 
 SERVER_INFO = capture_server_info()
+
+
+def _edit_response_schema(success_model: type[BaseModel]) -> dict:
+    """Expose success/error objects without FastMCP's result wrapper."""
+    schema = TypeAdapter(success_model | EditFailedResponse).json_schema(
+        mode='serialization',
+    )
+    # Both branches are objects. Explicitly stating this prevents FastMCP
+    # from treating the union as a non-object result that needs wrapping.
+    return {'type': 'object', **schema}
+
 
 mcp = FastMCP(
     name='google-docs-mcp',
@@ -173,7 +194,7 @@ def docs_read(
     return docs_edit.read(doc_id, heading_ids)
 
 
-@mcp.tool
+@mcp.tool(output_schema=_edit_response_schema(ReplaceSucceedResponse))
 # Preserve the public positional calling convention.
 def docs_search_replace(  # noqa: PLR0917
     doc_id: str,
@@ -211,7 +232,7 @@ def docs_search_replace(  # noqa: PLR0917
     )
 
 
-@mcp.tool
+@mcp.tool(output_schema=_edit_response_schema(InsertSucceedResponse))
 def docs_insert_after(
     doc_id: str,
     anchor: str,
@@ -245,7 +266,7 @@ def docs_insert_after(
     )
 
 
-@mcp.tool
+@mcp.tool(output_schema=_edit_response_schema(InsertSucceedResponse))
 def docs_insert_before(
     doc_id: str,
     anchor: str,
@@ -285,7 +306,7 @@ def docs_insert_before(
 
 
 @mcp.tool
-def docs_delete_paragraph(doc_id: str, anchor: str) -> str:
+def docs_delete_paragraph(doc_id: str, anchor: str) -> DeleteParagraphResponse:
     """
     Delete the paragraph(s) containing `anchor` text.
 
@@ -298,11 +319,12 @@ def docs_delete_paragraph(doc_id: str, anchor: str) -> str:
 
     Returns
     -------
-        JSON with: ok, deleted_count, deleted (list of deleted paragraph
-        previews)
+        A structured object with ok, deleted_count, and deleted (paragraph
+        previews up to 80 characters each, in reverse document order).
     """
-    result = docs_edit.delete_paragraph(doc_id, anchor)
-    return json.dumps(result, indent=2)
+    return DeleteParagraphResponse.model_validate(
+        docs_edit.delete_paragraph(doc_id, anchor),
+    )
 
 
 @mcp.tool
@@ -336,7 +358,9 @@ def docs_append(
 
 
 @mcp.tool
-def docs_batch_replace(doc_id: str, replacements_json: str) -> str:
+def docs_batch_replace(
+    doc_id: str, replacements_json: str
+) -> BatchReplaceResponse:
     """
     Apply multiple find→replace operations atomically in a single batchUpdate.
 
@@ -356,11 +380,13 @@ def docs_batch_replace(doc_id: str, replacements_json: str) -> str:
 
     Returns
     -------
-        JSON with: ok, applied (count), changes (list of what changed)
+        A structured object with ok, applied (count), and changes in document
+        order. Each change has replaced, with (replacement text), and at_index.
     """
     replacements = json.loads(replacements_json)
-    result = docs_edit.batch_replace(doc_id, replacements)
-    return json.dumps(result, indent=2)
+    return BatchReplaceResponse.model_validate(
+        docs_edit.batch_replace(doc_id, replacements),
+    )
 
 
 @mcp.tool
@@ -372,7 +398,7 @@ def docs_add_comment(  # noqa: PLR0917
     occurrence: int = 1,
     include_anchor_text: bool = True,
     bookmark_jump: bool = False,
-) -> str:
+) -> AddCommentResponse:
     """
     Add a comment anchored to specific text in a Google Doc.
 
@@ -413,8 +439,9 @@ def docs_add_comment(  # noqa: PLR0917
 
     Returns
     -------
-        JSON with: ok, comment_id, anchored_to (matched text), at_index,
-        named_range_id
+        A structured object with ok, comment_id, anchored_to (matched text),
+        at_index, named_range_id, comment_content, and optional bookmark_id,
+        bookmark_url, and apps_script_id (null when bookmarks are disabled).
     """
     result = docs_edit.add_comment(
         doc_id,
@@ -424,11 +451,13 @@ def docs_add_comment(  # noqa: PLR0917
         include_anchor_text=include_anchor_text,
         bookmark_jump=bookmark_jump,
     )
-    return json.dumps(result, indent=2)
+    return AddCommentResponse.model_validate(result)
 
 
 @mcp.tool
-def docs_reply_to_comment(doc_id: str, comment_id: str, reply: str) -> str:
+def docs_reply_to_comment(
+    doc_id: str, comment_id: str, reply: str
+) -> ReplyCommentResponse:
     """
     Reply to an existing comment on a Google Doc.
 
@@ -439,7 +468,7 @@ def docs_reply_to_comment(doc_id: str, comment_id: str, reply: str) -> str:
 
     Returns
     -------
-        JSON with: ok, reply_id, comment_id, content
+        A structured object with ok, reply_id, comment_id, and content.
     """
     creds = docs_edit._load_creds()
     drive = build('drive', 'v3', credentials=creds)
@@ -453,19 +482,17 @@ def docs_reply_to_comment(doc_id: str, comment_id: str, reply: str) -> str:
         )
         .execute()
     )
-    return json.dumps(
-        {
-            'ok': True,
-            'reply_id': result.get('id'),
-            'comment_id': comment_id,
-            'content': result.get('content'),
-        },
-        indent=2,
+    return ReplyCommentResponse(
+        reply_id=result.get('id'),
+        comment_id=comment_id,
+        content=result.get('content'),
     )
 
 
 @mcp.tool
-def docs_resolve_comment(doc_id: str, comment_id: str, reply: str = '') -> str:
+def docs_resolve_comment(
+    doc_id: str, comment_id: str, reply: str = ''
+) -> ResolveCommentResponse:
     """
     Resolve (close) a comment on a Google Doc, optionally with a final reply.
 
@@ -476,7 +503,7 @@ def docs_resolve_comment(doc_id: str, comment_id: str, reply: str = '') -> str:
 
     Returns
     -------
-        JSON with: ok, comment_id, resolved
+        A structured object with ok, comment_id, and resolved=True.
     """
     creds = docs_edit._load_creds()
     drive = build('drive', 'v3', credentials=creds)
@@ -495,13 +522,11 @@ def docs_resolve_comment(doc_id: str, comment_id: str, reply: str = '') -> str:
         body={'resolved': True},
         fields='id,resolved',
     ).execute()
-    return json.dumps(
-        {'ok': True, 'comment_id': comment_id, 'resolved': True}, indent=2
-    )
+    return ResolveCommentResponse(comment_id=comment_id)
 
 
 @mcp.tool
-def docs_delete_comment(doc_id: str, comment_id: str) -> str:
+def docs_delete_comment(doc_id: str, comment_id: str) -> DeleteCommentResponse:
     """
     Delete a comment from a Google Doc.
 
@@ -511,18 +536,20 @@ def docs_delete_comment(doc_id: str, comment_id: str) -> str:
 
     Returns
     -------
-        JSON with: ok, comment_id
+        A structured object with ok and comment_id.
     """
     creds = docs_edit._load_creds()
     drive = build('drive', 'v3', credentials=creds)
     drive.comments().delete(fileId=doc_id, commentId=comment_id).execute()
-    return json.dumps({'ok': True, 'comment_id': comment_id}, indent=2)
+    return DeleteCommentResponse(comment_id=comment_id)
 
 
 @mcp.tool
-def docs_read_comments(doc_id: str, include_resolved: bool = False) -> str:
+def docs_read_comments(
+    doc_id: str, include_resolved: bool = False
+) -> ReadCommentsResponse:
     """
-    Read all comments on a Google Doc.
+    Read a page of up to 100 comments on a Google Doc.
 
     Returns each comment with its content, author, anchor status, and whether
     it's resolved or deleted. Useful for auditing what comments exist and
@@ -534,9 +561,10 @@ def docs_read_comments(doc_id: str, include_resolved: bool = False) -> str:
 
     Returns
     -------
-        JSON array of comments with id, content, author, anchored, resolved,
-        deleted,
-        anchored_to (the named range id if anchored), created_time
+        A structured object with count and comments. Each comment has id,
+        content, author, anchored, named_range_id, quoted_text, resolved,
+        deleted, and created. Count includes only returned items after
+        filtering; additional pages are not fetched.
     """
     creds = docs_edit._load_creds()
     drive = build('drive', 'v3', credentials=creds)
@@ -583,21 +611,23 @@ def docs_read_comments(doc_id: str, include_resolved: bool = False) -> str:
             }
         )
 
-    return json.dumps({'count': len(results), 'comments': results}, indent=2)
+    return ReadCommentsResponse(count=len(results), comments=results)
 
 
 @mcp.tool
-def docs_list(query: str = '', limit: int = 20) -> str:
+def docs_list(query: str = '', limit: int = 20) -> ListDocumentsResponse:
     """
     List Google Docs from Drive, optionally filtered by a search query.
 
     Args:
         query: Optional search terms (searches title and content)
-        limit: Maximum number of results (default 20)
+        limit: Maximum number of results (default 20, capped at 100).
 
     Returns
     -------
-        JSON array of {id, name, modifiedTime, webViewLink}
+        A structured object with count and documents. Each document has id,
+        name, modifiedTime, and webViewLink. Count covers this response only;
+        additional pages are not fetched.
     """
     creds = docs_edit._load_creds()
     drive = build('drive', 'v3', credentials=creds)
@@ -638,11 +668,11 @@ def docs_list(query: str = '', limit: int = 20) -> str:
     )
 
     files = results.get('files', [])
-    return json.dumps(files, indent=2)
+    return ListDocumentsResponse(count=len(files), documents=files)
 
 
 @mcp.tool
-def docs_create(title: str, initial_text: str = '') -> str:
+def docs_create(title: str, initial_text: str = '') -> CreateDocumentResponse:
     """
     Create a new Google Doc with an optional initial paragraph of text.
 
@@ -652,7 +682,7 @@ def docs_create(title: str, initial_text: str = '') -> str:
 
     Returns
     -------
-        JSON with: id, title, webViewLink
+        A structured object with id, title, and webViewLink.
     """
     creds = docs_edit._load_creds()
     service = build('docs', 'v1', credentials=creds)
@@ -674,13 +704,10 @@ def docs_create(title: str, initial_text: str = '') -> str:
             },
         ).execute()
 
-    return json.dumps(
-        {
-            'id': doc_id,
-            'title': title,
-            'webViewLink': f'https://docs.google.com/document/d/{doc_id}/edit',
-        },
-        indent=2,
+    return CreateDocumentResponse(
+        id=doc_id,
+        title=title,
+        webViewLink=f'https://docs.google.com/document/d/{doc_id}/edit',
     )
 
 

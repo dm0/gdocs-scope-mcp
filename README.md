@@ -8,6 +8,29 @@ Compatibility note: the repo, package, CLI, env vars, and default token path now
 
 Indexing note: when the MCP reads document content before planning index-based edits, it requests `suggestionsViewMode=SUGGESTIONS_INLINE`. That keeps returned indices aligned for later `documents.batchUpdate` calls when the doc contains suggestions.
 
+## MCP result contracts
+
+All 16 tools return structured JSON objects with typed output schemas. The
+MCP text content contains the same JSON object for text-only clients; results
+are not JSON-encoded strings, and edit results have no outer `result` wrapper.
+
+- Insert and replace tools expose either their typed success fields with
+  `ok: true` or `ok: false`, `description`, and `suggested_action` directly.
+  These domain failures remain ordinary tool results. Execution exceptions
+  retain MCP's error behavior.
+- `docs_list` returns `{count, documents}` rather than a bare array. Document
+  fields retain `id`, `name`, `modifiedTime`, and `webViewLink`; the latter two
+  are nullable when Drive omits them.
+- `docs_read_comments` returns `{count, comments}`. Each comment exposes its
+  text, author, anchor metadata, and resolved/deleted state as typed fields.
+- Existing fields such as `with` in batch changes and bookmark metadata in
+  comment creation are preserved. The input `replacements_json` remains a
+  JSON string for compatibility.
+
+List counts describe returned items, not the total in Drive or the document.
+These tools still fetch only one page. Clients using the previous JSON-string
+or `result`-wrapped outputs must switch to the direct structured objects.
+
 ## Why
 
 The Google Docs API uses **character indices** for every edit. LLMs are bad at counting characters. Everyone ends up deleting and rewriting entire documents, which destroys version history, comments, and collaborator attribution.
