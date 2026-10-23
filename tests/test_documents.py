@@ -82,3 +82,54 @@ def test_markdown_preserves_inline_emphasis():
     assert html == (
         '<p>A <strong>bold</strong> and <em>italic</em> sentence.</p>\n'
     )
+
+
+@pytest.fixture
+def regex_document():
+    """Keep every regex match in one paragraph to isolate case handling."""
+    text = 'Ab7 !\n'
+    section = DocumentSection(
+        title='Example', id='example', level='H1',
+        paragraphs=[DocumentParagraph(
+            start_index=1, end_index=1 + len(text), text=text, markdown=text,
+        )],
+    )
+    return DocumentTree(
+        title='Example', document_id='example', revision_id='revision',
+        sections=[section], headings={'example': section},
+    )
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason='Case-insensitive search lowercases regex character-class escapes.',
+)
+@pytest.mark.parametrize('scope', ['document', 'section'])
+@pytest.mark.parametrize('first', [False, True])
+@pytest.mark.parametrize(
+    ('pattern', 'expected_spans'),
+    [
+        (r'\S+', [(0, 3), (4, 5)]),
+        (r'\D+', [(0, 2), (3, 6)]),
+        (r'\W+', [(3, 6)]),
+    ],
+)
+def test_case_insensitive_regex_preserves_character_classes(
+    regex_document, *, scope, first, pattern, expected_spans,
+):
+    """Case-insensitive matching must retain the original regex semantics."""
+    target = (
+        regex_document if scope == 'document'
+        else regex_document.headings['example']
+    )
+    if first:
+        match = target.find_first(pattern, case_sensitive=False, regex=True)
+        assert match is not None
+        matches = [match]
+        expected_spans = expected_spans[:1]
+    else:
+        matches = target.find_all(pattern, case_sensitive=False, regex=True)
+
+    assert [
+        (match.start_index, match.end_index) for match in matches
+    ] == expected_spans
