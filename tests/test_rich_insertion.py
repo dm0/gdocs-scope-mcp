@@ -231,3 +231,36 @@ def test_markdown_table_creates_native_structure_and_cell_text(newline_before):
         if 'insertText' in r and r['insertText']['text'].strip('\n')
     ]
     assert sorted(values) == ['A', 'B', 'C', 'D']
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason='Link and del elements do not contribute text formatting requests.',
+)
+@pytest.mark.parametrize(
+    ('markdown', 'style'),
+    [
+        ('[word](https://example.com)',
+         {'link': {'url': 'https://example.com'}}),
+        ('~~word~~', {'strikethrough': True}),
+    ],
+    ids=['hyperlink', 'strikethrough'],
+)
+@pytest.mark.parametrize('newline_before', [False, True])
+def test_inline_markdown_links_and_strikethrough_keep_style(
+    markdown, style, newline_before,
+):
+    """Keep link targets and deleted-text styling on the intended text only."""
+    requests = markdown_to_requests(
+        f'A {markdown} end', start=12, newline_before=newline_before,
+    )
+
+    assert requests[0]['insertText']['text'] == (
+        '\nA word end' if newline_before else 'A word end\n'
+    )
+    styles = [r['updateTextStyle'] for r in requests if 'updateTextStyle' in r]
+    assert len(styles) == 1
+    start = 14 + int(newline_before)
+    assert styles[0]['range'] == {'startIndex': start, 'endIndex': start + 4}
+    assert styles[0]['textStyle'] == style
+    assert set(styles[0]['fields'].split(',')) == set(style)
