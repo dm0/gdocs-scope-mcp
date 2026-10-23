@@ -47,10 +47,11 @@ def test_scoped_replace_targets_nested_section(
     )
 
 
-def test_targeted_occurrence_replace(simple_document, mock_docs):
+@pytest.mark.parametrize('regex', [False, True])
+def test_targeted_occurrence_replace(simple_document, mock_docs, regex):
     """An occurrence number selects the second matching paragraph."""
     result = docs_edit.search_replace(
-        'example', 'Target phrase', 'Changed', occurrence=2
+        'example', 'Target phrase', 'Changed', occurrence=2, regex=regex,
     )
 
     assert result.ok is True
@@ -136,10 +137,6 @@ def test_unsupported_replace_all_fails_without_writing(mock_docs, options):
     assert result.suggested_action
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason='First regex search stops after a non-matching first paragraph.',
-)
 @pytest.mark.parametrize('heading_id', [None, 'parent', 'nested'])
 def test_first_regex_match_after_heading_is_replaced(
     simple_document, mock_docs, heading_id,
@@ -160,11 +157,7 @@ def test_first_regex_match_after_heading_is_replaced(
     mock_docs.batchUpdate.assert_called_once()
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason='First regex search skips descendants after a paragraph mismatch.',
-)
-def test_first_regex_match_reaches_nested_section(mock_docs):
+def test_first_regex_match_reaches_nested_section(simple_document, mock_docs):
     """A parent without a matching paragraph still searches its descendants."""
     result = docs_edit.search_replace(
         'example', 'Target phrase again', 'Changed',
@@ -172,7 +165,70 @@ def test_first_regex_match_reaches_nested_section(mock_docs):
     )
 
     assert result.ok is True
-    mock_docs.batchUpdate.assert_called_once()
+    assert edited_text(simple_document, mock_docs) == (
+        '\nIntroduction\nParent\nTarget phrase\nNested\n'
+        'Changed\nOther\nTarget phrase elsewhere\n'
+    )
+
+
+@pytest.mark.parametrize(
+    ('heading_id', 'find'),
+    [(None, 'Introduction'), ('parent', 'Parent'), ('nested', 'Nested')],
+)
+def test_first_regex_match_in_first_paragraph(
+    simple_document, mock_docs, heading_id, find,
+):
+    """A matching first paragraph is replaced before searching further."""
+    result = docs_edit.search_replace(
+        'example', find, 'Changed', heading_id=heading_id, regex=True,
+    )
+
+    assert result.ok is True
+    original = '\n' + ''.join(
+        item['paragraph']['elements'][0]['textRun']['content']
+        for item in simple_document['body']['content']
+    )
+    assert edited_text(simple_document, mock_docs) == original.replace(
+        find, 'Changed', 1,
+    )
+
+
+def test_first_regex_match_precedes_matching_sibling_heading(
+    simple_document, mock_docs,
+):
+    """An earlier body match wins over a later matching sibling heading."""
+    result = docs_edit.search_replace(
+        'example', 'Target phrase|Other', 'Changed', regex=True,
+    )
+
+    assert result.ok is True
+    assert edited_text(simple_document, mock_docs) == (
+        '\nIntroduction\nParent\nChanged\nNested\n'
+        'Target phrase again\nOther\nTarget phrase elsewhere\n'
+    )
+
+
+@pytest.mark.parametrize(
+    ('heading_id', 'find'),
+    [
+        (None, 'Absent phrase'),
+        ('parent', 'Absent phrase'),
+        ('nested', 'Absent phrase'),
+        ('parent', 'Target phrase elsewhere'),
+        ('nested', 'Target phrase elsewhere'),
+    ],
+)
+def test_missing_regex_match_in_scope_does_not_write(
+    mock_docs, heading_id, find,
+):
+    """Exhaust the selected subtree without replacing outside matches."""
+    result = docs_edit.search_replace(
+        'example', find, 'Changed', heading_id=heading_id, regex=True,
+    )
+
+    assert result.ok is False
+    assert result.code == 'TEXT_NOT_FOUND'
+    mock_docs.batchUpdate.assert_not_called()
 
 
 def test_unscoped_replace_all_uses_native_api(mock_docs):
