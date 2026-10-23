@@ -700,6 +700,20 @@ def search_replace(  # noqa: PLR0917
         {"ok": True, "replaced": "old text", "at_index": 45,
         "occurrences_found": 3}
     """
+    if occurrence == 0 and (regex or heading_id is not None):
+        return EditFailedResponse(
+            code='INVALID_ARGUMENT',
+            description=(
+                'Replace-all (occurrence=0) requires regex=False and '
+                'heading_id=None.'
+            ),
+            suggested_action=(
+                'Use a positive occurrence number for scoped or regex '
+                'replacement, or set regex=False and omit heading_id '
+                'to replace all literal matches across the whole document.'
+            ),
+        )
+
     service = _get_service('docs', 'v1')
 
     # Replace-all: use the native replaceAllText API (fast, atomic)
