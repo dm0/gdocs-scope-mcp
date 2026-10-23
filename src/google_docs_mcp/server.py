@@ -227,11 +227,9 @@ def docs_insert_after(
 
     Rich formatting is ON by default. Set rich=False to insert literal text.
 
-    Supported rich subset:
-      - # / ## / ### / ... headings
-      - - item / * item bullet lists
-      - 1. item / 1) item numbered lists
-      - **bold**, *italic*, ***bold italic***
+    Converts Markdown paragraphs and # / ## / ### / ... headings, with
+    **bold**, *italic*, and ***bold italic*** inline styles. Native lists
+    and tables are not yet implemented by this converter.
 
     Args:
         doc_id: Google Doc ID
@@ -239,8 +237,7 @@ def docs_insert_after(
             paragraph. Choose a longer phrase to avoid accidental matches.
         text:   Text to insert as the new paragraph
         heading_id: Narrow down search to this heading and subheadings
-        rich:   If True (default), interpret simple markdown-like formatting
-        natively
+        rich:   If True (default), convert Markdown using the shared converter
     """
     return docs_edit.insert_after(
         doc_id, anchor, text, heading_id=heading_id, rich=rich

@@ -1077,7 +1077,7 @@ def insert_after(
     rich: bool = True,
 ) -> InsertSucceedResponse | EditFailedResponse:
     """
-    Insert text as a new paragraph after the paragraph containing `anchor`.
+    Insert Markdown paragraphs after the paragraph containing `anchor`.
 
     The inserted text becomes a separate paragraph (newline appended
     automatically).
@@ -1108,15 +1108,27 @@ def insert_after(
             suggested_action='Run docs_read to verify the exact anchor text',
         )
 
-    # Insert after the end of the paragraph (doc end index includes the \n)
-    insert_index = found.paragraph.end_index
+    # Split at the anchor's terminating newline, keeping it after the new text.
+    # This also stays inside the valid insertion range at the document end.
+    insert_index = found.paragraph.end_index - 1
 
-    requests, inserted_text = _build_insert_requests(
-        insert_index,
-        text,
-        prefix='\n',
-        rich=rich,
-    )
+    if rich:
+        requests = markdown_to_requests(text, start=insert_index)
+        inserted_text = ''.join(
+            request['insertText']['text']
+            for request in requests
+            if 'insertText' in request
+        )
+    else:
+        inserted_text = '\n' + text
+        requests = [
+            {
+                'insertText': {
+                    'location': {'index': insert_index},
+                    'text': inserted_text,
+                }
+            }
+        ]
     service.documents().batchUpdate(
         documentId=doc_id,
         body={'requests': requests},
@@ -1124,7 +1136,7 @@ def insert_after(
 
     return InsertSucceedResponse(
         anchor=found.paragraph.text,
-        insert_position='before',
+        insert_position='after',
         at_index=insert_index,
         rich=rich,
         inserted_text=inserted_text,

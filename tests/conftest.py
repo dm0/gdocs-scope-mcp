@@ -72,3 +72,34 @@ def mock_docs(monkeypatch, simple_document):
     documents.batchUpdate.return_value.execute.return_value = {}
     monkeypatch.setattr(docs_edit, '_get_service', lambda *_args: service)
     return documents
+
+
+@pytest.fixture
+def apply_insertions():
+    """Provide an ASCII text buffer that checks insert and style ranges."""
+
+    def apply(document, requests):
+        text = '\n' + ''.join(
+            item['paragraph']['elements'][0]['textRun']['content']
+            for item in document['body']['content']
+        )
+        styled = []
+        for request in requests:
+            if 'insertText' in request:
+                insertion = request['insertText']
+                index = insertion['location']['index']
+                assert 1 <= index < len(text)
+                text = text[:index] + insertion['text'] + text[index:]
+            else:
+                update = next(iter(request.values()))
+                span = update['range']
+                assert 1 <= span['startIndex'] <= span['endIndex'] < len(text)
+                styled.append(
+                    (
+                        text[span['startIndex'] : span['endIndex']],
+                        update,
+                    )
+                )
+        return text, styled
+
+    return apply

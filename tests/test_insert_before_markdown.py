@@ -8,31 +8,6 @@ from fastmcp import Client
 from google_docs_mcp import docs_edit, server
 
 
-def apply_insertions(document, requests):
-    """Apply insertions to a text buffer and inspect emitted style ranges."""
-    text = '\n' + ''.join(
-        item['paragraph']['elements'][0]['textRun']['content']
-        for item in document['body']['content']
-    )
-    styled = []
-    for request in requests:
-        if 'insertText' in request:
-            insertion = request['insertText']
-            index = insertion['location']['index']
-            text = text[:index] + insertion['text'] + text[index:]
-        else:
-            update = next(iter(request.values()))
-            span = update['range']
-            assert 1 <= span['startIndex'] <= span['endIndex'] < len(text)
-            styled.append(
-                (
-                    text[span['startIndex'] : span['endIndex']],
-                    update,
-                )
-            )
-    return text, styled
-
-
 @pytest.fixture
 def no_legacy_builder(monkeypatch):
     """Fail if the migrated insertion falls back to the old Markdown parser."""
@@ -59,6 +34,7 @@ def no_legacy_builder(monkeypatch):
 def test_markdown_before_anchor_keeps_paragraph_boundaries(
     simple_document,
     mock_docs,
+    apply_insertions,
     *,
     anchor,
     scope,
@@ -103,6 +79,7 @@ def test_literal_before_anchor_bypasses_markdown(
     monkeypatch,
     simple_document,
     mock_docs,
+    apply_insertions,
 ):
     """Literal mode preserves delimiters without invoking either converter."""
 
@@ -144,7 +121,11 @@ def test_unavailable_before_target_does_not_write(mock_docs, anchor, scope):
     mock_docs.batchUpdate.assert_not_called()
 
 
-def test_mcp_before_forwards_heading_scope(simple_document, mock_docs):
+def test_mcp_before_forwards_heading_scope(
+    simple_document,
+    mock_docs,
+    apply_insertions,
+):
     """A real in-process MCP call selects the nested repeated anchor."""
 
     async def call():
