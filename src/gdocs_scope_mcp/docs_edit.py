@@ -57,6 +57,9 @@ from googleapiclient.discovery import build
 from .md2requests import markdown_to_requests
 from .models import (
     APPEND_PREVIEW_LIMIT,
+    RECEIPT_ITEM_LIMIT,
+    SHORT_PREVIEW_LIMIT,
+    TEXT_PREVIEW_LIMIT,
     AppendSucceedResponse,
     DocumentOutline,
     DocumentParagraph,
@@ -726,7 +729,12 @@ def search_replace(  # noqa: PLR0917
             .get('replaceAllText', {})
             .get('occurrencesChanged', 0)
         )
-        return ReplaceSucceedResponse(replaced=find, occurrences_changed=count)
+        return ReplaceSucceedResponse(
+            document_id=doc_id, replaced=find, occurrences_changed=count,
+            applied=count,
+            replaced_char_count=len(find),
+            preview_truncated=len(find) > SHORT_PREVIEW_LIMIT,
+        )
 
     # Targeted occurrence: find index manually
     doc = _get_document(service, doc_id)
@@ -819,7 +827,13 @@ def search_replace(  # noqa: PLR0917
     ).execute()
 
     return ReplaceSucceedResponse(
-        replaced=old_text, at_index=doc_start, occurrences_found=len(found)
+        document_id=doc_id, heading_id=heading_id,
+        scope='heading_subtree' if heading_id is not None else 'document',
+        replaced=old_text, at_index=doc_start, occurrences_found=len(found),
+        occurrences_found_complete=occurrence != 1,
+        applied=1,
+        replaced_char_count=len(old_text),
+        preview_truncated=len(old_text) > SHORT_PREVIEW_LIMIT,
     )
 
 
@@ -891,6 +905,14 @@ def insert_after(
     ).execute()
 
     return InsertSucceedResponse(
+        document_id=doc_id, heading_id=heading_id,
+        scope='heading_subtree' if heading_id is not None else 'document',
+        inserted_char_count=len(inserted_text),
+        preview_truncated=len(inserted_text) > TEXT_PREVIEW_LIMIT,
+        anchor_char_count=len(found.paragraph.text),
+        anchor_preview_truncated=(
+            len(found.paragraph.text) > SHORT_PREVIEW_LIMIT
+        ),
         anchor=found.paragraph.text,
         insert_position='after',
         at_index=insert_index,
@@ -970,6 +992,14 @@ def insert_before(
     ).execute()
 
     return InsertSucceedResponse(
+        document_id=doc_id, heading_id=heading_id,
+        scope='heading_subtree' if heading_id is not None else 'document',
+        inserted_char_count=len(inserted_text),
+        preview_truncated=len(inserted_text) > TEXT_PREVIEW_LIMIT,
+        anchor_char_count=len(found.paragraph.text),
+        anchor_preview_truncated=(
+            len(found.paragraph.text) > SHORT_PREVIEW_LIMIT
+        ),
         anchor=found.paragraph.text,
         insert_position='before',
         at_index=insert_index,
@@ -1008,6 +1038,8 @@ def delete_paragraph(doc_id: str, anchor: str) -> dict:
     terminal_newline = doc['body']['content'][-1]['endIndex'] - 1
     requests = []
     deleted = []
+    deleted_char_counts = []
+    deleted_preview_truncated = []
     for t in targets:
         end = min(t.end, terminal_newline)
         if t.start >= end:
@@ -1022,7 +1054,9 @@ def delete_paragraph(doc_id: str, anchor: str) -> dict:
                 }
             }
         )
-        deleted.append(t.text[:80])
+        deleted.append(t.text[:SHORT_PREVIEW_LIMIT])
+        deleted_char_counts.append(len(t.text))
+        deleted_preview_truncated.append(len(t.text) > SHORT_PREVIEW_LIMIT)
 
     if requests:
         service.documents().batchUpdate(
@@ -1032,8 +1066,14 @@ def delete_paragraph(doc_id: str, anchor: str) -> dict:
 
     return {
         'ok': True,
+        'document_id': doc_id,
         'deleted_count': len(deleted),
-        'deleted': deleted,
+        'deleted': deleted[:RECEIPT_ITEM_LIMIT],
+        'deleted_char_counts': deleted_char_counts[:RECEIPT_ITEM_LIMIT],
+        'deleted_preview_truncated': (
+            deleted_preview_truncated[:RECEIPT_ITEM_LIMIT]
+        ),
+        'deleted_truncated': len(deleted) > RECEIPT_ITEM_LIMIT,
     }
 
 
@@ -1215,10 +1255,21 @@ def batch_replace(doc_id: str, replacements: list[dict]) -> dict:
 
     return {
         'ok': True,
+        'document_id': doc_id,
         'applied': len(changes),
+        'changes_truncated': len(changes) > RECEIPT_ITEM_LIMIT,
         'changes': [
-            {'replaced': old, 'with': new, 'at_index': ds}
-            for (ds, de, new, old) in sorted(changes, key=lambda c: c[0])
+            {
+                'replaced': old[:SHORT_PREVIEW_LIMIT],
+                'with': new[:TEXT_PREVIEW_LIMIT], 'at_index': ds,
+                'replaced_char_count': len(old),
+                'replacement_char_count': len(new),
+                'preview_truncated': len(old) > SHORT_PREVIEW_LIMIT,
+                'replacement_preview_truncated': len(new) > TEXT_PREVIEW_LIMIT,
+            }
+            for (ds, de, new, old) in sorted(
+                changes, key=lambda c: c[0]
+            )[:RECEIPT_ITEM_LIMIT]
         ],
     }
 
@@ -1379,6 +1430,7 @@ def add_comment(  # noqa: PLR0917
 
     return {
         'ok': True,
+        'document_id': doc_id,
         'comment_id': comment_result.get('id'),
         'anchored_to': full_text[ft_start:ft_end],
         'at_index': doc_start,

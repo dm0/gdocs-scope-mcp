@@ -375,16 +375,41 @@ class EditFailedResponse(BaseModel):
     ]
 
 
+SHORT_PREVIEW_LIMIT = 80
+TEXT_PREVIEW_LIMIT = 200
+RECEIPT_ITEM_LIMIT = 100
+
 TruncatedStr80 = Annotated[
-    str, PlainSerializer(lambda v: v[:80] if v else v, return_type=str)
+    str,
+    PlainSerializer(
+        lambda v: v[:SHORT_PREVIEW_LIMIT] if v else v, return_type=str
+    ),
+    Field(json_schema_extra={'maxLength': SHORT_PREVIEW_LIMIT}),
 ]
 
 TruncatedStr200 = Annotated[
-    str, PlainSerializer(lambda v: v[:200] if v else v, return_type=str)
+    str,
+    PlainSerializer(
+        lambda v: v[:TEXT_PREVIEW_LIMIT] if v else v, return_type=str
+    ),
+    Field(json_schema_extra={'maxLength': TEXT_PREVIEW_LIMIT}),
 ]
 
 
-class InsertSucceedResponse(BaseModel):
+class DocumentEditReceipt(BaseModel):
+    """Identify the document and effective scope of a successful edit."""
+
+    document_id: Annotated[str, Field(description='Edited Google Doc ID')]
+    scope: Literal[
+        'document', 'heading_subtree', 'document_end', 'comment'
+    ] = 'document'
+    heading_id: Annotated[
+        str | None, Field(description='Effective heading subtree ID, or null '
+                          'when the operation is not heading-scoped')
+    ] = None
+
+
+class InsertSucceedResponse(DocumentEditReceipt):
     """Result of successful text insertion request"""
 
     ok: Literal[True] = True
@@ -403,7 +428,7 @@ class InsertSucceedResponse(BaseModel):
     at_index: Annotated[
         int,
         Field(
-            description='Plain document model index the text was inserted at'
+            description='Google Docs API insertion index; diagnostic only'
         ),
     ]
     rich: bool
@@ -411,16 +436,26 @@ class InsertSucceedResponse(BaseModel):
         TruncatedStr200,
         Field(description='Inserted text; the first 200 characters max'),
     ]
+    inserted_char_count: Annotated[
+        int, Field(ge=0, description='Full inserted Unicode code-point count, '
+                   'including automatically added paragraph breaks')
+    ]
+    preview_truncated: bool
+    anchor_char_count: Annotated[
+        int, Field(ge=0, description='Full rendered anchor paragraph length '
+                   'in Unicode code points')
+    ]
+    anchor_preview_truncated: bool
 
 
-APPEND_PREVIEW_LIMIT = 200
+APPEND_PREVIEW_LIMIT = TEXT_PREVIEW_LIMIT
 
 
-class AppendSucceedResponse(BaseModel):
+class AppendSucceedResponse(DocumentEditReceipt):
     """Describe appended content without exposing Google API requests."""
 
     ok: Literal[True] = True
-    document_id: Annotated[str, Field(description='Edited Google Doc ID')]
+    scope: Literal['document_end'] = 'document_end'
     rich: Annotated[
         bool, Field(description='Whether the input was parsed as Markdown')
     ]
@@ -453,7 +488,7 @@ class AppendSucceedResponse(BaseModel):
     ]
 
 
-class ReplaceSucceedResponse(BaseModel):
+class ReplaceSucceedResponse(DocumentEditReceipt):
     """Result of successful text replacement request"""
 
     ok: Literal[True] = True
@@ -464,20 +499,33 @@ class ReplaceSucceedResponse(BaseModel):
     at_index: Annotated[
         int | None,
         Field(
-            description='Plain document model index the text was replaced at'
+            description='Google Docs API replacement index; diagnostic only'
         ),
     ] = None
     occurrences_found: Annotated[
         int | None,
-        Field(description='Number of occurances of the search text found'),
+        Field(description='Matches found in the effective scope; see '
+              'occurrences_found_complete. Targeted search is '
+              'case-insensitive.'),
     ] = None
     occurrences_changed: Annotated[
         int | None,
-        Field(description='Number of occurances that were replaced'),
+        Field(description='Native literal replace-all changed count; '
+              'case-sensitive, not a pre-edit match count'),
     ] = None
+    occurrences_found_complete: bool = False
+    applied: Annotated[
+        int, Field(ge=0, description='Number of replacements applied; '
+                   'distinct from the pre-edit match count')
+    ]
+    replaced_char_count: Annotated[
+        int, Field(ge=0, description='Full Unicode code-point length of '
+                   'replaced, or the search string for native replace-all')
+    ]
+    preview_truncated: bool
 
 
-class DeleteParagraphResponse(BaseModel):
+class DeleteParagraphResponse(DocumentEditReceipt):
     """Report deleted paragraphs using bounded text previews."""
 
     ok: Literal[True] = True
@@ -489,11 +537,24 @@ class DeleteParagraphResponse(BaseModel):
         ),
     ]
     deleted: Annotated[
-        list[str],
+        list[TruncatedStr80],
         Field(
+            max_length=RECEIPT_ITEM_LIMIT,
             description='Deleted paragraph previews, up to 80 '
             'characters each, in reverse document order'
         ),
+    ]
+    deleted_char_counts: Annotated[
+        list[int], Field(max_length=RECEIPT_ITEM_LIMIT,
+                         description='Full paragraph Unicode code-point '
+                         'lengths, aligned with the returned deleted previews')
+    ]
+    deleted_preview_truncated: Annotated[
+        list[bool], Field(max_length=RECEIPT_ITEM_LIMIT)
+    ]
+    deleted_truncated: Annotated[
+        bool, Field(description='Whether deleted omits paragraphs after '
+                    'the first 100 previews; deleted_count remains the total')
     ]
 
 
@@ -502,29 +563,45 @@ class BatchReplaceChange(BaseModel):
 
     model_config = ConfigDict(serialize_by_alias=True)
 
-    replaced: str
-    replacement: Annotated[str, Field(alias='with')]
-    at_index: int
+    replaced: TruncatedStr80
+    replacement: Annotated[TruncatedStr200, Field(alias='with')]
+    at_index: Annotated[int, Field(description='Google Docs API index; '
+                                 'diagnostic only')]
+    replaced_char_count: Annotated[
+        int, Field(ge=0, description='Full replaced Unicode code-point count')
+    ]
+    replacement_char_count: Annotated[
+        int, Field(ge=0,
+                   description='Full replacement Unicode code-point count')
+    ]
+    preview_truncated: bool
+    replacement_preview_truncated: bool
 
 
-class BatchReplaceResponse(BaseModel):
+class BatchReplaceResponse(DocumentEditReceipt):
     """Report the changes applied by one replacement batch."""
 
     ok: Literal[True] = True
     applied: int
     changes: Annotated[
         list[BatchReplaceChange],
-        Field(description='Applied changes in document order'),
+        Field(max_length=RECEIPT_ITEM_LIMIT,
+              description='First 100 applied changes in document order'),
+    ]
+    changes_truncated: Annotated[
+        bool, Field(description='Whether changes omits entries after the '
+                    'first 100 previews; applied remains the total')
     ]
 
 
-class AddCommentResponse(BaseModel):
+class AddCommentResponse(DocumentEditReceipt):
     """Report a created comment and its optional bookmark navigation data."""
 
     ok: Literal[True] = True
     comment_id: str | None
     anchored_to: str
-    at_index: int
+    at_index: Annotated[int, Field(description='Google Docs API anchor index; '
+                                 'diagnostic only')]
     named_range_id: str
     comment_content: str
     bookmark_id: str | None
@@ -532,27 +609,30 @@ class AddCommentResponse(BaseModel):
     apps_script_id: str | None
 
 
-class ReplyCommentResponse(BaseModel):
+class ReplyCommentResponse(DocumentEditReceipt):
     """Identify a newly posted comment reply."""
 
     ok: Literal[True] = True
+    scope: Literal['comment'] = 'comment'
     reply_id: str | None
     comment_id: str
     content: str | None
 
 
-class ResolveCommentResponse(BaseModel):
+class ResolveCommentResponse(DocumentEditReceipt):
     """Confirm resolution of a document comment."""
 
     ok: Literal[True] = True
+    scope: Literal['comment'] = 'comment'
     comment_id: str
     resolved: Literal[True] = True
 
 
-class DeleteCommentResponse(BaseModel):
+class DeleteCommentResponse(DocumentEditReceipt):
     """Identify the deleted comment."""
 
     ok: Literal[True] = True
+    scope: Literal['comment'] = 'comment'
     comment_id: str
 
 

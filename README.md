@@ -82,6 +82,87 @@ List counts describe returned items, not the total in Drive or the document.
 These tools still fetch only one page. Clients using the previous JSON-string
 or `result`-wrapped outputs must switch to the direct structured objects.
 
+### Action annotations and edit receipts
+
+All Google-backed tools declare `openWorldHint=true`; `server_info` is local
+and declares `openWorldHint=false`. These advisory hints describe effects,
+not authorization or retry guarantees. The per-operation policy is:
+
+| Tools | Read-only | Destructive | Idempotent |
+|-------|-----------|-------------|------------|
+| `docs_get_tree`, `docs_read`, `docs_list`, `docs_read_comments` | true | false | true |
+| `docs_search_replace`, `docs_batch_replace` | false | true | false |
+| `docs_delete_paragraph`, `docs_delete_comment` | false | true | true |
+| `docs_insert_before`, `docs_insert_after`, `docs_append` | false | false | false |
+| `docs_create`, `docs_add_comment`, `docs_reply_to_comment` | false | false | false |
+| `docs_resolve_comment` | false | false | false |
+
+Deletion is idempotent in effect: repeating it cannot remove more of the
+original targets, although a retry can return a not-found error. Resolution
+creates a resolving reply, so repeating it is not advertised as idempotent.
+Replacements can match their own output and are not idempotent.
+
+Successful text edits and comment mutations include `document_id`, `scope`,
+and nullable `heading_id`. Scope is `heading_subtree` for a scoped replacement
+or before/after insertion (including nested headings), `document` for an
+unscoped text operation or new anchored comment, `document_end` for append,
+and `comment` for reply/resolve/delete (identified by `comment_id`). Creation
+retains its existing `{id, title, webViewLink}` result. All `at_index` fields
+are API diagnostics; identify edits using document, scope, and operation IDs.
+
+All preview lengths use Unicode code points, not bytes or Google Docs UTF-16
+indices. Inserted lengths include automatically added paragraph breaks.
+Before/after insertion adds `inserted_char_count`, `preview_truncated`,
+`anchor_char_count`, and `anchor_preview_truncated`. The insertion preview
+remains at most 200 code points and the anchor preview at most 80. Append
+preserves its existing `appended`, length, and truncation semantics.
+
+For example, a literal before-insertion of `Hello` within `nested` includes
+these receipt fields (other fields omitted):
+
+```json
+{
+  "document_id": "example",
+  "scope": "heading_subtree",
+  "heading_id": "nested",
+  "inserted_text": "Hello\n",
+  "inserted_char_count": 6,
+  "preview_truncated": false
+}
+```
+
+Replacement adds `replaced_char_count`, `preview_truncated`, and `applied`
+(actual changes, distinct from matches found). `occurrences_found_complete`
+is false for the first-occurrence search because it stops early; later
+occurrences use the existing full search. Native literal replace-all reports
+`occurrences_changed` and `applied`, with `occurrences_found=null` and
+`occurrences_found_complete=false`. Targeted matching is case-insensitive;
+native literal replace-all is case-sensitive. These metadata do not change
+search behavior or resolve the separate match-count issue #16. For native
+replace-all, `replaced` previews the search string and its length, rather than
+an individual matched item.
+
+Deletion returns at most 100 `deleted` previews, each at most 80 code points,
+with aligned `deleted_char_counts` and `deleted_preview_truncated` arrays.
+Lengths describe full paragraph display text, excluding trailing newlines;
+`deleted_count` counts removed/cleared paragraphs, including a cleared final
+paragraph. `deleted_truncated` reports omitted preview entries.
+
+Batch replacement returns at most 100 `changes` in document order, while
+`applied` counts every applied change. `changes_truncated` reports omitted
+entries. Each change preserves the public `with` alias (up to 200 code points)
+and bounds `replaced` to 80 code points; `replaced_char_count`,
+`replacement_char_count`, `preview_truncated`, and
+`replacement_preview_truncated` describe their full lengths and completeness.
+
+Compatibility: existing field names, aliases, preview limits for insertion
+and replacement, and operation IDs are preserved. Metadata fields are
+additive; clients must tolerate new fields. Batch text previews and the
+batch/deletion collections are now bounded, so clients must check truncation
+flags and use counts rather than treating preview arrays as complete logs.
+Read the affected document to verify full content. Comment content fields
+remain complete strings. No tool arguments or Google edit requests change.
+
 ## Why
 
 The Google Docs API uses **character indices** for every edit. LLMs are bad at counting characters. Everyone ends up deleting and rewriting entire documents, which destroys version history, comments, and collaborator attribution.
@@ -398,17 +479,21 @@ docs_search_replace(doc_id="...", find="ACME Corp", replace="Initech", occurrenc
 docs_search_replace(doc_id="...", find=r"\bDraft\b", replace="Final", regex=True)
 ```
 
-Returns `ok`, `replaced` (up to 80 characters), `at_index`,
-`occurrences_found`, and `occurrences_changed`. Targeted replacements populate
-`at_index` and `occurrences_found`; whole-document literal replace-all populates
-`occurrences_changed`. Unused index/count fields are null. Replace-all requires
-`regex=False` and `heading_id=None`.
+Returns document/scope metadata, `ok`, `replaced` (up to 80 code points),
+`replaced_char_count`, `preview_truncated`, diagnostic `at_index`, `applied`,
+`occurrences_found`, `occurrences_found_complete`, and `occurrences_changed`.
+Targeted replacements populate `at_index` and `occurrences_found`; the first
+occurrence search may stop before all matches are found. Whole-document
+literal replace-all populates `occurrences_changed`. Unused index/count fields
+are null. Replace-all requires `regex=False` and `heading_id=None`.
 
 ---
 
 #### `docs_insert_after(doc_id, anchor, text, heading_id=None, rich=True)`
 Insert Markdown or literal text after the paragraph containing `anchor`.
 Pass `heading_id` to search only that section subtree; `rich=False` inserts literal text.
+Rich heading mapping: `# -> TITLE`, `## -> SUBTITLE`, `### -> HEADING_1`,
+and so on. Native list/table conversion is not implemented.
 
 ```
 docs_insert_after(
@@ -418,14 +503,18 @@ docs_insert_after(
 )
 ```
 
-Returns `ok`, `anchor` (up to 80 characters), `insert_position`, `at_index`,
-`rich`, and `inserted_text` (up to 200 characters).
+Returns document/scope metadata, `ok`, `anchor` (up to 80 code points),
+`anchor_char_count`, `anchor_preview_truncated`, `insert_position`, diagnostic
+`at_index`, `rich`, `inserted_text` (up to 200 code points),
+`inserted_char_count`, and `preview_truncated`.
 
 ---
 
 #### `docs_insert_before(doc_id, anchor, text, heading_id=None, rich=True)`
 Insert Markdown or literal text before the paragraph containing `anchor`.
 Pass `heading_id` to search only that section subtree; `rich=False` inserts literal text.
+Rich heading mapping: `# -> TITLE`, `## -> SUBTITLE`, `### -> HEADING_1`,
+and so on. Native list/table conversion is not implemented.
 
 ```
 docs_insert_before(
@@ -447,8 +536,10 @@ Delete all paragraphs containing `anchor` text (case-insensitive).
 docs_delete_paragraph(doc_id="...", anchor="[PLACEHOLDER — DELETE ME]")
 ```
 
-Returns `{ok, deleted_count, deleted}` with paragraph previews of up to 80
-characters in reverse document order. The final Body newline is preserved;
+Returns document/scope metadata, `ok`, `deleted_count`, and up to 100 `deleted`
+paragraph previews of up to 80 code points in reverse document order, plus
+`deleted_char_counts`, `deleted_preview_truncated`, and `deleted_truncated`.
+The final Body newline is preserved;
 clearing a final paragraph counts as one deletion, while an already-empty
 final paragraph is skipped.
 
@@ -493,8 +584,10 @@ Each item in the array:
 | `occurrence` | int | `1` | `1` = first, `0` = all |
 | `regex` | bool | `false` | Regex mode |
 
-Returns `{ok, applied, changes}`. Each change has `replaced`, `with` (the
-replacement text), and `at_index`; changes are returned in document order.
+Returns document/scope metadata, `ok`, `applied`, up to 100 `changes`, and
+`changes_truncated`. Each change has bounded `replaced` and `with` previews,
+their full lengths and truncation flags, and diagnostic `at_index`;
+changes are returned in document order.
 `replacements_json` is a JSON string, not a native array argument.
 
 ---

@@ -94,6 +94,15 @@ ERRORS:
 DIAGNOSTICS:
     server_info            Read process identity and startup source fingerprint
 
+EDIT RECEIPTS:
+    Text edits and comment mutations identify document_id, scope, and
+    heading_id.
+    at_index is diagnostic only. Text previews have explicit full lengths and
+    truncation flags; batch/deletion preview lists contain at most 100 items.
+    Use applied/deleted_count for totals, not preview-list lengths. A first
+    replacement search has occurrences_found_complete=false; do not interpret
+    its occurrences_found as a complete total.
+
 EDITING TOOLS:
     docs_get_tree          Read hierarchical document tree (headings)
     docs_read              Read document contents (paragraphs + plain)
@@ -155,6 +164,7 @@ to further reduce the scope.
         'readOnlyHint': True,
         'destructiveHint': False,
         'openWorldHint': False,
+        'idempotentHint': True,
     },
 )
 def server_info() -> ServerInfo:
@@ -162,7 +172,15 @@ def server_info() -> ServerInfo:
     return SERVER_INFO
 
 
-@mcp.tool(output_schema=_tool_response_schema(DocumentOutline))
+@mcp.tool(
+    output_schema=_tool_response_schema(DocumentOutline),
+    annotations={
+        'readOnlyHint': True,
+        'destructiveHint': False,
+        'idempotentHint': True,
+        'openWorldHint': True,
+    },
+)
 def docs_get_tree(doc_id: str) -> DocumentOutline:
     """
     Fetch a Google Doc's structural outline as a JSON object.
@@ -182,7 +200,15 @@ def docs_get_tree(doc_id: str) -> DocumentOutline:
     return docs_edit.get_tree(doc_id)
 
 
-@mcp.tool(output_schema=_tool_response_schema(DocumentSubset))
+@mcp.tool(
+    output_schema=_tool_response_schema(DocumentSubset),
+    annotations={
+        'readOnlyHint': True,
+        'destructiveHint': False,
+        'idempotentHint': True,
+        'openWorldHint': True,
+    },
+)
 def docs_read(
     doc_id: str, heading_ids: list[str] | None = None
 ) -> DocumentSubset:
@@ -208,7 +234,15 @@ def docs_read(
     return docs_edit.read(doc_id, heading_ids)
 
 
-@mcp.tool(output_schema=_tool_response_schema(ReplaceSucceedResponse))
+@mcp.tool(
+    output_schema=_tool_response_schema(ReplaceSucceedResponse),
+    annotations={
+        'readOnlyHint': False,
+        'destructiveHint': True,
+        'idempotentHint': False,
+        'openWorldHint': True,
+    },
+)
 # Preserve the public positional calling convention.
 def docs_search_replace(  # noqa: PLR0917
     doc_id: str,
@@ -243,13 +277,28 @@ def docs_search_replace(  # noqa: PLR0917
         occurrences_found, and occurrences_changed. Targeted replacements
         populate at_index and occurrences_found; replace-all populates
         occurrences_changed. Unused index/count fields are null.
+        Includes document_id, scope, heading_id, applied (changes),
+        replaced_char_count (Unicode code points), and preview_truncated.
+        occurrences_found_complete is False for early-stopped first-match
+        searches and True for later-occurrence searches. Native replace-all
+        has no pre-edit match count; replaced previews the search string.
+        Targeted matching is case-insensitive; native literal replace-all
+        is case-sensitive. at_index is diagnostic only.
     """
     return docs_edit.search_replace(
         doc_id, find, replace, occurrence, heading_id, regex
     )
 
 
-@mcp.tool(output_schema=_tool_response_schema(InsertSucceedResponse))
+@mcp.tool(
+    output_schema=_tool_response_schema(InsertSucceedResponse),
+    annotations={
+        'readOnlyHint': False,
+        'destructiveHint': False,
+        'idempotentHint': False,
+        'openWorldHint': True,
+    },
+)
 def docs_insert_after(
     doc_id: str,
     anchor: str,
@@ -267,7 +316,8 @@ def docs_insert_after(
     Rich formatting is ON by default. Set rich=False to insert literal text.
 
     Converts Markdown paragraphs and # / ## / ### / ... headings, with
-    **bold**, *italic*, and ***bold italic*** inline styles. Native lists
+    **bold**, *italic*, and ***bold italic*** inline styles. Heading mapping:
+    # is TITLE, ## is SUBTITLE, ### is HEADING_1, and so on. Native lists
     and tables are not yet implemented by this converter.
 
     Args:
@@ -277,13 +327,30 @@ def docs_insert_after(
         text:   Text to insert as the new paragraph
         heading_id: Narrow down search to this heading and subheadings
         rich:   If True (default), convert Markdown using the shared converter
+
+    Returns
+    -------
+        A receipt with document_id, scope, heading_id, ok, anchor,
+        insert_position, diagnostic at_index, rich, and inserted_text.
+        inserted_text is a preview of up to 200 Unicode code points;
+        inserted_char_count includes added paragraph breaks and
+        preview_truncated signals omitted text. The anchor preview is at most
+        80 code points, with anchor_char_count and anchor_preview_truncated.
     """
     return docs_edit.insert_after(
         doc_id, anchor, text, heading_id=heading_id, rich=rich
     )
 
 
-@mcp.tool(output_schema=_tool_response_schema(InsertSucceedResponse))
+@mcp.tool(
+    output_schema=_tool_response_schema(InsertSucceedResponse),
+    annotations={
+        'readOnlyHint': False,
+        'destructiveHint': False,
+        'idempotentHint': False,
+        'openWorldHint': True,
+    },
+)
 def docs_insert_before(
     doc_id: str,
     anchor: str,
@@ -303,7 +370,8 @@ def docs_insert_before(
     Rich formatting is ON by default. Set rich=False to insert literal text.
 
     Converts Markdown paragraphs and # / ## / ### / ... headings, with
-    **bold**, *italic*, and ***bold italic*** inline styles. Native lists
+    **bold**, *italic*, and ***bold italic*** inline styles. Heading mapping:
+    # is TITLE, ## is SUBTITLE, ### is HEADING_1, and so on. Native lists
     and tables are not yet implemented by this converter.
 
     Args:
@@ -312,6 +380,15 @@ def docs_insert_before(
         text:   Text to insert as the new paragraph
         heading_id: Narrow down search to this heading and subheadings
         rich:   If True (default), convert Markdown using the shared converter
+
+    Returns
+    -------
+        A receipt with document_id, scope, heading_id, ok, anchor,
+        insert_position, diagnostic at_index, rich, and inserted_text.
+        inserted_text is a preview of up to 200 Unicode code points;
+        inserted_char_count includes added paragraph breaks and
+        preview_truncated signals omitted text. The anchor preview is at most
+        80 code points, with anchor_char_count and anchor_preview_truncated.
     """
     return docs_edit.insert_before(
         doc_id,
@@ -322,7 +399,15 @@ def docs_insert_before(
     )
 
 
-@mcp.tool(output_schema=_tool_response_schema(DeleteParagraphResponse))
+@mcp.tool(
+    output_schema=_tool_response_schema(DeleteParagraphResponse),
+    annotations={
+        'readOnlyHint': False,
+        'destructiveHint': True,
+        'idempotentHint': True,
+        'openWorldHint': True,
+    },
+)
 def docs_delete_paragraph(doc_id: str, anchor: str) -> DeleteParagraphResponse:
     """
     Delete the paragraph(s) containing `anchor` text.
@@ -341,13 +426,26 @@ def docs_delete_paragraph(doc_id: str, anchor: str) -> DeleteParagraphResponse:
     -------
         A structured object with ok, deleted_count, and deleted (paragraph
         previews up to 80 characters each, in reverse document order).
+        Includes document_id, scope, and heading_id. At most 100 previews are
+        returned, with aligned deleted_char_counts (full display-text Unicode
+        code-point lengths excluding trailing newlines) and
+        deleted_preview_truncated flags. deleted_truncated signals omitted
+        previews; deleted_count includes all removed/cleared paragraphs.
     """
     return DeleteParagraphResponse.model_validate(
         docs_edit.delete_paragraph(doc_id, anchor),
     )
 
 
-@mcp.tool(output_schema=_tool_response_schema(AppendSucceedResponse))
+@mcp.tool(
+    output_schema=_tool_response_schema(AppendSucceedResponse),
+    annotations={
+        'readOnlyHint': False,
+        'destructiveHint': False,
+        'idempotentHint': False,
+        'openWorldHint': True,
+    },
+)
 def docs_append(
     doc_id: str, text: str, rich: bool = True
 ) -> AppendSucceedResponse:
@@ -373,11 +471,20 @@ def docs_append(
         appended (plain-text preview up to 200 Unicode code points),
         inserted_char_count (including paragraph breaks), preview_truncated,
         and ok=True. Read the document to verify formatting.
+        scope is document_end and heading_id is null.
     """
     return docs_edit.append(doc_id, text, rich=rich)
 
 
-@mcp.tool(output_schema=_tool_response_schema(BatchReplaceResponse))
+@mcp.tool(
+    output_schema=_tool_response_schema(BatchReplaceResponse),
+    annotations={
+        'readOnlyHint': False,
+        'destructiveHint': True,
+        'idempotentHint': False,
+        'openWorldHint': True,
+    },
+)
 def docs_batch_replace(
     doc_id: str, replacements_json: str
 ) -> BatchReplaceResponse:
@@ -402,6 +509,12 @@ def docs_batch_replace(
     -------
         A structured object with ok, applied (count), and changes in document
         order. Each change has replaced, with (replacement text), and at_index.
+        Includes document_id, scope, heading_id, and changes_truncated. Only
+        the first 100 change previews are returned; applied counts all edits.
+        Each change bounds replaced to 80 and with to 200 Unicode code points,
+        with full replaced_char_count/replacement_char_count and
+        preview_truncated/replacement_preview_truncated flags. Indices are
+        diagnostic only.
     """
     replacements = json.loads(replacements_json)
     return BatchReplaceResponse.model_validate(
@@ -409,7 +522,15 @@ def docs_batch_replace(
     )
 
 
-@mcp.tool(output_schema=_tool_response_schema(AddCommentResponse))
+@mcp.tool(
+    output_schema=_tool_response_schema(AddCommentResponse),
+    annotations={
+        'readOnlyHint': False,
+        'destructiveHint': False,
+        'idempotentHint': False,
+        'openWorldHint': True,
+    },
+)
 # Preserve the public positional calling convention.
 def docs_add_comment(  # noqa: PLR0917
     doc_id: str,
@@ -461,6 +582,7 @@ def docs_add_comment(  # noqa: PLR0917
         A structured object with ok, comment_id, anchored_to (matched text),
         at_index, named_range_id, comment_content, and optional bookmark_id,
         bookmark_url, and apps_script_id (null when bookmarks are disabled).
+        Includes document_id, scope=document, and heading_id=null.
     """
     result = docs_edit.add_comment(
         doc_id,
@@ -473,7 +595,15 @@ def docs_add_comment(  # noqa: PLR0917
     return AddCommentResponse.model_validate(result)
 
 
-@mcp.tool(output_schema=_tool_response_schema(ReplyCommentResponse))
+@mcp.tool(
+    output_schema=_tool_response_schema(ReplyCommentResponse),
+    annotations={
+        'readOnlyHint': False,
+        'destructiveHint': False,
+        'idempotentHint': False,
+        'openWorldHint': True,
+    },
+)
 def docs_reply_to_comment(
     doc_id: str, comment_id: str, reply: str
 ) -> ReplyCommentResponse:
@@ -488,6 +618,7 @@ def docs_reply_to_comment(
     Returns
     -------
         A structured object with ok, reply_id, comment_id, and content.
+        Includes document_id, scope=comment, and heading_id=null.
     """
     creds = docs_edit._load_creds()
     drive = build('drive', 'v3', credentials=creds)
@@ -502,13 +633,22 @@ def docs_reply_to_comment(
         .execute()
     )
     return ReplyCommentResponse(
+        document_id=doc_id,
         reply_id=result.get('id'),
         comment_id=comment_id,
         content=result.get('content'),
     )
 
 
-@mcp.tool(output_schema=_tool_response_schema(ResolveCommentResponse))
+@mcp.tool(
+    output_schema=_tool_response_schema(ResolveCommentResponse),
+    annotations={
+        'readOnlyHint': False,
+        'destructiveHint': False,
+        'idempotentHint': False,
+        'openWorldHint': True,
+    },
+)
 def docs_resolve_comment(
     doc_id: str, comment_id: str, reply: str = ''
 ) -> ResolveCommentResponse:
@@ -526,6 +666,7 @@ def docs_resolve_comment(
     Returns
     -------
         A structured object with ok, comment_id, and resolved=True.
+        Includes document_id, scope=comment, and heading_id=null.
     """
     creds = docs_edit._load_creds()
     drive = build('drive', 'v3', credentials=creds)
@@ -539,10 +680,18 @@ def docs_resolve_comment(
         body=body,
         fields='id',
     ).execute()
-    return ResolveCommentResponse(comment_id=comment_id)
+    return ResolveCommentResponse(document_id=doc_id, comment_id=comment_id)
 
 
-@mcp.tool(output_schema=_tool_response_schema(DeleteCommentResponse))
+@mcp.tool(
+    output_schema=_tool_response_schema(DeleteCommentResponse),
+    annotations={
+        'readOnlyHint': False,
+        'destructiveHint': True,
+        'idempotentHint': True,
+        'openWorldHint': True,
+    },
+)
 def docs_delete_comment(doc_id: str, comment_id: str) -> DeleteCommentResponse:
     """
     Delete a comment from a Google Doc.
@@ -554,14 +703,23 @@ def docs_delete_comment(doc_id: str, comment_id: str) -> DeleteCommentResponse:
     Returns
     -------
         A structured object with ok and comment_id.
+        Includes document_id, scope=comment, and heading_id=null.
     """
     creds = docs_edit._load_creds()
     drive = build('drive', 'v3', credentials=creds)
     drive.comments().delete(fileId=doc_id, commentId=comment_id).execute()
-    return DeleteCommentResponse(comment_id=comment_id)
+    return DeleteCommentResponse(document_id=doc_id, comment_id=comment_id)
 
 
-@mcp.tool(output_schema=_tool_response_schema(ReadCommentsResponse))
+@mcp.tool(
+    output_schema=_tool_response_schema(ReadCommentsResponse),
+    annotations={
+        'readOnlyHint': True,
+        'destructiveHint': False,
+        'idempotentHint': True,
+        'openWorldHint': True,
+    },
+)
 def docs_read_comments(
     doc_id: str, include_resolved: bool = False
 ) -> ReadCommentsResponse:
@@ -631,7 +789,15 @@ def docs_read_comments(
     return ReadCommentsResponse(count=len(results), comments=results)
 
 
-@mcp.tool(output_schema=_tool_response_schema(ListDocumentsResponse))
+@mcp.tool(
+    output_schema=_tool_response_schema(ListDocumentsResponse),
+    annotations={
+        'readOnlyHint': True,
+        'destructiveHint': False,
+        'idempotentHint': True,
+        'openWorldHint': True,
+    },
+)
 def docs_list(query: str = '', limit: int = 20) -> ListDocumentsResponse:
     """
     List Google Docs from Drive, optionally filtered by a search query.
@@ -688,7 +854,15 @@ def docs_list(query: str = '', limit: int = 20) -> ListDocumentsResponse:
     return ListDocumentsResponse(count=len(files), documents=files)
 
 
-@mcp.tool(output_schema=_tool_response_schema(CreateDocumentResponse))
+@mcp.tool(
+    output_schema=_tool_response_schema(CreateDocumentResponse),
+    annotations={
+        'readOnlyHint': False,
+        'destructiveHint': False,
+        'idempotentHint': False,
+        'openWorldHint': True,
+    },
+)
 def docs_create(title: str, initial_text: str = '') -> CreateDocumentResponse:
     """
     Create a new Google Doc with an optional initial paragraph of text.

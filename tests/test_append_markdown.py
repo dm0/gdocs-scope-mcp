@@ -41,6 +41,8 @@ def test_append_converts_headings_and_emphasis(simple_document, mock_docs):
     assert isinstance(result, AppendSucceedResponse)
     assert result.model_dump() == {
         'ok': True,
+        'scope': 'document_end',
+        'heading_id': None,
         'document_id': 'example',
         'rich': True,
         'at_index': simple_document['body']['content'][-1]['endIndex'] - 1,
@@ -181,6 +183,8 @@ def test_mcp_append_exposes_structured_receipt(mock_docs, rich):
 
     expected_fields = {
         'ok',
+        'scope',
+        'heading_id',
         'document_id',
         'rich',
         'at_index',

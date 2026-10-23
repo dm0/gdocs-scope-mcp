@@ -16,6 +16,10 @@ from jsonschema import validate
 from gdocs_scope_mcp import docs_edit, server
 from gdocs_scope_mcp.tool_logging import LOGGER_NAME
 
+EXPECTED_SHORT_PREVIEW_LIMIT = 80
+EXPECTED_TEXT_PREVIEW_LIMIT = 200
+EXPECTED_RECEIPT_ITEM_LIMIT = 100
+
 
 @pytest.fixture
 def contract_api(monkeypatch, mock_docs):
@@ -79,6 +83,32 @@ def call_tool(name, arguments, *, raise_on_error=True):
             return catalog[name], result
 
     return asyncio.run(call())
+
+
+@pytest.fixture
+def receipt_document(simple_document):
+    """Build valid paragraph ranges for receipt boundary cases."""
+    def populate(lines):
+        content = []
+        index = 1
+        for line in lines:
+            text = line + '\n'
+            end = index + len(text)
+            content.append({
+                'startIndex': index,
+                'endIndex': end,
+                'paragraph': {
+                    'paragraphStyle': {'namedStyleType': 'NORMAL_TEXT'},
+                    'elements': [{
+                        'startIndex': index, 'endIndex': end,
+                        'textRun': {'content': text, 'textStyle': {}},
+                    }],
+                },
+            })
+            index = end
+        simple_document['body']['content'] = content
+
+    return populate
 
 
 @pytest.mark.parametrize('only_paragraph', [False, True])
@@ -232,6 +262,10 @@ TOOL_CASES = [
                     'replaced': 'Introduction',
                     'with': 'Changed',
                     'at_index': 1,
+                    'replaced_char_count': 12,
+                    'replacement_char_count': 7,
+                    'preview_truncated': False,
+                    'replacement_preview_truncated': False,
                 }
             ],
         },
@@ -351,6 +385,15 @@ def test_all_tools_return_direct_typed_objects(name, arguments, expected):
     )
     for key, value in expected.items():
         assert data[key] == value
+    if name in {
+        'docs_search_replace', 'docs_insert_before', 'docs_insert_after',
+        'docs_delete_paragraph', 'docs_append', 'docs_batch_replace',
+        'docs_add_comment', 'docs_reply_to_comment', 'docs_resolve_comment',
+        'docs_delete_comment',
+    }:
+        assert data['document_id'] == arguments['doc_id']
+        assert data['heading_id'] == arguments.get('heading_id')
+        assert data['scope'] in {'document', 'document_end', 'comment'}
 
 
 @pytest.mark.parametrize(
@@ -751,6 +794,9 @@ def test_resolve_uses_reply_action_in_one_request(contract_api, reply):
     assert response.is_error is False
     assert response.structured_content == {
         'ok': True,
+        'document_id': 'example',
+        'scope': 'comment',
+        'heading_id': None,
         'comment_id': 'comment-id',
         'resolved': True,
     }
@@ -957,10 +1003,6 @@ def test_filtered_comment_page_keeps_continuation(contract_api):
     assert data['next_page_token'] == 'more-comments'
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason='Google-backed tools do not yet declare explicit MCP annotations.',
-)
 @pytest.mark.parametrize(
     ('name', 'read_only'),
     [
@@ -987,17 +1029,15 @@ def test_google_tools_declare_action_hints(name, read_only):
     assert hints is not None
     assert hints.readOnlyHint is read_only
     assert hints.openWorldHint is True
-    if read_only:
-        assert hints.destructiveHint is False
-    else:
-        assert hints.destructiveHint is not None
-        assert hints.idempotentHint is not None
+    assert hints.destructiveHint is (name in {
+        'docs_search_replace', 'docs_batch_replace',
+        'docs_delete_paragraph', 'docs_delete_comment',
+    })
+    assert hints.idempotentHint is (
+        read_only or name in {'docs_delete_paragraph', 'docs_delete_comment'}
+    )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason='Insertion receipts omit document, scope, and truncation metadata.',
-)
 @pytest.mark.parametrize('name', ['docs_insert_before', 'docs_insert_after'])
 def test_insertion_receipts_identify_scope_and_preview_truncation(
     contract_api, mock_docs, name,
@@ -1012,8 +1052,189 @@ def test_insertion_receipts_identify_scope_and_preview_truncation(
     data = response.structured_content
     assert data['document_id'] == 'example'
     assert data['heading_id'] == 'nested'
+    assert data['scope'] == 'heading_subtree'
     assert data['preview_truncated'] is True
     assert data['inserted_char_count'] == len(text) + 1
     assert len(data['inserted_text']) < data['inserted_char_count']
     mock_docs.batchUpdate.assert_called_once()
     contract_api.comments.return_value.create.assert_not_called()
+
+
+@pytest.mark.parametrize('name', ['docs_insert_before', 'docs_insert_after'])
+@pytest.mark.parametrize('rich', [False, True])
+@pytest.mark.parametrize('length', [0, 199, 200, 240])
+@pytest.mark.usefixtures('contract_api')
+def test_insertion_preview_counts_actual_unicode_requests(
+    mock_docs, name, rich, length,
+):
+    """Count API text including added breaks, independent of UTF-16 width."""
+    tool, response = call_tool(name, {
+        'doc_id': 'example', 'anchor': 'Target phrase',
+        'text': '😀' * length, 'rich': rich,
+    })
+    requests = mock_docs.batchUpdate.call_args.kwargs['body']['requests']
+    inserted = ''.join(
+        request['insertText']['text']
+        for request in requests
+        if 'insertText' in request
+    )
+    data = response.structured_content
+    assert data['inserted_text'] == inserted[:200]
+    assert data['inserted_char_count'] == len(inserted)
+    assert data['preview_truncated'] is (
+        len(inserted) > EXPECTED_TEXT_PREVIEW_LIMIT
+    )
+    assert data['anchor_char_count'] == len(data['anchor'])
+    assert data['anchor_preview_truncated'] is False
+    assert json.loads(response.content[0].text) == data
+    validate(data, tool.outputSchema)
+
+
+@pytest.mark.parametrize('name', ['docs_insert_before', 'docs_insert_after'])
+@pytest.mark.usefixtures('contract_api')
+def test_long_anchor_has_explicit_preview_metadata(receipt_document, name):
+    """Do not silently shorten the anchor used to identify an insertion."""
+    anchor = 'Z' * 81
+    receipt_document([anchor])
+    tool, response = call_tool(name, {
+        'doc_id': 'example', 'anchor': anchor,
+        'text': 'Inserted', 'rich': False,
+    })
+    data = response.structured_content
+    assert data['anchor'] == anchor[:80]
+    assert data['anchor_char_count'] == len(anchor + '\n\n')
+    assert data['anchor_preview_truncated'] is True
+    assert json.loads(response.content[0].text) == data
+    validate(data, tool.outputSchema)
+
+
+@pytest.mark.parametrize('length', [80, 81])
+@pytest.mark.usefixtures('contract_api')
+def test_replacement_preview_and_match_completeness(
+    simple_document, length,
+):
+    """Keep full counts and explicitly distinguish early-stop matches."""
+    original = '😀' * length
+    paragraph = simple_document['body']['content'][0]['paragraph']
+    paragraph['elements'][0]['textRun']['content'] = original + '\n'
+    tool, response = call_tool('docs_search_replace', {
+        'doc_id': 'example', 'find': original, 'replace': '',
+    })
+    data = response.structured_content
+    assert data['replaced'] == original[:80]
+    assert data['replaced_char_count'] == length
+    assert data['preview_truncated'] is (length > EXPECTED_SHORT_PREVIEW_LIMIT)
+    assert data['applied'] == 1
+    assert data['occurrences_found_complete'] is False
+    assert data['occurrences_changed'] is None
+    assert json.loads(response.content[0].text) == data
+    validate(data, tool.outputSchema)
+
+
+@pytest.mark.parametrize('occurrence', [1, 2])
+@pytest.mark.usefixtures('contract_api')
+def test_replacement_scope_and_count_metadata(occurrence):
+    """Expose scoped counts without changing the existing search strategy."""
+    _, response = call_tool('docs_search_replace', {
+        'doc_id': 'example', 'find': 'Target phrase', 'replace': 'New',
+        'heading_id': 'parent', 'occurrence': occurrence,
+    })
+    data = response.structured_content
+    assert data['document_id'] == 'example'
+    assert data['scope'] == 'heading_subtree'
+    assert data['heading_id'] == 'parent'
+    assert data['applied'] == 1
+    assert data['occurrences_found_complete'] is (occurrence != 1)
+
+
+@pytest.mark.usefixtures('contract_api')
+def test_native_replace_all_preserves_changed_count(mock_docs):
+    """Native changed counts are not presented as complete search counts."""
+    changed_count = 4
+    mock_docs.batchUpdate.return_value.execute.return_value = {
+        'replies': [{'replaceAllText': {'occurrencesChanged': changed_count}}],
+    }
+    _, response = call_tool('docs_search_replace', {
+        'doc_id': 'example', 'find': 'Target', 'replace': '', 'occurrence': 0,
+    })
+    data = response.structured_content
+    assert data['occurrences_changed'] == data['applied'] == changed_count
+    assert data['occurrences_found'] is None
+    assert data['occurrences_found_complete'] is False
+    mock_docs.get.assert_not_called()
+
+
+@pytest.mark.parametrize('count', [100, 101])
+@pytest.mark.usefixtures('contract_api')
+def test_batch_preview_limits_do_not_limit_edits(
+    mock_docs, receipt_document, count,
+):
+    """Bound receipts and preserve aliases while applying the entire batch."""
+    replacement = '😀' * 201
+    originals = ['Introduction' + 'X' * 70 + f'{index:03}'
+                 for index in range(count)]
+    receipt_document(originals)
+    tool, response = call_tool('docs_batch_replace', {
+        'doc_id': 'example',
+        'replacements_json': json.dumps([
+            {'find': original, 'replace': replacement}
+            for original in originals
+        ]),
+    })
+    data = response.structured_content
+    assert data['applied'] == count
+    assert len(data['changes']) == min(count, 100)
+    assert data['changes_truncated'] is (count > EXPECTED_RECEIPT_ITEM_LIMIT)
+    change = data['changes'][0]
+    assert change['with'] == replacement[:200]
+    assert change['replacement_char_count'] == len(replacement)
+    assert change['replacement_preview_truncated'] is True
+    assert change['replaced'] == originals[0][:80]
+    assert change['replaced_char_count'] == len(originals[0])
+    assert change['preview_truncated'] is True
+    requests = mock_docs.batchUpdate.call_args.kwargs['body']['requests']
+    assert len(requests) == count * 2
+    assert requests[0]['insertText']['text'] == replacement
+    assert json.loads(response.content[0].text) == data
+    validate(data, tool.outputSchema)
+
+
+@pytest.mark.parametrize('count', [100, 101])
+@pytest.mark.usefixtures('contract_api')
+def test_deleted_preview_limits_do_not_limit_edits(
+    mock_docs, receipt_document, count,
+):
+    """Retain full paragraph lengths and deletion counts past preview caps."""
+    text = 'X' * 81 + '\n'
+    receipt_document([text.rstrip('\n')] * count)
+    tool, response = call_tool('docs_delete_paragraph', {
+        'doc_id': 'example', 'anchor': 'X',
+    })
+    data = response.structured_content
+    shown = min(count, 100)
+    assert data['deleted_count'] == count
+    assert data['deleted'] == [text[:80]] * shown
+    assert data['deleted_char_counts'] == [len(text.rstrip('\n'))] * shown
+    assert data['deleted_preview_truncated'] == [True] * shown
+    assert data['deleted_truncated'] is (count > EXPECTED_RECEIPT_ITEM_LIMIT)
+    requests = mock_docs.batchUpdate.call_args.kwargs['body']['requests']
+    assert len(requests) == count
+    assert json.loads(response.content[0].text) == data
+    validate(data, tool.outputSchema)
+
+
+@pytest.mark.parametrize('name', [
+    'docs_insert_before', 'docs_insert_after', 'docs_append',
+])
+def test_rich_insertion_catalog_explains_heading_mapping(name):
+    """Keep the unusual Markdown mapping visible to tool callers."""
+    async def description():
+        async with Client(server.mcp) as client:
+            return next(
+                tool.description for tool in await client.list_tools()
+                if tool.name == name
+            )
+
+    text = ' '.join(asyncio.run(description()).split())
+    for mapping in ('# is TITLE', '## is SUBTITLE', '### is HEADING_1'):
+        assert mapping in text
