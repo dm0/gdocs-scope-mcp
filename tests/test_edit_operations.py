@@ -248,3 +248,52 @@ def test_delete_matching_paragraphs_preserves_remaining_text(
     assert edited_text(simple_document, mock_docs) == (
         '\nIntroduction\nParent\nNested\nOther\n'
     )
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason='Table text is merged into a paragraph with wrong source indices.',
+)
+@pytest.mark.parametrize(
+    'operation', ['replace', 'insert_before', 'insert_after'],
+)
+def test_table_edits_use_cell_indices_or_reject_without_writing(
+    captured_document, mock_docs, operation,
+):
+    """Use API cell positions, or refuse edits with unsupported positions."""
+    table = next(
+        item['table'] for item in captured_document['body']['content']
+        if 'table' in item
+    )
+    column = 1 if operation == 'replace' else 0
+    cell = table['tableRows'][0]['tableCells'][column]['content'][0]
+    run = cell['paragraph']['elements'][0]
+    anchor = run['textRun']['content'].strip()
+    start = run['startIndex']
+    end = cell['endIndex']
+    mock_docs.get.return_value.execute.side_effect = None
+    mock_docs.get.return_value.execute.return_value = captured_document
+
+    if operation == 'replace':
+        result = docs_edit.search_replace('example', anchor, 'X')
+        expected_index = start
+    else:
+        result = getattr(docs_edit, operation)(
+            'example', anchor, 'X', rich=False,
+        )
+        expected_index = start if operation == 'insert_before' else end - 1
+
+    if not result.ok:
+        mock_docs.batchUpdate.assert_not_called()
+        assert result.code
+        assert result.suggested_action
+        return
+
+    requests = mock_docs.batchUpdate.call_args.kwargs['body']['requests']
+    insertion = requests[0]['insertText']
+    assert insertion['location']['index'] == expected_index
+    if operation == 'replace':
+        assert requests[1]['deleteContentRange']['range'] == {
+            'startIndex': start + 1,
+            'endIndex': start + len(anchor) + 1,
+        }
