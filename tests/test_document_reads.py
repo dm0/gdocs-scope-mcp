@@ -3,8 +3,14 @@
 # Fixture counts and offsets are intentional expectations in these tests.
 # ruff: noqa: PLR2004
 
+import pytest
+from pydantic import TypeAdapter
+
 from gdocs_scope_mcp import docs_edit
-from gdocs_scope_mcp.models import GoogleDocument
+from gdocs_scope_mcp.models import (
+    GoogleDocument,
+    GoogleDocumentParagraphElement,
+)
 
 
 def test_absent_inline_objects_defaults_to_independent_empty_map(
@@ -160,4 +166,83 @@ def test_multiple_selected_sections_keep_document_order(mock_docs):
     assert len(result.subset_md) == 2
     assert 'Target phrase again' in result.subset_md[0]
     assert 'Target phrase elsewhere' in result.subset_md[1]
+    mock_docs.batchUpdate.assert_not_called()
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason='Paragraph element discrimination omits rules and inline objects.',
+)
+@pytest.mark.parametrize(
+    ('kind', 'payload'),
+    [
+        ('horizontalRule', {'textStyle': {}}),
+        ('inlineObjectElement', {
+            'inlineObjectId': 'fixture-image', 'textStyle': {},
+        }),
+    ],
+)
+def test_non_text_paragraph_elements_keep_their_type(kind, payload):
+    """Recognize supported non-text elements instead of an empty base model."""
+    element = TypeAdapter(GoogleDocumentParagraphElement).validate_python({
+        'startIndex': 1, 'endIndex': 2, kind: payload,
+    })
+
+    assert element.type == kind
+    assert element.start_index == 1
+    assert element.end_index == 2
+    if kind == 'inlineObjectElement':
+        assert element.inline_object_id == 'fixture-image'
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason='Inline image elements are parsed as empty base elements.',
+)
+def test_captured_inline_images_are_included_in_reads(
+    captured_document, mock_docs,
+):
+    """Render captured image references using deterministic fixture URLs."""
+    expected_images = []
+    for index, obj in enumerate(captured_document['inlineObjects'].values()):
+        embedded = obj['inlineObjectProperties']['embeddedObject']
+        title = f'Fixture image {index}'
+        uri = f'https://example.com/fixture-image-{index}.png'
+        embedded['title'] = title
+        embedded['imageProperties']['contentUri'] = uri
+        expected_images.append(f'![{title}]({uri})')
+    assert expected_images
+    mock_docs.get.return_value.execute.side_effect = None
+    mock_docs.get.return_value.execute.return_value = captured_document
+
+    result = docs_edit.read('example')
+
+    markdown = ''.join(result.subset_md)
+    for image in expected_images:
+        assert image in markdown
+    mock_docs.batchUpdate.assert_not_called()
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason='Horizontal rules are parsed as empty base elements.',
+)
+def test_horizontal_rule_is_included_in_reads(simple_document, mock_docs):
+    """Expose the document's horizontal rule in the Markdown read result."""
+    simple_document['body']['content'] = [{
+        'startIndex': 1, 'endIndex': 3,
+        'paragraph': {
+            'paragraphStyle': {'namedStyleType': 'NORMAL_TEXT'},
+            'elements': [
+                {'startIndex': 1, 'endIndex': 2,
+                 'horizontalRule': {'textStyle': {}}},
+                {'startIndex': 2, 'endIndex': 3,
+                 'textRun': {'content': '\n', 'textStyle': {}}},
+            ],
+        },
+    }]
+
+    result = docs_edit.read('example')
+
+    assert '\n---\n' in ''.join(result.subset_md)
     mock_docs.batchUpdate.assert_not_called()
