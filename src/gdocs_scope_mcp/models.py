@@ -178,7 +178,8 @@ class DocumentSection(DocumentOutlineItem):
                                 end_index=match.end(),
                             )
                         )
-                    return results
+                        return results
+                    continue
                 results.extend(
                     [
                         SearchResult(
