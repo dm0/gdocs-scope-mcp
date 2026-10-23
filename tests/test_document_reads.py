@@ -4,6 +4,36 @@
 # ruff: noqa: PLR2004
 
 from google_docs_mcp import docs_edit
+from google_docs_mcp.models import GoogleDocument
+
+
+def test_absent_inline_objects_defaults_to_independent_empty_map(
+    simple_document,
+):
+    """Documents without embedded objects accept the API's omitted field."""
+    del simple_document['inlineObjects']
+    first = GoogleDocument.model_validate(simple_document)
+    second = GoogleDocument.model_validate(simple_document)
+
+    assert first.inline_objects == {}
+    assert second.inline_objects == {}
+    assert first.inline_objects is not second.inline_objects
+
+
+def test_reads_work_when_api_omits_inline_objects(simple_document, mock_docs):
+    """Outline and section reads survive the response seen in live testing."""
+    del simple_document['inlineObjects']
+
+    outline = docs_edit.get_tree('example')
+    result = docs_edit.read('example', ['nested'])
+
+    assert [section.id for section in outline.sections] == [
+        '', 'parent', 'nested', 'other',
+    ]
+    assert result.selected_headings == ['nested']
+    assert 'Target phrase again' in result.subset_md[0]
+    assert 'elsewhere' not in result.subset_md[0]
+    mock_docs.batchUpdate.assert_not_called()
 
 
 def test_captured_outline_preserves_heading_identity(

@@ -1123,12 +1123,6 @@ def append(doc_id: str, text: str, rich: bool = True) -> dict:
     last_elem = body_content[-1]
     insert_index = last_elem['endIndex'] - 1
 
-    requests, inserted_text = _build_insert_requests(
-        insert_index,
-        text,
-        prefix='\n',
-        rich=rich,
-    )
     requests = markdown_to_requests(text, start=insert_index)
     service.documents().batchUpdate(
         documentId=doc_id,

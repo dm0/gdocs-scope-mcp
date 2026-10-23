@@ -721,7 +721,8 @@ class GoogleDocument(BaseModel, populate_by_name=True):
     body: GoogleDocumentBody
     lists: dict[str, GoogleDocumentList]
     inline_objects: Annotated[
-        dict[str, GoogleDocumentInlineObject], Field(alias='inlineObjects')
+        dict[str, GoogleDocumentInlineObject],
+        Field(alias='inlineObjects', default_factory=dict)
     ]
     revision_id: Annotated[str, Field(alias='revisionId')]
     document_id: Annotated[str, Field(alias='documentId')]
