@@ -174,3 +174,34 @@ def test_read_heading_anchor_is_not_inserted_as_visible_text():
         if 'updateParagraphStyle' in r
     ]
     assert styles[0]['paragraphStyle']['namedStyleType'] == 'HEADING_1'
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason='List elements are flattened without paragraph breaks or bullets.',
+)
+@pytest.mark.parametrize(
+    'markdown', ['- first\n- second', '1. first\n2. second'],
+    ids=['unordered', 'ordered'],
+)
+@pytest.mark.parametrize('newline_before', [False, True])
+def test_markdown_lists_create_item_paragraphs_and_native_bullets(
+    markdown, newline_before,
+):
+    """Keep each item in a separate paragraph with native list formatting."""
+    requests = markdown_to_requests(
+        markdown, start=12, newline_before=newline_before,
+    )
+
+    inserted = ''.join(
+        request['insertText']['text'] for request in requests
+        if 'insertText' in request
+    )
+    expected = '\nfirst\nsecond' if newline_before else 'first\nsecond\n'
+    assert inserted == expected
+    bullets = [
+        request['createParagraphBullets'] for request in requests
+        if 'createParagraphBullets' in request
+    ]
+    assert bullets
+    assert all(item['bulletPreset'] for item in bullets)
