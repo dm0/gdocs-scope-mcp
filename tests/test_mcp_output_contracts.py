@@ -688,3 +688,81 @@ def test_resolve_failure_does_not_return_success(contract_api):
     assert response.is_error is True
     assert response.structured_content['code'] == 'INTERNAL_ERROR'
     contract_api.comments.return_value.update.assert_not_called()
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason='Batch replacements are exposed as an opaque JSON string.',
+)
+def test_typed_batch_input_schema_exposes_replacement_fields():
+    """Expose item fields for constructing validated replacement objects."""
+    async def schema():
+        async with Client(server.mcp) as client:
+            tools = await client.list_tools()
+            return next(
+                tool.inputSchema for tool in tools
+                if tool.name == 'docs_batch_replace'
+            )
+
+    item_array = asyncio.run(schema())['properties']['replacements']
+    assert item_array['type'] == 'array'
+    item = item_array['items']
+    assert item['type'] == 'object'
+    assert {'find', 'replace'} <= set(item['required'])
+    assert item['properties']['occurrence']['minimum'] == 0
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason='The batch tool does not accept a typed replacements array.',
+)
+def test_typed_batch_input_accepts_structured_replacements(
+    contract_api, mock_docs,
+):
+    """Pass replacement objects directly, without nested JSON serialization."""
+    _, response = call_tool(
+        'docs_batch_replace',
+        {'doc_id': 'example', 'replacements': [
+            {'find': 'Introduction', 'replace': 'Changed'},
+        ]},
+        raise_on_error=False,
+    )
+
+    assert response.is_error is False
+    assert response.structured_content['applied'] == 1
+    mock_docs.batchUpdate.assert_called_once()
+    contract_api.files.return_value.list.assert_not_called()
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason='Tool constraints are not consistently validated before API calls.',
+)
+@pytest.mark.parametrize(
+    ('name', 'arguments'),
+    [
+        ('docs_search_replace', {'find': 'Target phrase', 'replace': 'New',
+                                 'occurrence': -1}),
+        ('docs_insert_before', {'anchor': '', 'text': 'New'}),
+        ('docs_delete_paragraph', {'anchor': ''}),
+        ('docs_add_comment', {'anchor_text': 'Target phrase', 'comment': 'New',
+                              'occurrence': 0}),
+        ('docs_list', {'limit': 0}),
+        ('docs_list', {'limit': -1}),
+        ('docs_batch_replace', {'replacements_json': '[{"replace":"New"}]'}),
+    ],
+)
+def test_invalid_tool_constraints_fail_before_api_access(
+    contract_api, mock_docs, name, arguments,
+):
+    """Reject invalid ranges, empty anchors, and incomplete replacements."""
+    if name != 'docs_list':
+        arguments = {'doc_id': 'example', **arguments}
+    _, response = call_tool(name, arguments, raise_on_error=False)
+
+    assert response.is_error
+    assert response.structured_content['code'] == 'INVALID_ARGUMENT'
+    mock_docs.get.assert_not_called()
+    mock_docs.batchUpdate.assert_not_called()
+    contract_api.files.return_value.list.assert_not_called()
+    contract_api.comments.return_value.create.assert_not_called()
