@@ -1,7 +1,6 @@
-#!/usr/bin/env python3
 """
-docs_edit.py — Surgical Google Docs editor
-==========================================
+Edit Google Docs through text anchors and batch updates.
+
 Edits Google Docs in-place using real batchUpdate requests, preserving
 document history, comments, and suggestions. LLMs never touch indices.
 
@@ -27,12 +26,12 @@ Auth (in priority order):
 Legacy GOOGLE_DRIVE_MCP_* env var aliases still work.
 
 Python API:
-    from google_docs_mcp.docs_edit import read, search_replace, insert_after, insert_before,
+    from google_docs_mcp.docs_edit import read, search_replace, insert_after,
+    insert_before,
                           delete_paragraph, append, batch_replace
 """
 
 from __future__ import annotations
-from itertools import chain
 
 import argparse
 import json
@@ -45,16 +44,31 @@ import tempfile
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
+from contextlib import suppress
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
+
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
+from googleapiclient.discovery import build
 
 # isort: split
 from .md2requests import markdown_to_requests
 from .models import (
-    DocumentSection, GoogleDocument, GoogleDocumentParagraph,
-    GoogleDocumentTextRun, GoogleDocumentNamedStyleType, DocumentOutline,
-    DocumentTree, DocumentSubset, DocumentParagraph, InsertSucceedResponse, EditFailedResponse, SearchResult, ReplaceSucceedResponse
+    HEADING_LEVELS,
+    DocumentOutline,
+    DocumentParagraph,
+    DocumentSection,
+    DocumentSubset,
+    DocumentTree,
+    EditFailedResponse,
+    GoogleDocument,
+    GoogleDocumentNamedStyleType,
+    GoogleDocumentParagraph,
+    InsertSucceedResponse,
+    ReplaceSucceedResponse,
+    SearchResult,
 )
 
 log = logging.getLogger(__name__)
@@ -73,9 +87,15 @@ TOKEN_ENV_ALIASES = (TOKEN_ENV_VAR, 'GOOGLE_DRIVE_MCP_TOKEN')
 CLIENT_ID_ENV_VAR = 'GOOGLE_DOCS_MCP_CLIENT_ID'
 CLIENT_SECRET_ENV_VAR = 'GOOGLE_DOCS_MCP_CLIENT_SECRET'
 CLIENT_ID_ENV_ALIASES = (CLIENT_ID_ENV_VAR, 'GOOGLE_DRIVE_MCP_CLIENT_ID')
-CLIENT_SECRET_ENV_ALIASES = (CLIENT_SECRET_ENV_VAR, 'GOOGLE_DRIVE_MCP_CLIENT_SECRET')
+CLIENT_SECRET_ENV_ALIASES = (
+    CLIENT_SECRET_ENV_VAR,
+    'GOOGLE_DRIVE_MCP_CLIENT_SECRET',
+)
 APPS_SCRIPT_ID_ENV_VAR = 'GOOGLE_DOCS_MCP_APPS_SCRIPT_ID'
-APPS_SCRIPT_ID_ENV_ALIASES = (APPS_SCRIPT_ID_ENV_VAR, 'GOOGLE_DRIVE_MCP_APPS_SCRIPT_ID')
+APPS_SCRIPT_ID_ENV_ALIASES = (
+    APPS_SCRIPT_ID_ENV_VAR,
+    'GOOGLE_DRIVE_MCP_APPS_SCRIPT_ID',
+)
 TOKEN_URL = 'https://oauth2.googleapis.com/token'
 SCRIPT_API_BASE = 'https://script.googleapis.com/v1'
 
@@ -94,17 +114,28 @@ def _export_gog_token(email: str = 'david@harriethq.com') -> dict:
         tmp = f.name
     try:
         result = subprocess.run(
-            ['gog', 'auth', 'tokens', 'export', email, '--out', tmp, '--overwrite', '-y'],
-            env=env, capture_output=True, text=True,
+            [
+                'gog',
+                'auth',
+                'tokens',
+                'export',
+                email,
+                '--out',
+                tmp,
+                '--overwrite',
+                '-y',
+            ],
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
         )
         if result.returncode != 0:
             raise RuntimeError(f'gog token export failed: {result.stderr}')
         return json.loads(Path(tmp).read_text())
     finally:
-        try:
-            os.unlink(tmp)
-        except OSError:
-            pass
+        with suppress(OSError):
+            Path(tmp).unlink()
 
 
 def _first_env(*names: str) -> str | None:
@@ -118,6 +149,7 @@ def _first_env(*names: str) -> str | None:
 def _load_token() -> dict:
     """
     Load token data. Priority:
+
       1. GOOGLE_DOCS_MCP_TOKEN env var   (standalone auth_setup.py output)
       2. GOOGLE_DRIVE_MCP_TOKEN env var  (backward-compatible alias)
       3. GOOGLE_DOCS_TOKEN_FILE env var  (legacy / gog compat)
@@ -145,9 +177,10 @@ def _load_token() -> dict:
     try:
         token = _export_gog_token()
         GOG_TOKEN_CACHE.write_text(json.dumps(token))
-        return token
     except RuntimeError as e:
         log.warning('Gog auto-export failed: %s', e)
+    else:
+        return token
 
     # 5. Gog cache
     if GOG_TOKEN_CACHE.exists():
@@ -164,18 +197,21 @@ def _load_token() -> dict:
 
 def _load_creds():
     """Return refreshed google.oauth2.credentials.Credentials."""
-    from google.oauth2.credentials import Credentials
-    from google.auth.transport.requests import Request
-
     token_data = _load_token()
 
-    # Self-contained token — auth_setup.py embeds client_id / client_secret directly
+    # Self-contained token — auth_setup.py embeds client_id / client_secret
+    # directly
     # (also handle legacy _client_id / _client_secret with underscore prefix)
     client_id = token_data.get('client_id') or token_data.get('_client_id')
-    client_secret = token_data.get('client_secret') or token_data.get('_client_secret')
-    token_uri = token_data.get('token_uri') or token_data.get('_token_uri', 'https://oauth2.googleapis.com/token')
+    client_secret = token_data.get('client_secret') or token_data.get(
+        '_client_secret'
+    )
+    token_uri = token_data.get('token_uri') or token_data.get(
+        '_token_uri', 'https://oauth2.googleapis.com/token'
+    )
 
-    # Environment override allows using external client credentials instead of a credentials.json file.
+    # Environment override allows using external client credentials instead of
+    # a credentials.json file.
     client_id = client_id or _first_env(*CLIENT_ID_ENV_ALIASES)
     client_secret = client_secret or _first_env(*CLIENT_SECRET_ENV_ALIASES)
 
@@ -187,12 +223,15 @@ def _load_creds():
 
     if not client_id or not client_secret:
         raise RuntimeError(
-            'No OAuth client credentials found. Re-run google-docs-mcp-auth to generate a self-contained token, '
+            'No OAuth client credentials found. Re-run google-docs-mcp-auth '
+            'to generate a self-contained token, '
             f'or set {CLIENT_ID_ENV_VAR} and {CLIENT_SECRET_ENV_VAR} '
             '(legacy GOOGLE_DRIVE_MCP_* aliases also work).'
         )
 
-    scopes = [s for s in token_data.get('scopes', []) if s not in ('email', 'openid')]
+    scopes = [
+        s for s in token_data.get('scopes', []) if s not in ('email', 'openid')
+    ]
 
     creds = Credentials(
         token=None,
@@ -208,7 +247,6 @@ def _load_creds():
 
 def _get_service(api: str = 'docs', version: str = 'v1'):
     """Build a Google API service client."""
-    from googleapiclient.discovery import build
     return build(api, version, credentials=_load_creds())
 
 
@@ -218,12 +256,17 @@ SUGGESTIONS_VIEW_MODE = 'SUGGESTIONS_INLINE'
 def _get_document(service, doc_id: str) -> dict:
     """
     Fetch a document with inline suggestions so returned indices stay usable
+
     for later batchUpdate calls.
     """
-    return service.documents().get(
-        documentId=doc_id,
-        suggestionsViewMode=SUGGESTIONS_VIEW_MODE,
-    ).execute()
+    return (
+        service.documents()
+        .get(
+            documentId=doc_id,
+            suggestionsViewMode=SUGGESTIONS_VIEW_MODE,
+        )
+        .execute()
+    )
 
 
 def _refresh_access_token_stdlib() -> str:
@@ -264,7 +307,9 @@ def _apps_script_api_request(
             message = payload.get('error', {}).get('message', raw)
         except json.JSONDecodeError:
             message = raw
-        raise RuntimeError(f'Apps Script API request failed ({e.code}): {message}') from None
+        raise RuntimeError(
+            f'Apps Script API request failed ({e.code}): {message}'
+        ) from None
 
 
 def _build_bookmark_bridge_files() -> list[dict]:
@@ -278,7 +323,9 @@ function createBookmarkAtText(docId, anchorText, occurrence) {
   for (var i = 0; i < wanted; i++) {
     found = body.findText(anchorText, found);
     if (!found) {
-      throw new Error('Anchor text not found for occurrence ' + wanted + ': ' + anchorText);
+      throw new Error(
+        'Anchor text not found for occurrence ' + wanted + ': ' + anchorText
+      );
     }
   }
 
@@ -345,13 +392,19 @@ def _create_bookmark_via_apps_script(
     if 'error' in result:
         details = result.get('error', {}).get('details', [])
         detail = details[0] if details else {}
-        message = detail.get('errorMessage') or result.get('error', {}).get('message') or json.dumps(result['error'])
+        message = (
+            detail.get('errorMessage')
+            or result.get('error', {}).get('message')
+            or json.dumps(result['error'])
+        )
         raise RuntimeError(f'Apps Script bookmark creation failed: {message}')
 
     payload = result.get('response', {}).get('result', {})
     bookmark_id = payload.get('bookmarkId')
     if not bookmark_id:
-        raise RuntimeError('Apps Script bookmark creation returned no bookmarkId')
+        raise RuntimeError(
+            'Apps Script bookmark creation returned no bookmarkId'
+        )
 
     return {
         'script_id': script_id,
@@ -368,23 +421,31 @@ def _build_bookmark_jump_url(doc_id: str, bookmark_id: str) -> str:
 # Document structure helpers
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class TextRun:
+    """Store plain text and its inclusive/exclusive document indices."""
+
     text: str
     start: int  # Document index (inclusive)
-    end: int    # Document index (exclusive)
+    end: int  # Document index (exclusive)
 
 
 @dataclass
 class Paragraph:
+    """Store source indices and plain text for an editable paragraph."""
+
     text: str
     style: str
-    start: int   # Start of paragraph including leading newline-like element
-    end: int     # End of paragraph (exclusive)
+    start: int  # Start of paragraph including leading newline-like element
+    end: int  # End of paragraph (exclusive)
     runs: list[TextRun]
+
 
 @dataclass
 class InlineStyleSpan:
+    """Describe an inline style over a range of inserted text."""
+
     start: int
     end: int
     bold: bool = False
@@ -393,9 +454,11 @@ class InlineStyleSpan:
 
 @dataclass
 class RichParagraph:
+    """Store parsed paragraph text, style, and list instructions."""
+
     text: str
     style: str = 'NORMAL_TEXT'
-    bullet_preset: Optional[str] = None
+    bullet_preset: str | None = None
     inline_styles: list[InlineStyleSpan] = field(default_factory=list)
 
 
@@ -406,27 +469,34 @@ def _extract_paragraphs(doc: dict) -> list[Paragraph]:
         if 'paragraph' not in elem:
             continue
         para = elem['paragraph']
-        style = para.get('paragraphStyle', {}).get('namedStyleType', 'NORMAL_TEXT')
+        style = para.get('paragraphStyle', {}).get(
+            'namedStyleType', 'NORMAL_TEXT'
+        )
         runs = []
         full_text = ''
         for pe in para.get('elements', []):
             if 'textRun' in pe:
                 content = pe['textRun']['content']
-                runs.append(TextRun(
-                    text=content,
-                    start=pe['startIndex'],
-                    end=pe['endIndex'],
-                ))
+                runs.append(
+                    TextRun(
+                        text=content,
+                        start=pe['startIndex'],
+                        end=pe['endIndex'],
+                    )
+                )
                 full_text += content
-        # Strip trailing newline for display (Google Docs always ends paragraphs with \n)
+        # Strip trailing newline for display (Google Docs always ends
+        # paragraphs with \n)
         display_text = full_text.rstrip('\n')
-        paragraphs.append(Paragraph(
-            text=display_text,
-            style=style,
-            start=elem['startIndex'],
-            end=elem['endIndex'],
-            runs=runs,
-        ))
+        paragraphs.append(
+            Paragraph(
+                text=display_text,
+                style=style,
+                start=elem['startIndex'],
+                end=elem['endIndex'],
+                runs=runs,
+            )
+        )
     return paragraphs
 
 
@@ -443,14 +513,13 @@ def _parse_document_tree(doc: dict) -> DocumentTree:
         level=GoogleDocumentNamedStyleType.NORMAL_TEXT.compact,
         paragraphs=[
             DocumentParagraph(start_index=0, end_index=0, text='', markdown='')
-        ]
+        ],
     )
     top_level: list[DocumentSection] = [last]
 
     google_doc = GoogleDocument.model_validate(doc)
 
     headings = {}
-
 
     for elem in google_doc.body.content:
         if not isinstance(elem, GoogleDocumentParagraph):
@@ -462,7 +531,7 @@ def _parse_document_tree(doc: dict) -> DocumentTree:
             start_index=elem.start_index,
             end_index=elem.end_index,
             text=elem.to_text(google_doc),
-            markdown=elem.to_markdown(google_doc)
+            markdown=elem.to_markdown(google_doc),
         )
         if elem.paragraph_style.heading_id is None:
             last.paragraphs.append(paragraph)
@@ -472,9 +541,9 @@ def _parse_document_tree(doc: dict) -> DocumentTree:
             title=paragraph.text,
             id=elem.paragraph_style.heading_id,
             level=elem.paragraph_style.named_style_type.compact,
-            ancestor_ids = [],
+            ancestor_ids=[],
             paragraphs=[paragraph],
-            sections=[]
+            sections=[],
         )
 
         headings[section.id] = section
@@ -505,13 +574,16 @@ def _parse_document_tree(doc: dict) -> DocumentTree:
         headings=headings,
         title=google_doc.title,
         revision_id=google_doc.revision_id,
-        document_id=google_doc.document_id
+        document_id=google_doc.document_id,
     )
 
 
-def _build_full_text_map(paragraphs: list[Paragraph]) -> tuple[str, list[tuple[int, int, int]]]:
+def _build_full_text_map(
+    paragraphs: list[Paragraph],
+) -> tuple[str, list[tuple[int, int, int]]]:
     """
-    Returns (full_text, text_map) where:
+    Return (full_text, text_map) where:
+
     - full_text is all characters concatenated from all text runs
     - text_map is list of (offset_in_full_text, doc_start_index, length)
       allowing mapping from full_text position → document index
@@ -527,12 +599,16 @@ def _build_full_text_map(paragraphs: list[Paragraph]) -> tuple[str, list[tuple[i
     return ''.join(parts), text_map
 
 
-def _full_text_pos_to_doc_index(pos: int, text_map: list[tuple[int, int, int]]) -> int:
-    """Map a position in the concatenated full_text to a document character index."""
-    for (ft_offset, doc_start, length) in text_map:
+def _full_text_pos_to_doc_index(
+    pos: int, text_map: list[tuple[int, int, int]]
+) -> int:
+    """Map a position in concatenated text to a document character index."""
+    for ft_offset, doc_start, length in text_map:
         if ft_offset <= pos < ft_offset + length:
             return doc_start + (pos - ft_offset)
-    raise ValueError(f'Position {pos} is not within any text run in the document.')
+    raise ValueError(
+        f'Position {pos} is not within any text run in the document.'
+    )
 
 
 def _parse_inline_rich_text(text: str) -> tuple[str, list[InlineStyleSpan]]:
@@ -550,29 +626,33 @@ def _parse_inline_rich_text(text: str) -> tuple[str, list[InlineStyleSpan]]:
     spans: list[InlineStyleSpan] = []
     i = 0
 
-    def emit_styled(inner: str, *, bold: bool = False, italic: bool = False) -> None:
+    def emit_styled(
+        inner: str, *, bold: bool = False, italic: bool = False
+    ) -> None:
         start = len(''.join(out))
         out.append(inner)
         end = start + len(inner)
-        spans.append(InlineStyleSpan(start=start, end=end, bold=bold, italic=italic))
+        spans.append(
+            InlineStyleSpan(start=start, end=end, bold=bold, italic=italic)
+        )
 
     while i < len(text):
         if text.startswith('***', i):
             j = text.find('***', i + 3)
             if j != -1 and j > i + 3:
-                emit_styled(text[i + 3:j], bold=True, italic=True)
+                emit_styled(text[i + 3 : j], bold=True, italic=True)
                 i = j + 3
                 continue
         if text.startswith('**', i):
             j = text.find('**', i + 2)
             if j != -1 and j > i + 2:
-                emit_styled(text[i + 2:j], bold=True)
+                emit_styled(text[i + 2 : j], bold=True)
                 i = j + 2
                 continue
         if text.startswith('*', i):
             j = text.find('*', i + 1)
             if j != -1 and j > i + 1:
-                emit_styled(text[i + 1:j], italic=True)
+                emit_styled(text[i + 1 : j], italic=True)
                 i = j + 1
                 continue
         out.append(text[i])
@@ -603,20 +683,20 @@ def _parse_rich_text(text: str) -> list[RichParagraph]:
     paragraphs: list[RichParagraph] = []
 
     heading_map = {
-        f"{'#'  * (style.level + 1)} ": style.value
+        f'{"#" * (style.level + 1)} ': style.value
         for style in reversed(GoogleDocumentNamedStyleType)
-        if style.level < 8
+        if style.level < len(HEADING_LEVELS)
     }
 
     for raw_line in lines:
         line = raw_line
         style = GoogleDocumentNamedStyleType.NORMAL_TEXT.value
-        bullet_preset: Optional[str] = None
+        bullet_preset: str | None = None
 
         for prefix, h_style in heading_map.items():
             if line.startswith(prefix):
                 style = h_style
-                line = line[len(prefix):]
+                line = line[len(prefix) :]
                 break
         else:
             bullet_match = re.match(r'^\s*[-*]\s+(.+)$', line)
@@ -680,17 +760,22 @@ def _build_insert_requests(
     for idx, para in enumerate(paragraphs):
         start = cursor
         end = start + len(para.text)
-        paragraph_end = end + 1  # Paragraph terminator newline (inserted or existing body newline)
+        paragraph_end = (
+            end + 1
+        )  # Paragraph terminator newline (inserted or existing body newline)
         paragraph_positions.append((para, start, end, paragraph_end))
         cursor = end
         if idx < len(paragraphs) - 1:
             cursor += 1
 
-    for para, start, end, paragraph_end in paragraph_positions:
+    for para, start, end, _paragraph_end in paragraph_positions:
         requests.append(
             {
                 'updateParagraphStyle': {
-                    'range': {'startIndex': start, 'endIndex': max(end, start)},
+                    'range': {
+                        'startIndex': start,
+                        'endIndex': max(end, start),
+                    },
                     'paragraphStyle': {'namedStyleType': para.style},
                     'fields': 'namedStyleType',
                 }
@@ -734,7 +819,9 @@ def _build_insert_requests(
         group_end = paragraph_end
         j = i + 1
         while j < len(paragraph_positions):
-            next_para, next_start, next_end, next_paragraph_end = paragraph_positions[j]
+            next_para, _next_start, _next_end, next_paragraph_end = (
+                paragraph_positions[j]
+            )
             if next_para.bullet_preset != bullet_preset:
                 break
             group_end = next_paragraph_end
@@ -742,7 +829,10 @@ def _build_insert_requests(
         requests.append(
             {
                 'createParagraphBullets': {
-                    'range': {'startIndex': group_start, 'endIndex': group_end},
+                    'range': {
+                        'startIndex': group_start,
+                        'endIndex': group_end,
+                    },
                     'bulletPreset': bullet_preset,
                 }
             }
@@ -772,9 +862,8 @@ def _render_comment_with_anchor_text(comment: str, anchor_text: str) -> str:
 # Core operations
 # ---------------------------------------------------------------------------
 
-def read(
-    doc_id: str, heading_ids: list[str] | None = None
-) -> DocumentSubset:
+
+def read(doc_id: str, heading_ids: list[str] | None = None) -> DocumentSubset:
     """
     Read Google document or its parts including all nested headings.
     """
@@ -784,10 +873,7 @@ def read(
     google_doc = _parse_document_tree(doc)
 
     if heading_ids is None:
-        items = [
-            section.subtree_markdown()
-            for section in google_doc.sections
-        ]
+        items = [section.subtree_markdown() for section in google_doc.sections]
     else:
         items = [
             item.subtree_markdown()
@@ -818,9 +904,9 @@ def get_tree(doc_id: str) -> DocumentOutline:
 
     return DocumentOutline(
         sections=flat_items,
-        title = tree.title,
+        title=tree.title,
         revision_id=tree.revision_id,
-        document_id=tree.document_id
+        document_id=tree.document_id,
     )
 
 
@@ -834,7 +920,8 @@ def get_full_tree(doc_id: str) -> DocumentTree:
     return _parse_document_tree(doc)
 
 
-def search_replace(
+# Preserve the public positional calling convention.
+def search_replace(  # noqa: PLR0917
     doc_id: str,
     find: str,
     replace: str,
@@ -854,24 +941,35 @@ def search_replace(
         heading_id: Scope search to this heading and all nested subheadings.
         regex:      Treat `find` as a regular expression
 
-    Returns:
-        {"ok": True, "replaced": "old text", "at_index": 45, "occurrences_found": 3}
+    Returns
+    -------
+        {"ok": True, "replaced": "old text", "at_index": 45,
+        "occurrences_found": 3}
     """
     service = _get_service('docs', 'v1')
 
     # Replace-all: use the native replaceAllText API (fast, atomic)
     if occurrence == 0 and not regex and heading_id is None:
-        result = service.documents().batchUpdate(
-            documentId=doc_id,
-            body={
-                'requests': [{
-                    'replaceAllText': {
-                        'containsText': {'text': find, 'matchCase': True},
-                        'replaceText': replace,
-                    }
-                }]
-            },
-        ).execute()
+        result = (
+            service.documents()
+            .batchUpdate(
+                documentId=doc_id,
+                body={
+                    'requests': [
+                        {
+                            'replaceAllText': {
+                                'containsText': {
+                                    'text': find,
+                                    'matchCase': True,
+                                },
+                                'replaceText': replace,
+                            }
+                        }
+                    ]
+                },
+            )
+            .execute()
+        )
         count = (
             result.get('replies', [{}])[0]
             .get('replaceAllText', {})
@@ -882,12 +980,16 @@ def search_replace(
     # Targeted occurrence: find index manually
     doc = _get_document(service, doc_id)
     tree = _parse_document_tree(doc)
-    haystack = tree if heading_id is None else tree.headings.get(heading_id, None)
+    haystack = (
+        tree if heading_id is None else tree.headings.get(heading_id, None)
+    )
     if haystack is None:
         return EditFailedResponse(
             description=f"Heading with id '{heading_id}' was not "
-                         "found in the document",
-            suggested_action='Run docs_get_tree to verify the exact heading id'
+            'found in the document',
+            suggested_action=(
+                'Run docs_get_tree to verify the exact heading id'
+            ),
         )
 
     found = (
@@ -899,21 +1001,24 @@ def search_replace(
         where = 'document' if heading_id is None else 'requested heading'
         return EditFailedResponse(
             description=f"A paragraph containing '{find}' was not "
-                        f"found in the {where}",
-            suggested_action='Run docs_read to verify the exact text to search for'
+            f'found in the {where}',
+            suggested_action=(
+                'Run docs_read to verify the exact text to search for'
+            ),
         )
 
     if isinstance(found, SearchResult):
         found = [found]
-
 
     target_idx = occurrence - 1
     if target_idx >= len(found):
         where = 'Document' if heading_id is None else 'Requested heading'
         return EditFailedResponse(
             description=f'Occurrence {occurrence} not found. {where} has '
-                        f'{len(found)} occurrence(s) of {find!r}',
-            suggested_action='Run docs_read to verify the exact occurrence number'
+            f'{len(found)} occurrence(s) of {find!r}',
+            suggested_action=(
+                'Run docs_read to verify the exact occurrence number'
+            ),
         )
 
     target = found[target_idx]
@@ -921,32 +1026,38 @@ def search_replace(
     doc_start = target.paragraph.start_index + target.start_index
     doc_end = target.paragraph.start_index + target.end_index
 
-    old_text = target.paragraph.text[target.start_index:target.end_index]
+    old_text = target.paragraph.text[target.start_index : target.end_index]
 
     # Apply: delete old text, then insert replacement at same position
     requests = []
     if replace:
-        requests.append({
-            'insertText': {
-                'location': {'index': doc_start},
-                'text': replace,
-            }
-        })
-        requests.append({
-            'deleteContentRange': {
-                'range': {
-                    'startIndex': doc_start + len(replace),
-                    'endIndex': doc_end + len(replace),
+        requests.append(
+            {
+                'insertText': {
+                    'location': {'index': doc_start},
+                    'text': replace,
                 }
             }
-        })
+        )
+        requests.append(
+            {
+                'deleteContentRange': {
+                    'range': {
+                        'startIndex': doc_start + len(replace),
+                        'endIndex': doc_end + len(replace),
+                    }
+                }
+            }
+        )
     else:
         # Replacing with empty string = pure delete
-        requests.append({
-            'deleteContentRange': {
-                'range': {'startIndex': doc_start, 'endIndex': doc_end}
+        requests.append(
+            {
+                'deleteContentRange': {
+                    'range': {'startIndex': doc_start, 'endIndex': doc_end}
+                }
             }
-        })
+        )
 
     service.documents().batchUpdate(
         documentId=doc_id,
@@ -954,29 +1065,38 @@ def search_replace(
     ).execute()
 
     return ReplaceSucceedResponse(
-        replaced=old_text, at_index=doc_start, occurrences_found=len(found))
+        replaced=old_text, at_index=doc_start, occurrences_found=len(found)
+    )
 
 
 def insert_after(
-    doc_id: str, anchor: str, text: str,
-    heading_id: str | None = None, rich: bool = True
+    doc_id: str,
+    anchor: str,
+    text: str,
+    heading_id: str | None = None,
+    rich: bool = True,
 ) -> InsertSucceedResponse | EditFailedResponse:
     """
     Insert text as a new paragraph after the paragraph containing `anchor`.
 
-    The inserted text becomes a separate paragraph (newline appended automatically).
+    The inserted text becomes a separate paragraph (newline appended
+    automatically).
     The search can be scoped to the specified heading (and nested subheadings).
     """
     service = _get_service('docs', 'v1')
     doc = _get_document(service, doc_id)
     tree = _parse_document_tree(doc)
 
-    haystack = tree if heading_id is None else tree.headings.get(heading_id, None)
+    haystack = (
+        tree if heading_id is None else tree.headings.get(heading_id, None)
+    )
     if haystack is None:
         return EditFailedResponse(
             description=f"Heading with id '{heading_id}' was not "
-                         "found in the document",
-            suggested_action='Run docs_get_tree to verify the exact heading id'
+            'found in the document',
+            suggested_action=(
+                'Run docs_get_tree to verify the exact heading id'
+            ),
         )
 
     found = haystack.find_first(anchor, False)
@@ -984,8 +1104,8 @@ def insert_after(
         where = 'document' if heading_id is None else 'requested heading'
         return EditFailedResponse(
             description=f"A paragraph containing anchor '{anchor}' was not "
-                        f"found in the {where}",
-            suggested_action='Run docs_read to verify the exact anchor text'
+            f'found in the {where}',
+            suggested_action='Run docs_read to verify the exact anchor text',
         )
 
     # Insert after the end of the paragraph (doc end index includes the \n)
@@ -1007,30 +1127,38 @@ def insert_after(
         insert_position='before',
         at_index=insert_index,
         rich=rich,
-        inserted_text=inserted_text
+        inserted_text=inserted_text,
     )
 
 
 def insert_before(
-    doc_id: str, anchor: str, text: str,
-    heading_id: str | None = None, rich: bool = True
+    doc_id: str,
+    anchor: str,
+    text: str,
+    heading_id: str | None = None,
+    rich: bool = True,
 ) -> InsertSucceedResponse | EditFailedResponse:
     """
     Insert Markdown paragraphs before the paragraph containing `anchor`.
 
-    The inserted text becomes a separate paragraph (newline appended automatically).
+    The inserted text becomes a separate paragraph (newline appended
+    automatically).
     The search can be scoped to the specified heading (and nested subheadings).
     """
     service = _get_service('docs', 'v1')
     doc = _get_document(service, doc_id)
     tree = _parse_document_tree(doc)
 
-    haystack = tree if heading_id is None else tree.headings.get(heading_id, None)
+    haystack = (
+        tree if heading_id is None else tree.headings.get(heading_id, None)
+    )
     if haystack is None:
         return EditFailedResponse(
             description=f"Heading with id '{heading_id}' was not "
-                         "found in the document",
-            suggested_action='Run docs_get_tree to verify the exact heading id'
+            'found in the document',
+            suggested_action=(
+                'Run docs_get_tree to verify the exact heading id'
+            ),
         )
 
     found = haystack.find_first(anchor, False)
@@ -1038,8 +1166,8 @@ def insert_before(
         where = 'document' if heading_id is None else 'requested heading'
         return EditFailedResponse(
             description=f"A paragraph containing anchor '{anchor}' was not "
-                        f"found in the {where}",
-            suggested_action='Run docs_read to verify the exact anchor text'
+            f'found in the {where}',
+            suggested_action='Run docs_read to verify the exact anchor text',
         )
 
     # Insert at the start of the paragraph
@@ -1047,17 +1175,25 @@ def insert_before(
 
     if rich:
         requests = markdown_to_requests(
-            text, start=insert_index, newline_before=False,
+            text,
+            start=insert_index,
+            newline_before=False,
         )
         inserted_text = ''.join(
             request['insertText']['text']
-            for request in requests if 'insertText' in request
+            for request in requests
+            if 'insertText' in request
         )
     else:
         inserted_text = text + '\n'
-        requests = [{'insertText': {
-            'location': {'index': insert_index}, 'text': inserted_text,
-        }}]
+        requests = [
+            {
+                'insertText': {
+                    'location': {'index': insert_index},
+                    'text': inserted_text,
+                }
+            }
+        ]
     service.documents().batchUpdate(
         documentId=doc_id,
         body={'requests': requests},
@@ -1068,7 +1204,7 @@ def insert_before(
         insert_position='before',
         at_index=insert_index,
         rich=rich,
-        inserted_text=inserted_text
+        inserted_text=inserted_text,
     )
 
 
@@ -1087,19 +1223,22 @@ def delete_paragraph(doc_id: str, anchor: str) -> dict:
     if not targets:
         raise ValueError(f'No paragraph containing anchor: {anchor!r}')
 
-    # Sort by start index descending so deleting earlier content doesn't shift later indices
+    # Sort by start index descending so deleting earlier content doesn't shift
+    # later indices
     targets.sort(key=lambda p: p.start, reverse=True)
 
     requests = []
     for t in targets:
-        requests.append({
-            'deleteContentRange': {
-                'range': {
-                    'startIndex': t.start,
-                    'endIndex': t.end,
+        requests.append(
+            {
+                'deleteContentRange': {
+                    'range': {
+                        'startIndex': t.start,
+                        'endIndex': t.end,
+                    }
                 }
             }
-        })
+        )
 
     service.documents().batchUpdate(
         documentId=doc_id,
@@ -1113,7 +1252,8 @@ def delete_paragraph(doc_id: str, anchor: str) -> dict:
     }
 
 
-def append(doc_id: str, text: str, rich: bool = True) -> dict:
+# Retain the public rich option until append migration is complete.
+def append(doc_id: str, text: str, rich: bool = True) -> dict:  # noqa: ARG001
     """
     Append text as a new paragraph at the end of the document.
     """
@@ -1150,10 +1290,12 @@ def batch_replace(doc_id: str, replacements: list[dict]) -> dict:
 
     Args:
         doc_id:       Google Doc ID
-        replacements: List of {"find": "...", "replace": "...", "occurrence": 1}
+        replacements: List of {"find": "...", "replace": "...", "occurrence":
+        1}
                       `occurrence` defaults to 1. Use 0 for replace-all.
 
-    Returns:
+    Returns
+    -------
         {"ok": True, "applied": N, "changes": [...]}
     """
     service = _get_service('docs', 'v1')
@@ -1171,7 +1313,9 @@ def batch_replace(doc_id: str, replacements: list[dict]) -> dict:
 
         # Build list of (ft_start, ft_end) tuples
         if is_regex:
-            matches = [(m.start(), m.end()) for m in re.finditer(find, full_text)]
+            matches = [
+                (m.start(), m.end()) for m in re.finditer(find, full_text)
+            ]
         else:
             matches = []
             search_from = 0
@@ -1190,43 +1334,54 @@ def batch_replace(doc_id: str, replacements: list[dict]) -> dict:
             for ft_start, ft_end in matches:
                 ds = _full_text_pos_to_doc_index(ft_start, text_map)
                 de = _full_text_pos_to_doc_index(ft_end - 1, text_map) + 1
-                changes.append((ds, de, replace_text, full_text[ft_start:ft_end]))
+                changes.append(
+                    (ds, de, replace_text, full_text[ft_start:ft_end])
+                )
         else:
             idx = occurrence - 1
             if idx >= len(matches):
-                raise ValueError(f'Occurrence {occurrence} not found for {find!r}')
+                raise ValueError(
+                    f'Occurrence {occurrence} not found for {find!r}'
+                )
             ft_start, ft_end = matches[idx]
             ds = _full_text_pos_to_doc_index(ft_start, text_map)
             de = _full_text_pos_to_doc_index(ft_end - 1, text_map) + 1
             changes.append((ds, de, replace_text, full_text[ft_start:ft_end]))
 
-    # Sort by doc_start DESCENDING (apply end-of-doc first so indices stay valid)
+    # Sort by doc_start DESCENDING (apply end-of-doc first so indices stay
+    # valid)
     changes.sort(key=lambda c: c[0], reverse=True)
 
     # Build batchUpdate requests
     requests = []
-    for (ds, de, replace_text, old_text) in changes:
+    for ds, de, replace_text, _old_text in changes:
         if replace_text:
-            requests.append({
-                'insertText': {
-                    'location': {'index': ds},
-                    'text': replace_text,
-                }
-            })
-            requests.append({
-                'deleteContentRange': {
-                    'range': {
-                        'startIndex': ds + len(replace_text),
-                        'endIndex': de + len(replace_text),
+            requests.append(
+                {
+                    'insertText': {
+                        'location': {'index': ds},
+                        'text': replace_text,
                     }
                 }
-            })
-        else:
-            requests.append({
-                'deleteContentRange': {
-                    'range': {'startIndex': ds, 'endIndex': de}
+            )
+            requests.append(
+                {
+                    'deleteContentRange': {
+                        'range': {
+                            'startIndex': ds + len(replace_text),
+                            'endIndex': de + len(replace_text),
+                        }
+                    }
                 }
-            })
+            )
+        else:
+            requests.append(
+                {
+                    'deleteContentRange': {
+                        'range': {'startIndex': ds, 'endIndex': de}
+                    }
+                }
+            )
 
     service.documents().batchUpdate(
         documentId=doc_id,
@@ -1243,7 +1398,8 @@ def batch_replace(doc_id: str, replacements: list[dict]) -> dict:
     }
 
 
-def add_comment(
+# Preserve the public positional calling convention.
+def add_comment(  # noqa: PLR0917
     doc_id: str,
     comment: str,
     anchor_text: str,
@@ -1261,7 +1417,8 @@ def add_comment(
     Important limitation: despite the named range, Google Docs still renders
     these API-created comments as "Original content deleted" in the UI rather
     than as a proper inline highlight. This function is kept for API-level
-    comment access, but a real Apps Script automation path is being investigated
+    comment access, but a real Apps Script automation path is being
+    investigated
     for true inline Docs comments.
 
     Steps:
@@ -1275,12 +1432,11 @@ def add_comment(
         anchor_text: Text in the document to attach the comment to
         occurrence:  Which occurrence to anchor to (default 1 = first)
 
-    Returns:
+    Returns
+    -------
         {"ok": True, "comment_id": "...", "anchored_to": "...", "at_index": N,
          "named_range_id": "..."}
     """
-    import uuid
-
     docs_service = _get_service('docs', 'v1')
     doc = _get_document(docs_service, doc_id)
     paragraphs = _extract_paragraphs(doc)
@@ -1312,21 +1468,27 @@ def add_comment(
 
     # Create a named range at the anchor position
     range_name = f'comment-anchor-{uuid.uuid4().hex[:12]}'
-    result = docs_service.documents().batchUpdate(
-        documentId=doc_id,
-        body={
-            'requests': [{
-                'createNamedRange': {
-                    'name': range_name,
-                    'range': {
-                        'startIndex': doc_start,
-                        'endIndex': doc_end,
-                        'segmentId': '',  # empty = main document body
-                    },
-                }
-            }]
-        },
-    ).execute()
+    result = (
+        docs_service.documents()
+        .batchUpdate(
+            documentId=doc_id,
+            body={
+                'requests': [
+                    {
+                        'createNamedRange': {
+                            'name': range_name,
+                            'range': {
+                                'startIndex': doc_start,
+                                'endIndex': doc_end,
+                                'segmentId': '',  # empty = main document body
+                            },
+                        }
+                    }
+                ]
+            },
+        )
+        .execute()
+    )
 
     named_range_id = (
         result.get('replies', [{}])[0]
@@ -1334,12 +1496,13 @@ def add_comment(
         .get('namedRangeId')
     )
     if not named_range_id:
-        raise RuntimeError('Failed to create named range — no ID returned by Docs API')
+        raise RuntimeError(
+            'Failed to create named range — no ID returned by Docs API'
+        )
 
     # The correct anchor format for Google Docs is the bare named range ID
     # (e.g. "kix.abc123") as a plain string — NOT a JSON object.
     # quotedFileContent provides the fallback display text.
-    from googleapiclient.discovery import build
     drive = build('drive', 'v3', credentials=_load_creds())
     bookmark = None
     if bookmark_jump:
@@ -1356,21 +1519,24 @@ def add_comment(
         else comment
     )
     if bookmark is not None:
-        rendered_comment = (
-            f"{rendered_comment}\n\nJump: {_build_bookmark_jump_url(doc_id, bookmark['bookmark_id'])}"
-        )
-    comment_result = drive.comments().create(
-        fileId=doc_id,
-        body={
-            'content': rendered_comment,
-            'anchor': named_range_id,
-            'quotedFileContent': {
-                'mimeType': 'text/html',
-                'value': full_text[ft_start:ft_end],
+        jump_url = _build_bookmark_jump_url(doc_id, bookmark['bookmark_id'])
+        rendered_comment = f'{rendered_comment}\n\nJump: {jump_url}'
+    comment_result = (
+        drive.comments()
+        .create(
+            fileId=doc_id,
+            body={
+                'content': rendered_comment,
+                'anchor': named_range_id,
+                'quotedFileContent': {
+                    'mimeType': 'text/html',
+                    'value': full_text[ft_start:ft_end],
+                },
             },
-        },
-        fields='id,content,anchor',
-    ).execute()
+            fields='id,content,anchor',
+        )
+        .execute()
+    )
 
     return {
         'ok': True,
@@ -1379,13 +1545,17 @@ def add_comment(
         'at_index': doc_start,
         'named_range_id': named_range_id,
         'comment_content': rendered_comment,
-        'bookmark_id': bookmark['bookmark_id'] if bookmark is not None else None,
+        'bookmark_id': bookmark['bookmark_id']
+        if bookmark is not None
+        else None,
         'bookmark_url': (
             _build_bookmark_jump_url(doc_id, bookmark['bookmark_id'])
             if bookmark is not None
             else None
         ),
-        'apps_script_id': bookmark['script_id'] if bookmark is not None else None,
+        'apps_script_id': bookmark['script_id']
+        if bookmark is not None
+        else None,
     }
 
 
@@ -1393,12 +1563,17 @@ def add_comment(
 # CLI
 # ---------------------------------------------------------------------------
 
+
 def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         description='Surgical Google Docs editor — LLMs never touch indices.',
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    p.add_argument('--json', action='store_true', help='Output JSON (default for scripting)')
+    p.add_argument(
+        '--json',
+        action='store_true',
+        help='Output JSON (default for scripting)',
+    )
 
     sub = p.add_subparsers(dest='command', required=True)
 
@@ -1411,7 +1586,12 @@ def _build_parser() -> argparse.ArgumentParser:
     sr.add_argument('doc_id')
     sr.add_argument('--find', required=True)
     sr.add_argument('--replace', required=True)
-    sr.add_argument('--occurrence', type=int, default=1, help='Which occurrence (1=first, 0=all)')
+    sr.add_argument(
+        '--occurrence',
+        type=int,
+        default=1,
+        help='Which occurrence (1=first, 0=all)',
+    )
     sr.add_argument('--regex', action='store_true')
 
     # insert_after
@@ -1420,7 +1600,12 @@ def _build_parser() -> argparse.ArgumentParser:
     ia.add_argument('--anchor', required=True)
     ia.add_argument('--text', required=True)
     ia.set_defaults(rich=True)
-    ia.add_argument('--plain', dest='rich', action='store_false', help='Insert literal text without rich formatting')
+    ia.add_argument(
+        '--plain',
+        dest='rich',
+        action='store_false',
+        help='Insert literal text without rich formatting',
+    )
 
     # insert_before
     ib = sub.add_parser('insert_before', help='Insert paragraph before anchor')
@@ -1428,10 +1613,17 @@ def _build_parser() -> argparse.ArgumentParser:
     ib.add_argument('--anchor', required=True)
     ib.add_argument('--text', required=True)
     ib.set_defaults(rich=True)
-    ib.add_argument('--plain', dest='rich', action='store_false', help='Insert literal text without rich formatting')
+    ib.add_argument(
+        '--plain',
+        dest='rich',
+        action='store_false',
+        help='Insert literal text without rich formatting',
+    )
 
     # delete_paragraph
-    dp = sub.add_parser('delete_paragraph', help='Delete paragraph(s) matching anchor')
+    dp = sub.add_parser(
+        'delete_paragraph', help='Delete paragraph(s) matching anchor'
+    )
     dp.add_argument('doc_id')
     dp.add_argument('--anchor', required=True)
 
@@ -1440,7 +1632,12 @@ def _build_parser() -> argparse.ArgumentParser:
     ap.add_argument('doc_id')
     ap.add_argument('--text', required=True)
     ap.set_defaults(rich=True)
-    ap.add_argument('--plain', dest='rich', action='store_false', help='Insert literal text without rich formatting')
+    ap.add_argument(
+        '--plain',
+        dest='rich',
+        action='store_false',
+        help='Insert literal text without rich formatting',
+    )
 
     # batch_replace
     br = sub.add_parser('batch_replace', help='Multiple replacements (atomic)')
@@ -1452,11 +1649,22 @@ def _build_parser() -> argparse.ArgumentParser:
     )
 
     # add_comment
-    ac = sub.add_parser('add_comment', help='Add a comment anchored to specific text')
+    ac = sub.add_parser(
+        'add_comment', help='Add a comment anchored to specific text'
+    )
     ac.add_argument('doc_id')
-    ac.add_argument('--anchor', required=True, help='Text in the document to anchor the comment to')
+    ac.add_argument(
+        '--anchor',
+        required=True,
+        help='Text in the document to anchor the comment to',
+    )
     ac.add_argument('--comment', required=True, help='Comment text to post')
-    ac.add_argument('--occurrence', type=int, default=1, help='Which occurrence to anchor to (default 1)')
+    ac.add_argument(
+        '--occurrence',
+        type=int,
+        default=1,
+        help='Which occurrence to anchor to (default 1)',
+    )
     ac.add_argument(
         '--no-include-anchor-text',
         action='store_true',
@@ -1465,7 +1673,10 @@ def _build_parser() -> argparse.ArgumentParser:
     ac.add_argument(
         '--bookmark-jump',
         action='store_true',
-        help='Create an Apps Script bookmark and append a #bookmark jump URL into the comment body',
+        help=(
+            'Create an Apps Script bookmark and append a #bookmark jump URL '
+            'into the comment body'
+        ),
     )
     ac.add_argument(
         '--apps-script-id',
@@ -1476,6 +1687,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def main():
+    """Run the command-line entry point for this module."""
     logging.basicConfig(level=logging.WARNING)
     parser = _build_parser()
     args = parser.parse_args()
@@ -1485,12 +1697,20 @@ def main():
             result = read(args.doc_id)
         elif args.command == 'search_replace':
             result = search_replace(
-                args.doc_id, args.find, args.replace, args.occurrence, args.regex
+                args.doc_id,
+                args.find,
+                args.replace,
+                args.occurrence,
+                args.regex,
             )
         elif args.command == 'insert_after':
-            result = insert_after(args.doc_id, args.anchor, args.text, rich=args.rich)
+            result = insert_after(
+                args.doc_id, args.anchor, args.text, rich=args.rich
+            )
         elif args.command == 'insert_before':
-            result = insert_before(args.doc_id, args.anchor, args.text, rich=args.rich)
+            result = insert_before(
+                args.doc_id, args.anchor, args.text, rich=args.rich
+            )
         elif args.command == 'delete_paragraph':
             result = delete_paragraph(args.doc_id, args.anchor)
         elif args.command == 'append':
@@ -1514,7 +1734,8 @@ def main():
 
         print(json.dumps(result, indent=2))
 
-    except Exception as e:
+    # This boundary intentionally handles all errors without propagating.
+    except Exception as e:  # noqa: BLE001
         print(json.dumps({'ok': False, 'error': str(e)}), file=sys.stderr)
         sys.exit(1)
 

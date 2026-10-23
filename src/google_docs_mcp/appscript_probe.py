@@ -1,7 +1,5 @@
-#!/usr/bin/env python3
 """
-appscript_probe.py
-==================
+Probe Apps Script support for inline Google Docs comments.
 
 Stdlib-only helper for probing whether Apps Script offers a viable route for
 proper inline Google Docs comments.
@@ -25,7 +23,8 @@ Prerequisites:
   project is not enough for remote execution.
 
 Usage:
-    uv run -m google_docs_mcp.appscript_probe inspect-comment-api --doc-id <DOC_ID>
+    uv run -m google_docs_mcp.appscript_probe inspect-comment-api --doc-id
+    <DOC_ID>
 """
 
 from __future__ import annotations
@@ -36,20 +35,27 @@ import sys
 import urllib.error
 import urllib.parse
 import urllib.request
+from http import HTTPStatus
 
 from . import docs_edit
 
 APPS_SCRIPT_SETTINGS_URL = 'https://script.google.com/home/usersettings'
-CLOUD_PROJECTS_GUIDE_URL = 'https://developers.google.com/apps-script/guides/cloud-platform-projects'
+CLOUD_PROJECTS_GUIDE_URL = (
+    'https://developers.google.com/apps-script/guides/cloud-platform-projects'
+)
 TOKEN_URL = 'https://oauth2.googleapis.com/token'
 SCRIPT_API_BASE = 'https://script.googleapis.com/v1'
 
 
 class AppsScriptProbeError(RuntimeError):
+    """Report a failed Apps Script capability probe."""
+
     pass
 
 
 class AppsScriptApiDisabledError(AppsScriptProbeError):
+    """Report that the account has not enabled the Apps Script API."""
+
     pass
 
 
@@ -68,7 +74,9 @@ def _refresh_access_token() -> str:
         return json.loads(resp.read().decode('utf-8'))['access_token']
 
 
-def _api_request(access_token: str, method: str, path: str, body: dict | None = None) -> dict:
+def _api_request(
+    access_token: str, method: str, path: str, body: dict | None = None
+) -> dict:
     req = urllib.request.Request(f'{SCRIPT_API_BASE}{path}', method=method)
     req.add_header('Authorization', f'Bearer {access_token}')
     req.add_header('Content-Type', 'application/json; charset=utf-8')
@@ -85,19 +93,30 @@ def _api_request(access_token: str, method: str, path: str, body: dict | None = 
         except json.JSONDecodeError:
             payload = {'error': {'message': raw}}
         message = payload.get('error', {}).get('message', raw)
-        if e.code == 403 and 'User has not enabled the Apps Script API' in message:
+        if (
+            e.code == HTTPStatus.FORBIDDEN
+            and 'User has not enabled the Apps Script API' in message
+        ):
             raise AppsScriptApiDisabledError(
                 'Apps Script API is not enabled for this Google account. '
-                f'Open {APPS_SCRIPT_SETTINGS_URL} and enable it, then rerun this probe.'
+                f'Open {APPS_SCRIPT_SETTINGS_URL} and enable it, '
+                'then rerun this probe.'
             ) from None
-        if e.code == 403 and 'The caller does not have permission' in message:
+        if (
+            e.code == HTTPStatus.FORBIDDEN
+            and 'The caller does not have permission' in message
+        ):
             raise AppsScriptProbeError(
-                'Apps Script execution is now getting past account-level enablement, but the API executable '
-                'still cannot run because the script project is not using the same standard Google Cloud '
-                'project as the OAuth client. A default Apps Script project is not enough for scripts.run. '
+                'Apps Script execution is now getting past account-level '
+                'enablement, but the API executable still cannot run because '
+                'the script project is not using the same standard Google '
+                'Cloud project as the OAuth client. A default Apps Script '
+                'project is not enough for scripts.run. '
                 f'See {CLOUD_PROJECTS_GUIDE_URL}.'
             ) from None
-        raise AppsScriptProbeError(f'Apps Script API request failed ({e.code}): {message}') from None
+        raise AppsScriptProbeError(
+            f'Apps Script API request failed ({e.code}): {message}'
+        ) from None
 
 
 def _build_probe_files() -> list[dict]:
@@ -148,6 +167,7 @@ def inspect_comment_api(
     title: str = 'google-docs-mcp comment probe',
     script_id: str | None = None,
 ) -> dict:
+    """Deploy and run a probe of Apps Script comment capabilities."""
     access_token = _refresh_access_token()
 
     if script_id is None:
@@ -205,17 +225,37 @@ def inspect_comment_api(
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description='Probe Apps Script comment support for Google Docs.')
+    parser = argparse.ArgumentParser(
+        description='Probe Apps Script comment support for Google Docs.'
+    )
     sub = parser.add_subparsers(dest='command', required=True)
 
-    inspect = sub.add_parser('inspect-comment-api', help='Check whether DocumentApp exposes comment methods.')
-    inspect.add_argument('--doc-id', required=True, help='Google Doc ID to open during the probe')
-    inspect.add_argument('--title', default='google-docs-mcp comment probe', help='Temporary Apps Script project title')
-    inspect.add_argument('--script-id', help='Existing Apps Script project ID to update and execute instead of creating a temporary one')
+    inspect = sub.add_parser(
+        'inspect-comment-api',
+        help='Check whether DocumentApp exposes comment methods.',
+    )
+    inspect.add_argument(
+        '--doc-id',
+        required=True,
+        help='Google Doc ID to open during the probe',
+    )
+    inspect.add_argument(
+        '--title',
+        default='google-docs-mcp comment probe',
+        help='Temporary Apps Script project title',
+    )
+    inspect.add_argument(
+        '--script-id',
+        help=(
+            'Existing Apps Script project ID to update and execute '
+            'instead of creating a temporary one'
+        ),
+    )
     return parser
 
 
 def main() -> int:
+    """Run the command-line entry point for this module."""
     parser = _build_parser()
     args = parser.parse_args()
 

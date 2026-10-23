@@ -1,7 +1,6 @@
-#!/usr/bin/env python3
 """
-google-docs-mcp — Surgical Google Docs editing for AI agents
-=============================================================
+Expose surgical Google Docs editing tools over MCP.
+
 Exposes Google Docs and Drive operations as MCP tools.
 
 Core abstraction: search-by-text, not by character index.
@@ -27,8 +26,10 @@ Auth (in priority order):
 
 Setup:
   google-docs-mcp-auth --credentials ~/credentials.json
-  google-docs-mcp-auth --credentials ~/credentials.json --headless  # no browser
-  GOOGLE_DOCS_MCP_CLIENT_ID=... GOOGLE_DOCS_MCP_CLIENT_SECRET=... google-docs-mcp-auth
+  google-docs-mcp-auth --credentials ~/credentials.json --headless  # no
+  browser
+  GOOGLE_DOCS_MCP_CLIENT_ID=... GOOGLE_DOCS_MCP_CLIENT_SECRET=...
+  google-docs-mcp-auth
 
 Transport: stdio (Claude Desktop / OpenClaw MCP config)
 """
@@ -41,13 +42,13 @@ import os
 import sys
 
 from fastmcp import FastMCP
+from googleapiclient.discovery import build
 
 from . import docs_edit
 from .diagnostics import ServerInfo, capture_server_info
 from .models import (
     DocumentOutline,
     DocumentSubset,
-    DocumentTree,
     EditFailedResponse,
     InsertSucceedResponse,
     ReplaceSucceedResponse,
@@ -72,8 +73,8 @@ EDITING TOOLS:
     docs_search_replace    Find and replace text (occurrence-targeted or all)
     docs_insert_after      Insert text after a specified paragraph anchor text
     docs_insert_before     Insert text before a specified paragraph anchor text
-    docs_delete_paragraph  Delete a paragraph matching the specified anchor text
-    docs_append            Append paragraph at the end of a document or heading section
+    docs_delete_paragraph  Delete a paragraph matching the specified anchor
+    docs_append            Append paragraph at the end of a document
     docs_batch_replace     Multiple replacements atomically (one API call)
 
 COMMENT TOOLS:
@@ -110,8 +111,8 @@ to further reduce the scope.
 #     """
 #     Fetch a Google Doc and return structured representation.
 
-#     Use this tool FIRST when encountering a document to locate target sections
-#     via their heading IDs, avoiding the need to read a massive document all at
+# Use this tool FIRST when encountering a document to locate target sections
+# via their heading IDs, avoiding the need to read a massive document all at
 #     once.
 
 #     Args:
@@ -136,7 +137,9 @@ def server_info() -> ServerInfo:
 @mcp.tool
 def docs_get_tree(doc_id: str) -> DocumentOutline:
     """
-    Fetch the structural outline (headings only) of a Google Doc as a JSON array.
+    Fetch the structural outline (headings only) of a Google Doc as a JSON
+
+    array.
 
     Use this tool FIRST when encountering a document to locate target sections
     via their heading IDs, avoiding the need to read a massive document all at
@@ -149,7 +152,9 @@ def docs_get_tree(doc_id: str) -> DocumentOutline:
 
 
 @mcp.tool
-def docs_read(doc_id: str, heading_ids: list[str] | None = None) -> DocumentSubset:
+def docs_read(
+    doc_id: str, heading_ids: list[str] | None = None
+) -> DocumentSubset:
     """
     Read a Google document's content converted to Markdown.
 
@@ -168,7 +173,8 @@ def docs_read(doc_id: str, heading_ids: list[str] | None = None) -> DocumentSubs
 
 
 @mcp.tool
-def docs_search_replace(
+# Preserve the public positional calling convention.
+def docs_search_replace(  # noqa: PLR0917
     doc_id: str,
     find: str,
     replace: str,
@@ -195,17 +201,22 @@ def docs_search_replace(
                     subheadings. Use docs_get_tree to find heading IDs.
         regex:      If True, treat `find` as a Python regular expression
 
-    Returns:
+    Returns
+    -------
         JSON with: ok, replaced (original text), at_index, occurrences_found
     """
     return docs_edit.search_replace(
-        doc_id, find, replace, occurrence, heading_id, regex)
+        doc_id, find, replace, occurrence, heading_id, regex
+    )
 
 
 @mcp.tool
 def docs_insert_after(
-    doc_id: str, anchor: str, text: str,
-    heading_id: str | None = None, rich: bool = True
+    doc_id: str,
+    anchor: str,
+    text: str,
+    heading_id: str | None = None,
+    rich: bool = True,
 ) -> InsertSucceedResponse | EditFailedResponse:
     """
     Insert a new paragraph immediately after the paragraph containing `anchor`.
@@ -228,18 +239,26 @@ def docs_insert_after(
             paragraph. Choose a longer phrase to avoid accidental matches.
         text:   Text to insert as the new paragraph
         heading_id: Narrow down search to this heading and subheadings
-        rich:   If True (default), interpret simple markdown-like formatting natively
+        rich:   If True (default), interpret simple markdown-like formatting
+        natively
     """
-    return docs_edit.insert_after(doc_id, anchor, text, heading_id=heading_id, rich=rich)
+    return docs_edit.insert_after(
+        doc_id, anchor, text, heading_id=heading_id, rich=rich
+    )
 
 
 @mcp.tool
 def docs_insert_before(
-    doc_id: str, anchor: str, text: str,
-    heading_id: str | None = None, rich: bool = True
+    doc_id: str,
+    anchor: str,
+    text: str,
+    heading_id: str | None = None,
+    rich: bool = True,
 ) -> InsertSucceedResponse | EditFailedResponse:
     """
-    Insert a new paragraph immediately before the paragraph containing `anchor`.
+    Insert a new paragraph immediately before the paragraph containing
+
+    `anchor`.
 
     The anchor is matched case-insensitively as a substring of the paragraph.
 
@@ -259,7 +278,11 @@ def docs_insert_before(
         rich:   If True (default), convert Markdown using the shared converter
     """
     return docs_edit.insert_before(
-        doc_id, anchor, text, heading_id=heading_id, rich=rich,
+        doc_id,
+        anchor,
+        text,
+        heading_id=heading_id,
+        rich=rich,
     )
 
 
@@ -275,8 +298,10 @@ def docs_delete_paragraph(doc_id: str, anchor: str) -> str:
         doc_id: Google Doc ID
         anchor: Text to search for in paragraphs to delete
 
-    Returns:
-        JSON with: ok, deleted_count, deleted (list of deleted paragraph previews)
+    Returns
+    -------
+        JSON with: ok, deleted_count, deleted (list of deleted paragraph
+        previews)
     """
     result = docs_edit.delete_paragraph(doc_id, anchor)
     return json.dumps(result, indent=2)
@@ -298,13 +323,14 @@ def docs_append(doc_id: str, text: str, rich: bool = True) -> list[dict]:
     Args:
         doc_id: Google Doc ID
         text:   Text to append as the final paragraph
-        rich:   If True (default), interpret simple markdown-like formatting natively
+        rich:   If True (default), interpret simple markdown-like formatting
+        natively
 
-    Returns:
+    Returns
+    -------
         JSON with: ok, appended (text preview), at_index
     """
-    result = docs_edit.append(doc_id, text, rich=rich)
-    return result
+    return docs_edit.append(doc_id, text, rich=rich)
 
 
 @mcp.tool
@@ -319,13 +345,15 @@ def docs_batch_replace(doc_id: str, replacements_json: str) -> str:
         doc_id:           Google Doc ID
         replacements_json: JSON array of replacements, e.g.:
                           '[{"find": "Q1", "replace": "Q2"},
-                            {"find": "draft", "replace": "final", "occurrence": 0}]'
+                            {"find": "draft", "replace": "final", "occurrence":
+                            0}]'
 
                           Each item: {"find": str, "replace": str,
                                       "occurrence": int (default 1, 0=all),
                                       "regex": bool (default false)}
 
-    Returns:
+    Returns
+    -------
         JSON with: ok, applied (count), changes (list of what changed)
     """
     replacements = json.loads(replacements_json)
@@ -334,7 +362,8 @@ def docs_batch_replace(doc_id: str, replacements_json: str) -> str:
 
 
 @mcp.tool
-def docs_add_comment(
+# Preserve the public positional calling convention.
+def docs_add_comment(  # noqa: PLR0917
     doc_id: str,
     comment: str,
     anchor_text: str,
@@ -347,10 +376,12 @@ def docs_add_comment(
 
     NOTE: The current implementation uses the Drive comments API plus a Docs
     named range. In the Docs UI this still shows as "Original content deleted"
-    rather than a proper inline comment highlight. The comments ARE readable via
+    rather than a proper inline comment highlight. The comments ARE readable
+    via
     docs_read_comments and the Docs 💬 panel.
 
-    The next path to investigate is Apps Script automation. The OAuth token must
+    The next path to investigate is Apps Script automation. The OAuth token
+    must
     include the script.* scopes, and the Google account must also have the Apps
     Script API enabled at https://script.google.com/home/usersettings before
     remote Apps Script project creation/execution will work.
@@ -367,8 +398,10 @@ def docs_add_comment(
         doc_id:      Google Doc ID (from the URL: /document/d/{DOC_ID}/edit)
         comment:     The comment text to post
         anchor_text: Exact text in the document to attach the comment to.
-                     Use a short, unique phrase (a few words) for reliable matching.
-        occurrence:  Which occurrence of anchor_text to use (default 1 = first).
+                     Use a short, unique phrase (a few words) for reliable
+                     matching.
+        occurrence:  Which occurrence of anchor_text to use (default 1 =
+        first).
                      Use 2, 3, etc. if the text appears multiple times.
         include_anchor_text: If True (default), append the matched anchor text
                      excerpt into the comment body for human readability.
@@ -376,8 +409,10 @@ def docs_add_comment(
                      jump URL into the comment body. Requires the Apps Script
                      bridge env var setup documented in the README.
 
-    Returns:
-        JSON with: ok, comment_id, anchored_to (matched text), at_index, named_range_id
+    Returns
+    -------
+        JSON with: ok, comment_id, anchored_to (matched text), at_index,
+        named_range_id
     """
     result = docs_edit.add_comment(
         doc_id,
@@ -400,24 +435,31 @@ def docs_reply_to_comment(doc_id: str, comment_id: str, reply: str) -> str:
         comment_id: ID of the comment to reply to (from docs_read_comments)
         reply:      Reply text to post
 
-    Returns:
+    Returns
+    -------
         JSON with: ok, reply_id, comment_id, content
     """
-    from googleapiclient.discovery import build
     creds = docs_edit._load_creds()
     drive = build('drive', 'v3', credentials=creds)
-    result = drive.replies().create(
-        fileId=doc_id,
-        commentId=comment_id,
-        body={'content': reply},
-        fields='id,content,createdTime',
-    ).execute()
-    return json.dumps({
-        'ok': True,
-        'reply_id': result.get('id'),
-        'comment_id': comment_id,
-        'content': result.get('content'),
-    }, indent=2)
+    result = (
+        drive.replies()
+        .create(
+            fileId=doc_id,
+            commentId=comment_id,
+            body={'content': reply},
+            fields='id,content,createdTime',
+        )
+        .execute()
+    )
+    return json.dumps(
+        {
+            'ok': True,
+            'reply_id': result.get('id'),
+            'comment_id': comment_id,
+            'content': result.get('content'),
+        },
+        indent=2,
+    )
 
 
 @mcp.tool
@@ -430,10 +472,10 @@ def docs_resolve_comment(doc_id: str, comment_id: str, reply: str = '') -> str:
         comment_id: ID of the comment to resolve (from docs_read_comments)
         reply:      Optional reply text to post before resolving
 
-    Returns:
+    Returns
+    -------
         JSON with: ok, comment_id, resolved
     """
-    from googleapiclient.discovery import build
     creds = docs_edit._load_creds()
     drive = build('drive', 'v3', credentials=creds)
 
@@ -451,7 +493,9 @@ def docs_resolve_comment(doc_id: str, comment_id: str, reply: str = '') -> str:
         body={'resolved': True},
         fields='id,resolved',
     ).execute()
-    return json.dumps({'ok': True, 'comment_id': comment_id, 'resolved': True}, indent=2)
+    return json.dumps(
+        {'ok': True, 'comment_id': comment_id, 'resolved': True}, indent=2
+    )
 
 
 @mcp.tool
@@ -463,10 +507,10 @@ def docs_delete_comment(doc_id: str, comment_id: str) -> str:
         doc_id:     Google Doc ID
         comment_id: ID of the comment to delete
 
-    Returns:
+    Returns
+    -------
         JSON with: ok, comment_id
     """
-    from googleapiclient.discovery import build
     creds = docs_edit._load_creds()
     drive = build('drive', 'v3', credentials=creds)
     drive.comments().delete(fileId=doc_id, commentId=comment_id).execute()
@@ -486,21 +530,24 @@ def docs_read_comments(doc_id: str, include_resolved: bool = False) -> str:
         doc_id:           Google Doc ID
         include_resolved: Include resolved/deleted comments (default False)
 
-    Returns:
-        JSON array of comments with id, content, author, anchored, resolved, deleted,
+    Returns
+    -------
+        JSON array of comments with id, content, author, anchored, resolved,
+        deleted,
         anchored_to (the named range id if anchored), created_time
     """
-    from googleapiclient.discovery import build
-    import json as _json
-
     creds = docs_edit._load_creds()
     drive = build('drive', 'v3', credentials=creds)
 
-    resp = drive.comments().list(
-        fileId=doc_id,
-        fields='comments(id,content,anchor,resolved,deleted,author,createdTime,quotedFileContent)',
-        pageSize=100,
-    ).execute()
+    resp = (
+        drive.comments()
+        .list(
+            fileId=doc_id,
+            fields='comments(id,content,anchor,resolved,deleted,author,createdTime,quotedFileContent)',
+            pageSize=100,
+        )
+        .execute()
+    )
 
     results = []
     for c in resp.get('comments', []):
@@ -510,23 +557,29 @@ def docs_read_comments(doc_id: str, include_resolved: bool = False) -> str:
         named_range_id = None
         if anchor:
             try:
-                a = _json.loads(anchor)
+                a = json.loads(anchor)
                 for part in a.get('a', []):
                     if part.get('t') == 'r':
                         named_range_id = part.get('v')
-            except Exception:
+            # This boundary intentionally handles all errors without
+            # propagating.
+            except Exception:  # noqa: BLE001
                 pass
-        results.append({
-            'id': c['id'],
-            'content': c.get('content', ''),
-            'author': c.get('author', {}).get('displayName', '?'),
-            'anchored': bool(anchor),
-            'named_range_id': named_range_id,
-            'quoted_text': (c.get('quotedFileContent') or {}).get('value', ''),
-            'resolved': c.get('resolved', False),
-            'deleted': c.get('deleted', False),
-            'created': c.get('createdTime', ''),
-        })
+        results.append(
+            {
+                'id': c['id'],
+                'content': c.get('content', ''),
+                'author': c.get('author', {}).get('displayName', '?'),
+                'anchored': bool(anchor),
+                'named_range_id': named_range_id,
+                'quoted_text': (c.get('quotedFileContent') or {}).get(
+                    'value', ''
+                ),
+                'resolved': c.get('resolved', False),
+                'deleted': c.get('deleted', False),
+                'created': c.get('createdTime', ''),
+            }
+        )
 
     return json.dumps({'count': len(results), 'comments': results}, indent=2)
 
@@ -540,14 +593,16 @@ def docs_list(query: str = '', limit: int = 20) -> str:
         query: Optional search terms (searches title and content)
         limit: Maximum number of results (default 20)
 
-    Returns:
+    Returns
+    -------
         JSON array of {id, name, modifiedTime, webViewLink}
     """
-    from googleapiclient.discovery import build
     creds = docs_edit._load_creds()
     drive = build('drive', 'v3', credentials=creds)
 
-    use_drive = os.environ.get('GOOGLE_DOCS_USE_DRIVE', 'false').lower() == 'true'
+    use_drive = (
+        os.environ.get('GOOGLE_DOCS_USE_DRIVE', 'false').lower() == 'true'
+    )
     drive_id = os.environ.get('GOOGLE_DOCS_DRIVE_ID', None)
     drive_kwargs: dict[str, str | bool] = {}
     if drive_id is not None:
@@ -555,27 +610,30 @@ def docs_list(query: str = '', limit: int = 20) -> str:
         drive_kwargs = {
             **drive_kwargs,
             'corpora': 'drive',
-            'driveId': drive_id
+            'driveId': drive_id,
         }
     if use_drive:
         drive_kwargs = {
             **drive_kwargs,
             'supportsAllDrives': True,
-            'includeItemsFromAllDrives': True
+            'includeItemsFromAllDrives': True,
         }
-
 
     q = 'mimeType="application/vnd.google-apps.document" and trashed=false'
     if query:
         q += f' and fullText contains "{query}"'
 
-    results = drive.files().list(
-        q=q,
-        pageSize=min(limit, 100),
-        fields='files(id, name, modifiedTime, webViewLink)',
-        orderBy='modifiedTime desc',
-        **drive_kwargs
-    ).execute()
+    results = (
+        drive.files()
+        .list(
+            q=q,
+            pageSize=min(limit, 100),
+            fields='files(id, name, modifiedTime, webViewLink)',
+            orderBy='modifiedTime desc',
+            **drive_kwargs,
+        )
+        .execute()
+    )
 
     files = results.get('files', [])
     return json.dumps(files, indent=2)
@@ -590,12 +648,11 @@ def docs_create(title: str, initial_text: str = '') -> str:
         title:        Document title
         initial_text: Optional first paragraph content
 
-    Returns:
+    Returns
+    -------
         JSON with: id, title, webViewLink
     """
     creds = docs_edit._load_creds()
-    from googleapiclient.discovery import build
-
     service = build('docs', 'v1', credentials=creds)
     doc = service.documents().create(body={'title': title}).execute()
     doc_id = doc['documentId']
@@ -604,23 +661,29 @@ def docs_create(title: str, initial_text: str = '') -> str:
         service.documents().batchUpdate(
             documentId=doc_id,
             body={
-                'requests': [{
-                    'insertText': {
-                        'location': {'index': 1},
-                        'text': initial_text,
+                'requests': [
+                    {
+                        'insertText': {
+                            'location': {'index': 1},
+                            'text': initial_text,
+                        }
                     }
-                }]
+                ]
             },
         ).execute()
 
-    return json.dumps({
-        'id': doc_id,
-        'title': title,
-        'webViewLink': f'https://docs.google.com/document/d/{doc_id}/edit',
-    }, indent=2)
+    return json.dumps(
+        {
+            'id': doc_id,
+            'title': title,
+            'webViewLink': f'https://docs.google.com/document/d/{doc_id}/edit',
+        },
+        indent=2,
+    )
 
 
 def main():
+    """Run the command-line entry point for this module."""
     configure_logging()
     # Our logger has its own handler; this default is for third-party loggers.
     logging.basicConfig(level=logging.WARNING, stream=sys.stderr)

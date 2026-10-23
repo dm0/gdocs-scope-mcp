@@ -1,17 +1,18 @@
-#!/usr/bin/env python3
 """
-auth_setup.py — Standalone OAuth setup for google-docs-mcp
-============================================================
+Set up standalone OAuth credentials for Google Docs MCP.
+
 Works in three modes:
   1. Local browser  — opens a browser on this machine (default)
-  2. Headless       -- prints a URL, you visit on any device, paste back the redirect URL
+  2. Headless       -- prints a URL, you visit on any device, paste back the
+  redirect URL
   3. Code exchange  — you already have an auth code, just exchange it
 
 Usage:
     google-docs-mcp-auth --credentials ~/credentials.json
     google-docs-mcp-auth --credentials ~/credentials.json --headless
     google-docs-mcp-auth --credentials ~/credentials.json --code "4/0Afr..."
-    GOOGLE_DOCS_MCP_CLIENT_ID=... GOOGLE_DOCS_MCP_CLIENT_SECRET=... google-docs-mcp-auth
+    GOOGLE_DOCS_MCP_CLIENT_ID=... GOOGLE_DOCS_MCP_CLIENT_SECRET=...
+    google-docs-mcp-auth
 
 Get credentials.json:
     https://console.cloud.google.com/
@@ -28,9 +29,9 @@ import argparse
 import json
 import os
 import sys
-import threading
 import urllib.parse
 import urllib.request
+import webbrowser
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
@@ -58,7 +59,10 @@ REDIRECT_URI = f'http://127.0.0.1:{REDIRECT_PORT}/oauth2/callback'
 CLIENT_ID_ENV_VAR = 'GOOGLE_DOCS_MCP_CLIENT_ID'
 CLIENT_SECRET_ENV_VAR = 'GOOGLE_DOCS_MCP_CLIENT_SECRET'
 CLIENT_ID_ENV_ALIASES = (CLIENT_ID_ENV_VAR, 'GOOGLE_DRIVE_MCP_CLIENT_ID')
-CLIENT_SECRET_ENV_ALIASES = (CLIENT_SECRET_ENV_VAR, 'GOOGLE_DRIVE_MCP_CLIENT_SECRET')
+CLIENT_SECRET_ENV_ALIASES = (
+    CLIENT_SECRET_ENV_VAR,
+    'GOOGLE_DRIVE_MCP_CLIENT_SECRET',
+)
 
 
 def _first_env(*names: str) -> str | None:
@@ -70,8 +74,10 @@ def _first_env(*names: str) -> str | None:
 
 
 def load_client_config(creds_path: Path) -> dict:
+    """Read OAuth client settings from a Google credentials file."""
     raw = json.loads(creds_path.read_text())
-    # Google downloads credentials.json in {installed: {...}} or {web: {...}} wrapper
+    # Google downloads credentials.json in {installed: {...}} or {web: {...}}
+    # wrapper
     if 'installed' in raw:
         return raw['installed']
     if 'web' in raw:
@@ -80,12 +86,14 @@ def load_client_config(creds_path: Path) -> dict:
     if 'client_id' in raw:
         return raw
     raise ValueError(
-        'credentials.json format not recognised. Expected {installed: ...} or {web: ...} '
+        'credentials.json format not recognised. '
+        'Expected {installed: ...} or {web: ...} '
         'from Google Cloud Console → Credentials → Download JSON.'
     )
 
 
 def build_auth_url(client_id: str, state: str = 'auth') -> str:
+    """Build the consent URL for an offline OAuth authorization."""
     params = {
         'client_id': client_id,
         'redirect_uri': REDIRECT_URI,
@@ -95,18 +103,23 @@ def build_auth_url(client_id: str, state: str = 'auth') -> str:
         'prompt': 'consent',
         'state': state,
     }
-    return 'https://accounts.google.com/o/oauth2/v2/auth?' + urllib.parse.urlencode(params)
+    return (
+        'https://accounts.google.com/o/oauth2/v2/auth?'
+        + urllib.parse.urlencode(params)
+    )
 
 
 def exchange_code(code: str, client_id: str, client_secret: str) -> dict:
     """Exchange an auth code for tokens."""
-    data = urllib.parse.urlencode({
-        'code': code,
-        'client_id': client_id,
-        'client_secret': client_secret,
-        'redirect_uri': REDIRECT_URI,
-        'grant_type': 'authorization_code',
-    }).encode()
+    data = urllib.parse.urlencode(
+        {
+            'code': code,
+            'client_id': client_id,
+            'client_secret': client_secret,
+            'redirect_uri': REDIRECT_URI,
+            'grant_type': 'authorization_code',
+        }
+    ).encode()
     req = urllib.request.Request(
         'https://oauth2.googleapis.com/token',
         data=data,
@@ -118,6 +131,7 @@ def exchange_code(code: str, client_id: str, client_secret: str) -> dict:
 
 
 def get_email(access_token: str) -> str:
+    """Fetch the account email, returning an empty string on failure."""
     req = urllib.request.Request(
         'https://www.googleapis.com/oauth2/v2/userinfo',
         headers={'Authorization': f'Bearer {access_token}'},
@@ -125,11 +139,15 @@ def get_email(access_token: str) -> str:
     try:
         with urllib.request.urlopen(req) as resp:
             return json.loads(resp.read()).get('email', '')
-    except Exception:
+    # This boundary intentionally handles all errors without propagating.
+    except Exception:  # noqa: BLE001
         return ''
 
 
-def save_token(token_response: dict, client_id: str, client_secret: str, out_path: Path):
+def save_token(
+    token_response: dict, client_id: str, client_secret: str, out_path: Path
+):
+    """Save refresh credentials with owner-only file permissions."""
     email = get_email(token_response.get('access_token', ''))
     token_data = {
         'email': email,
@@ -149,6 +167,7 @@ class _CallbackHandler(BaseHTTPRequestHandler):
     error = None
 
     def do_GET(self):
+        """Handle the local OAuth redirect and capture its code or error."""
         parsed = urllib.parse.urlparse(self.path)
         params = dict(urllib.parse.parse_qsl(parsed.query))
         if 'code' in params:
@@ -167,34 +186,41 @@ class _CallbackHandler(BaseHTTPRequestHandler):
             self.send_response(400)
             self.send_header('Content-Type', 'text/html')
             self.end_headers()
-            self.wfile.write(f'<html><body>Error: {_CallbackHandler.error}</body></html>'.encode())
+            self.wfile.write(
+                (
+                    f'<html><body>Error: {_CallbackHandler.error}'
+                    '</body></html>'
+                ).encode()
+            )
 
     def log_message(self, *args):
+        """Suppress HTTP callback request logging."""
         pass  # silence request logs
 
 
 def run_local_flow(client_id: str, client_secret: str, out_path: Path):
     """Start local server, open browser, wait for callback."""
-    import webbrowser
     server = HTTPServer(('127.0.0.1', REDIRECT_PORT), _CallbackHandler)
     auth_url = build_auth_url(client_id)
 
-    print(f'\nOpening browser for Google authorisation...')
+    print('\nOpening browser for Google authorisation...')
     print(f"If it doesn't open automatically, visit:\n\n  {auth_url}\n")
     webbrowser.open(auth_url)
 
     server.handle_request()  # blocks until one request arrives
 
     if _CallbackHandler.error:
-        print(f'\nAuthorisation failed: {_CallbackHandler.error}', file=sys.stderr)
+        print(
+            f'\nAuthorisation failed: {_CallbackHandler.error}',
+            file=sys.stderr,
+        )
         sys.exit(1)
     if not _CallbackHandler.code:
         print('\nNo auth code received.', file=sys.stderr)
         sys.exit(1)
 
     tokens = exchange_code(_CallbackHandler.code, client_id, client_secret)
-    email = save_token(tokens, client_id, client_secret, out_path)
-    return email
+    return save_token(tokens, client_id, client_secret, out_path)
 
 
 def run_headless_flow(client_id: str, client_secret: str, out_path: Path):
@@ -224,18 +250,19 @@ def run_headless_flow(client_id: str, client_secret: str, out_path: Path):
             sys.exit(1)
 
     tokens = exchange_code(code, client_id, client_secret)
-    email = save_token(tokens, client_id, client_secret, out_path)
-    return email
+    return save_token(tokens, client_id, client_secret, out_path)
 
 
-def run_code_exchange(code: str, client_id: str, client_secret: str, out_path: Path):
+def run_code_exchange(
+    code: str, client_id: str, client_secret: str, out_path: Path
+):
     """Exchange a code that was already obtained."""
     tokens = exchange_code(code, client_id, client_secret)
-    email = save_token(tokens, client_id, client_secret, out_path)
-    return email
+    return save_token(tokens, client_id, client_secret, out_path)
 
 
 def main():
+    """Run the command-line entry point for this module."""
     parser = argparse.ArgumentParser(
         description='Set up Google OAuth credentials for google-docs-mcp',
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -245,7 +272,9 @@ Examples:
   google-docs-mcp-auth --credentials ~/credentials.json
 
   # Or use env vars instead of a credentials file:
-  GOOGLE_DOCS_MCP_CLIENT_ID=... GOOGLE_DOCS_MCP_CLIENT_SECRET=... google-docs-mcp-auth
+  export GOOGLE_DOCS_MCP_CLIENT_ID=...
+  export GOOGLE_DOCS_MCP_CLIENT_SECRET=...
+  google-docs-mcp-auth
 
   # Headless / remote server (prints URL, paste back redirect):
   google-docs-mcp-auth --credentials ~/credentials.json --headless
@@ -258,19 +287,30 @@ Examples:
         """,
     )
     parser.add_argument(
-        '--credentials', '-c',
-        help='Path to credentials.json from Google Cloud Console (OAuth 2.0 Client ID → Desktop App)',
+        '--credentials',
+        '-c',
+        help=(
+            'Path to credentials.json from Google Cloud Console '
+            '(OAuth 2.0 Client ID → Desktop App)'
+        ),
     )
     parser.add_argument(
         '--client-id',
-        help=f'OAuth client ID (alternative to --credentials file; defaults to ${CLIENT_ID_ENV_VAR} if set)',
+        help=(
+            'OAuth client ID (alternative to --credentials file; '
+            f'defaults to ${CLIENT_ID_ENV_VAR} if set)'
+        ),
     )
     parser.add_argument(
         '--client-secret',
-        help=f'OAuth client secret (alternative to --credentials file; defaults to ${CLIENT_SECRET_ENV_VAR} if set)',
+        help=(
+            'OAuth client secret (alternative to --credentials file; '
+            f'defaults to ${CLIENT_SECRET_ENV_VAR} if set)'
+        ),
     )
     parser.add_argument(
-        '--out', '-o',
+        '--out',
+        '-o',
         default=str(DEFAULT_TOKEN_PATH),
         help=f'Output path for token file (default: {DEFAULT_TOKEN_PATH})',
     )
@@ -294,7 +334,10 @@ Examples:
     if args.credentials:
         creds_path = Path(args.credentials).expanduser()
         if not creds_path.exists():
-            print(f'Error: credentials file not found: {creds_path}', file=sys.stderr)
+            print(
+                f'Error: credentials file not found: {creds_path}',
+                file=sys.stderr,
+            )
             sys.exit(1)
         cfg = load_client_config(creds_path)
         client_id = cfg['client_id']
@@ -303,7 +346,8 @@ Examples:
         pass
     else:
         print(
-            'Error: provide --credentials, both --client-id and --client-secret, '
+            'Error: provide --credentials, '
+            'both --client-id and --client-secret, '
             f'or set both {CLIENT_ID_ENV_VAR} and {CLIENT_SECRET_ENV_VAR} '
             '(legacy GOOGLE_DRIVE_MCP_* aliases also work)',
             file=sys.stderr,
@@ -313,17 +357,19 @@ Examples:
     out_path = Path(args.out).expanduser()
 
     print(f'Token will be saved to: {out_path}')
-    print(f'Scopes: docs, drive, appscript (for inline comments)')
+    print('Scopes: docs, drive, appscript (for inline comments)')
 
     # Run the appropriate flow
     if args.code:
-        email = run_code_exchange(args.code, client_id, client_secret, out_path)
+        email = run_code_exchange(
+            args.code, client_id, client_secret, out_path
+        )
     elif args.headless:
         email = run_headless_flow(client_id, client_secret, out_path)
     else:
         email = run_local_flow(client_id, client_secret, out_path)
 
-    print(f"\n✓ Authenticated as: {email or '(email unknown)'}")
+    print(f'\n✓ Authenticated as: {email or "(email unknown)"}')
     print(f'✓ Token saved: {out_path}')
     print()
     print('Set this env var to use the token:')

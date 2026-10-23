@@ -23,9 +23,11 @@ def configure_logging() -> str:
         )
 
     handler = logging.StreamHandler(sys.stderr)
-    handler.setFormatter(logging.Formatter(
-        '%(asctime)s %(levelname)s %(name)s pid=%(process)d %(message)s'
-    ))
+    handler.setFormatter(
+        logging.Formatter(
+            '%(asctime)s %(levelname)s %(name)s pid=%(process)d %(message)s'
+        )
+    )
     logger.handlers = [handler]
     logger.setLevel(level)
     logger.propagate = False
@@ -45,13 +47,15 @@ class ToolCallLoggingMiddleware(Middleware):
         except CancelledError:
             logger.warning(
                 'tool=%s status=cancelled duration_ms=%.3f',
-                name, (perf_counter() - started) * 1000,
+                name,
+                (perf_counter() - started) * 1000,
             )
             raise
         except Exception:
             logger.exception(
                 'tool=%s status=failure duration_ms=%.3f',
-                name, (perf_counter() - started) * 1000,
+                name,
+                (perf_counter() - started) * 1000,
             )
             raise
 
@@ -60,10 +64,14 @@ class ToolCallLoggingMiddleware(Middleware):
         if isinstance(payload, dict) and payload.get('ok') is False:
             logger.error(
                 'tool=%s status=failure duration_ms=%.3f error=%s',
-                name, duration_ms, payload.get('description', 'Edit failed'),
+                name,
+                duration_ms,
+                payload.get('description', 'Edit failed'),
             )
         else:
             logger.info(
-                'tool=%s status=success duration_ms=%.3f', name, duration_ms,
+                'tool=%s status=success duration_ms=%.3f',
+                name,
+                duration_ms,
             )
         return result
