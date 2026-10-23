@@ -117,6 +117,45 @@ def test_unsupported_replace_all_fails_without_writing(mock_docs, options):
     assert result.suggested_action
 
 
+@pytest.mark.xfail(
+    strict=True,
+    reason='First regex search stops after a non-matching first paragraph.',
+)
+@pytest.mark.parametrize('heading_id', [None, 'parent', 'nested'])
+def test_first_regex_match_after_heading_is_replaced(
+    simple_document, mock_docs, heading_id,
+):
+    """Skip non-matching heading paragraphs and reach the first body match."""
+    result = docs_edit.search_replace(
+        'example', 'Target phrase', 'Changed',
+        heading_id=heading_id, regex=True,
+    )
+
+    assert result.ok is True
+    text = edited_text(simple_document, mock_docs)
+    if heading_id == 'nested':
+        assert 'Nested\nChanged again\nOther\nTarget phrase elsewhere' in text
+        assert 'Parent\nTarget phrase\n' in text
+    else:
+        assert 'Parent\nChanged\nNested\nTarget phrase again' in text
+    mock_docs.batchUpdate.assert_called_once()
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason='First regex search skips descendants after a paragraph mismatch.',
+)
+def test_first_regex_match_reaches_nested_section(mock_docs):
+    """A parent without a matching paragraph still searches its descendants."""
+    result = docs_edit.search_replace(
+        'example', 'Target phrase again', 'Changed',
+        heading_id='parent', regex=True,
+    )
+
+    assert result.ok is True
+    mock_docs.batchUpdate.assert_called_once()
+
+
 def test_unscoped_replace_all_uses_native_api(mock_docs):
     """Literal replace-all uses the API and reports the changed count."""
     mock_docs.batchUpdate.return_value.execute.return_value = {
