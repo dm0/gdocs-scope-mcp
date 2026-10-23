@@ -92,6 +92,31 @@ def test_missing_search_text_does_not_write(mock_docs):
     mock_docs.batchUpdate.assert_not_called()
 
 
+@pytest.mark.xfail(
+    strict=True,
+    reason='Unsupported replace-all modes currently edit the last match.',
+)
+@pytest.mark.parametrize(
+    'options',
+    [
+        {'heading_id': 'parent'},
+        {'regex': True},
+        {'heading_id': 'parent', 'regex': True},
+    ],
+    ids=['scoped', 'regex', 'scoped-regex'],
+)
+def test_unsupported_replace_all_fails_without_writing(mock_docs, options):
+    """Reject unsupported replace-all modes before issuing any API writes."""
+    result = docs_edit.search_replace(
+        'example', 'Target phrase', 'Changed', occurrence=0, **options,
+    )
+
+    mock_docs.batchUpdate.assert_not_called()
+    assert result.ok is False
+    assert result.code == 'INVALID_ARGUMENT'
+    assert result.suggested_action
+
+
 def test_unscoped_replace_all_uses_native_api(mock_docs):
     """Literal replace-all uses the API and reports the changed count."""
     mock_docs.batchUpdate.return_value.execute.return_value = {
