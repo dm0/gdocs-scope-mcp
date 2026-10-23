@@ -115,3 +115,62 @@ def test_literal_insertion_preserves_input_exactly(mock_docs, text, side):
 def test_markdown_html_stage(markdown, expected):
     """The HTML stage recognizes headings, strikethrough, and links."""
     assert markdown_to_html(markdown) == expected
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason='The Markdown HTML stage escapes markup emitted by document reads.',
+)
+@pytest.mark.parametrize(
+    ('markup', 'expected_style'),
+    [
+        ('<b>word</b>', {'bold': True}),
+        ('<i>word</i>', {'italic': True}),
+        ('<u>word</u>', {'underline': True}),
+    ],
+)
+def test_read_style_html_is_converted_to_text_style(markup, expected_style):
+    """Convert supported HTML styles without inserting visible markup."""
+    requests = markdown_to_requests(markup, start=12)
+
+    assert requests[0]['insertText']['text'] == '\nword'
+    styles = [r['updateTextStyle'] for r in requests if 'updateTextStyle' in r]
+    assert len(styles) == 1
+    assert styles[0]['textStyle'] == expected_style
+    assert styles[0]['range'] == {'startIndex': 13, 'endIndex': 17}
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason='The Markdown HTML stage escapes paragraph alignment markup.',
+)
+def test_read_alignment_html_is_converted_to_paragraph_style():
+    """Keep the centered paragraph syntax emitted by document reads."""
+    requests = markdown_to_requests(
+        '<p style="text-align: center;">word</p>', start=12,
+    )
+
+    assert requests[0]['insertText']['text'] == '\nword'
+    styles = [
+        r['updateParagraphStyle'] for r in requests
+        if 'updateParagraphStyle' in r
+    ]
+    assert styles[0]['paragraphStyle']['alignment'] == 'CENTER'
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason='The Markdown HTML stage escapes structural heading anchors.',
+)
+def test_read_heading_anchor_is_not_inserted_as_visible_text():
+    """Keep heading ID metadata out of visible inserted text."""
+    requests = markdown_to_requests(
+        '### <a id=heading-id></a>Heading', start=12,
+    )
+
+    assert requests[0]['insertText']['text'] == '\nHeading'
+    styles = [
+        r['updateParagraphStyle'] for r in requests
+        if 'updateParagraphStyle' in r
+    ]
+    assert styles[0]['paragraphStyle']['namedStyleType'] == 'HEADING_1'
