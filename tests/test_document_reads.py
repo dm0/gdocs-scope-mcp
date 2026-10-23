@@ -26,6 +26,39 @@ def test_absent_inline_objects_defaults_to_independent_empty_map(
     assert first.inline_objects is not second.inline_objects
 
 
+@pytest.mark.xfail(
+    strict=True,
+    reason='GoogleDocument still requires the lists collection explicitly.',
+)
+def test_absent_lists_defaults_to_independent_empty_map(simple_document):
+    """Accept omitted list metadata when no paragraph references a list."""
+    del simple_document['lists']
+
+    first = GoogleDocument.model_validate(simple_document)
+    second = GoogleDocument.model_validate(simple_document)
+
+    assert first.lists == {}
+    assert second.lists == {}
+    assert first.lists is not second.lists
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason='Missing lists metadata prevents outline and content reads.',
+)
+@pytest.mark.parametrize('operation', ['get_tree', 'read'])
+def test_reads_work_when_api_omits_lists(
+    simple_document, mock_docs, operation,
+):
+    """Read a document without lists when the API omits the empty map."""
+    del simple_document['lists']
+
+    result = getattr(docs_edit, operation)('example')
+
+    assert result.document_id == 'example'
+    mock_docs.batchUpdate.assert_not_called()
+
+
 def test_reads_work_when_api_omits_inline_objects(simple_document, mock_docs):
     """Outline and section reads survive the response seen in live testing."""
     del simple_document['inlineObjects']
@@ -245,4 +278,59 @@ def test_horizontal_rule_is_included_in_reads(simple_document, mock_docs):
     result = docs_edit.read('example')
 
     assert '\n---\n' in ''.join(result.subset_md)
+    mock_docs.batchUpdate.assert_not_called()
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason='Unknown heading IDs currently produce a successful empty read.',
+)
+def test_partial_read_contract_rejects_all_unknown_headings(mock_docs):
+    """An entirely unresolved selection must not look like an empty section."""
+    result = docs_edit.read('example', ['missing-heading'])
+
+    assert getattr(result, 'ok', True) is False
+    assert result.code == 'HEADING_NOT_FOUND'
+    mock_docs.batchUpdate.assert_not_called()
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason='selected_headings echoes requested IDs without resolving them.',
+)
+def test_partial_read_contract_reports_found_and_unknown_headings(mock_docs):
+    """Separate unresolved IDs from the sections actually returned."""
+    result = docs_edit.read('example', ['missing-heading', 'nested'])
+
+    assert result.selected_headings == ['nested']
+    assert result.unknown_heading_ids == ['missing-heading']
+    mock_docs.batchUpdate.assert_not_called()
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason='A selected parent and descendant currently duplicate content.',
+)
+def test_partial_read_contract_deduplicates_overlapping_subtrees(mock_docs):
+    """Return nested content once when both ancestor and child are selected."""
+    result = docs_edit.read('example', ['parent', 'nested'])
+
+    assert ''.join(result.subset_md).count('Target phrase again') == 1
+    assert result.selected_headings == ['parent']
+    mock_docs.batchUpdate.assert_not_called()
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason='Returned Markdown chunks do not have explicit heading identities.',
+)
+def test_partial_read_contract_identifies_each_returned_section(mock_docs):
+    """Associate each Markdown chunk with its resolved heading ID."""
+    result = docs_edit.read('example', ['nested', 'other'])
+
+    assert [section.heading_id for section in result.sections] == [
+        'nested', 'other',
+    ]
+    assert 'Target phrase again' in result.sections[0].markdown
+    assert 'Target phrase elsewhere' in result.sections[1].markdown
     mock_docs.batchUpdate.assert_not_called()
