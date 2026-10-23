@@ -301,3 +301,45 @@ def test_markdown_code_keeps_literal_text_and_font(block, newline_before):
         style['textStyle']['weightedFontFamily']['fontFamily']
         for style in code_styles
     )
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason='Markdown image nodes disappear without native image requests.',
+)
+@pytest.mark.parametrize('newline_before', [False, True])
+@pytest.mark.parametrize('surrounded', [False, True], ids=['alone', 'in-text'])
+def test_markdown_images_are_not_silently_omitted(newline_before, surrounded):
+    """Retain an image at its intended position without fetching its URL."""
+    uri = 'https://example.com/fixture-image.png'
+    image = f'![Fixture image]({uri})'
+    markdown = f'Before {image} after' if surrounded else image
+    requests = markdown_to_requests(
+        markdown, start=12, newline_before=newline_before,
+    )
+
+    images = [
+        request['insertInlineImage'] for request in requests
+        if 'insertInlineImage' in request
+    ]
+    assert len(images) == 1
+    assert images[0]['uri'] == uri
+    # Replay text/image insertions independently of the planner's ordering.
+    prefix = '_' * 12
+    buffer = prefix + '\n'
+    for request in requests:
+        if 'insertText' in request:
+            insertion = request['insertText']
+            content = insertion['text']
+        elif 'insertInlineImage' in request:
+            insertion = request['insertInlineImage']
+            content = '\ufffc'
+        else:
+            continue
+        index = insertion['location']['index']
+        assert 0 <= index < len(buffer)
+        buffer = buffer[:index] + content + buffer[index:]
+
+    plain = 'Before \ufffc after' if surrounded else '\ufffc'
+    expected = '\n' + plain if newline_before else plain + '\n'
+    assert buffer == prefix + expected + '\n'
