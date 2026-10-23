@@ -3,8 +3,8 @@
 # Fixture counts and offsets are intentional expectations in these tests.
 # ruff: noqa: PLR2004
 
-from google_docs_mcp import docs_edit
-from google_docs_mcp.models import GoogleDocument
+from gdocs_scope_mcp import docs_edit
+from gdocs_scope_mcp.models import GoogleDocument
 
 
 def test_absent_inline_objects_defaults_to_independent_empty_map(

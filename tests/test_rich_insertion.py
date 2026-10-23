@@ -2,8 +2,8 @@
 
 import pytest
 
-from google_docs_mcp import docs_edit
-from google_docs_mcp.md2requests import markdown_to_html, markdown_to_requests
+from gdocs_scope_mcp import docs_edit
+from gdocs_scope_mcp.md2requests import markdown_to_html, markdown_to_requests
 
 
 @pytest.mark.parametrize(

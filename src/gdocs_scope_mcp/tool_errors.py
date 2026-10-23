@@ -70,7 +70,7 @@ def failure_from_exception(
         return EditFailedResponse(
             code='AUTHENTICATION_REQUIRED',
             description='Google credentials could not be refreshed.',
-            suggested_action='Run google-docs-mcp-auth, then retry the call.',
+            suggested_action='Run gdocs-scope-mcp-auth, then retry the call.',
         )
     if isinstance(error, HttpError):
         status = error.resp.status
@@ -79,7 +79,7 @@ def failure_from_exception(
                 'INVALID_ARGUMENT',
                 'Check the tool arguments and document state.',
             ),
-            401: ('AUTHENTICATION_REQUIRED', 'Run google-docs-mcp-auth.'),
+            401: ('AUTHENTICATION_REQUIRED', 'Run gdocs-scope-mcp-auth.'),
             403: (
                 'PERMISSION_DENIED',
                 'Check document access, OAuth scopes and quota limits.',

@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from google_docs_mcp import docs_edit
+from gdocs_scope_mcp import docs_edit
 
 
 @pytest.fixture

@@ -3,9 +3,9 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "google-docs-mcp"
+name = "gdocs-scope-mcp"
 version = "0.2.0"
-description = "MCP server for surgical Google Docs editing and commenting"
+description = "MCP server for hierarchical, section-scoped editing of large Google Docs"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
@@ -24,14 +24,12 @@ dependencies = [
 ]
 
 [project.scripts]
-google-docs-mcp = "google_docs_mcp.server:main"
-google-docs-mcp-auth = "google_docs_mcp.auth_setup:main"
-google-drive-mcp = "google_docs_mcp.server:main"
-google-drive-mcp-auth = "google_docs_mcp.auth_setup:main"
+gdocs-scope-mcp = "gdocs_scope_mcp.server:main"
+gdocs-scope-mcp-auth = "gdocs_scope_mcp.auth_setup:main"
 
 [project.urls]
-Homepage = "https://github.com/dbuxton/google-docs-mcp"
-Repository = "https://github.com/dbuxton/google-docs-mcp"
+Homepage = "https://github.com/dm0/gdocs-scope-mcp"
+Repository = "https://github.com/dm0/gdocs-scope-mcp"
 
 [dependency-groups]
 dev = ["pytest>=8"]

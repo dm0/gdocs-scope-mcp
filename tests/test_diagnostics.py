@@ -6,8 +6,8 @@ from importlib.metadata import version
 
 from fastmcp import Client
 
-from google_docs_mcp import server
-from google_docs_mcp.diagnostics import capture_server_info
+from gdocs_scope_mcp import server
+from gdocs_scope_mcp.diagnostics import capture_server_info
 
 
 def test_server_info_keeps_startup_snapshot(tmp_path, monkeypatch):
@@ -25,9 +25,10 @@ def test_server_info_keeps_startup_snapshot(tmp_path, monkeypatch):
     async def check():
         async with Client(server.mcp) as client:
             initialization = client.initialize_result.model_dump(by_alias=True)
+            assert initialization['serverInfo']['name'] == 'gdocs-scope-mcp'
             assert (
                 initialization['serverInfo']['version']
-                == version('google-docs-mcp')
+                == version('gdocs-scope-mcp')
             )
             first = await client.call_tool('server_info')
             source.write_text('after = True\n')
@@ -37,7 +38,7 @@ def test_server_info_keeps_startup_snapshot(tmp_path, monkeypatch):
 
     info = asyncio.run(check())
 
-    assert info['package_version'] == version('google-docs-mcp')
+    assert info['package_version'] == version('gdocs-scope-mcp')
     assert info['pid'] == os.getpid()
     assert info['package_path'] == str(tmp_path)
     assert info['started_at']

@@ -8,8 +8,8 @@ from types import SimpleNamespace
 import pytest
 from fastmcp import Client, FastMCP
 
-from google_docs_mcp.models import EditFailedResponse
-from google_docs_mcp.tool_logging import (
+from gdocs_scope_mcp.models import EditFailedResponse
+from gdocs_scope_mcp.tool_logging import (
     LOG_LEVEL_ENV,
     LOGGER_NAME,
     ToolCallLoggingMiddleware,

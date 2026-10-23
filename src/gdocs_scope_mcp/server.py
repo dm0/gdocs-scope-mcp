@@ -25,11 +25,11 @@ Auth (in priority order):
   6. GOG_KEYRING_PASSWORD env var    — auto-export from gog CLI
 
 Setup:
-  google-docs-mcp-auth --credentials ~/credentials.json
-  google-docs-mcp-auth --credentials ~/credentials.json --headless  # no
+  gdocs-scope-mcp-auth --credentials ~/credentials.json
+  gdocs-scope-mcp-auth --credentials ~/credentials.json --headless  # no
   browser
   GOOGLE_DOCS_MCP_CLIENT_ID=... GOOGLE_DOCS_MCP_CLIENT_SECRET=...
-  google-docs-mcp-auth
+  gdocs-scope-mcp-auth
 
 Transport: stdio (Claude Desktop / OpenClaw MCP config)
 """
@@ -80,7 +80,7 @@ def _tool_response_schema(success_model: type[BaseModel]) -> dict:
 
 
 mcp = FastMCP(
-    name='google-docs-mcp',
+    name='gdocs-scope-mcp',
     version=SERVER_INFO.package_version,
     middleware=[ToolCallLoggingMiddleware()],
     instructions="""

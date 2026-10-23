@@ -13,8 +13,8 @@ from googleapiclient.errors import HttpError
 from httplib2 import Response
 from jsonschema import validate
 
-from google_docs_mcp import docs_edit, server
-from google_docs_mcp.tool_logging import LOGGER_NAME
+from gdocs_scope_mcp import docs_edit, server
+from gdocs_scope_mcp.tool_logging import LOGGER_NAME
 
 
 @pytest.fixture
@@ -82,7 +82,7 @@ def call_tool(name, arguments, *, raise_on_error=True):
 
 
 TOOL_CASES = [
-    ('server_info', {}, {'package_version': version('google-docs-mcp')}),
+    ('server_info', {}, {'package_version': version('gdocs-scope-mcp')}),
     ('docs_get_tree', {'doc_id': 'example'}, {'document_id': 'example'}),
     ('docs_read', {'doc_id': 'example'}, {'partial': False}),
     (
@@ -501,7 +501,7 @@ def test_expired_credentials_have_authentication_guidance(monkeypatch):
     assert response.is_error
     data = response.structured_content
     assert data['code'] == 'AUTHENTICATION_REQUIRED'
-    assert 'google-docs-mcp-auth' in data['suggested_action']
+    assert 'gdocs-scope-mcp-auth' in data['suggested_action']
     assert 'private-token-details' not in json.dumps(data)
 
 

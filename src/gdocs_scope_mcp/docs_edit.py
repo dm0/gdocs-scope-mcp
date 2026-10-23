@@ -5,7 +5,7 @@ Edits Google Docs in-place using real batchUpdate requests, preserving
 document history, comments, and suggestions. LLMs never touch indices.
 
 Usage (CLI):
-    uv run -m google_docs_mcp.docs_edit <command> <docId> [options]
+    uv run -m gdocs_scope_mcp.docs_edit <command> <docId> [options]
 
 Commands: get, search_replace, insert_after, insert_before,
           delete_paragraph, append, batch_replace.
@@ -26,7 +26,7 @@ Auth (in priority order):
 Legacy GOOGLE_DRIVE_MCP_* env var aliases still work.
 
 Python API:
-    from google_docs_mcp.docs_edit import read, search_replace, insert_after,
+    from gdocs_scope_mcp.docs_edit import read, search_replace, insert_after,
     insert_before,
                           delete_paragraph, append, batch_replace
 """
@@ -191,7 +191,7 @@ def _load_token() -> dict:
 
     raise RuntimeError(
         'No Google credentials found.\n'
-        'Run: google-docs-mcp-auth --credentials ~/credentials.json\n'
+        'Run: gdocs-scope-mcp-auth --credentials ~/credentials.json\n'
         'Or set GOOGLE_DOCS_MCP_TOKEN to your token file path '
         '(legacy GOOGLE_DRIVE_MCP_TOKEN also works).'
     )
@@ -225,7 +225,7 @@ def _load_creds():
 
     if not client_id or not client_secret:
         raise RuntimeError(
-            'No OAuth client credentials found. Re-run google-docs-mcp-auth '
+            'No OAuth client credentials found. Re-run gdocs-scope-mcp-auth '
             'to generate a self-contained token, '
             f'or set {CLIENT_ID_ENV_VAR} and {CLIENT_SECRET_ENV_VAR} '
             '(legacy GOOGLE_DRIVE_MCP_* aliases also work).'

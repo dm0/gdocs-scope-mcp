@@ -5,7 +5,7 @@
 
 import pytest
 
-from google_docs_mcp import docs_edit
+from gdocs_scope_mcp import docs_edit
 
 
 def edited_text(document, mock_docs):

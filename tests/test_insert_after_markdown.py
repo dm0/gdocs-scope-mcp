@@ -5,7 +5,7 @@ import asyncio
 import pytest
 from fastmcp import Client
 
-from google_docs_mcp import docs_edit, server
+from gdocs_scope_mcp import docs_edit, server
 
 
 @pytest.mark.parametrize(

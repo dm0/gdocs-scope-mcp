@@ -2,8 +2,8 @@
 
 import pytest
 
-from google_docs_mcp.md2requests import markdown_to_html
-from google_docs_mcp.models import (
+from gdocs_scope_mcp.md2requests import markdown_to_html
+from gdocs_scope_mcp.models import (
     DocumentParagraph,
     DocumentSection,
     DocumentTree,

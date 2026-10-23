@@ -8,14 +8,14 @@ Why this exists:
 - The current Drive comment + named-range path renders as "Original content
   deleted" in the Docs UI.
 - The next promising route is Apps Script automation.
-- Before wiring that into google-docs-mcp, we want a concrete probe that can:
+- Before wiring that into gdocs-scope-mcp, we want a concrete probe that can:
   1. create an Apps Script project,
   2. upload a tiny script,
   3. execute it remotely,
   4. report whether DocumentApp exposes any comment-related methods.
 
 Prerequisites:
-- An existing google-docs-mcp token with script.* scopes.
+- An existing gdocs-scope-mcp token with script.* scopes.
 - The Google account must have the Apps Script API enabled at:
   https://script.google.com/home/usersettings
 - For scripts.run to execute successfully, the temporary script must use the
@@ -23,7 +23,7 @@ Prerequisites:
   project is not enough for remote execution.
 
 Usage:
-    uv run -m google_docs_mcp.appscript_probe inspect-comment-api --doc-id
+    uv run -m gdocs_scope_mcp.appscript_probe inspect-comment-api --doc-id
     <DOC_ID>
 """
 
@@ -164,7 +164,7 @@ function inspectDocumentCommentApi(docId) {
 def inspect_comment_api(
     doc_id: str,
     *,
-    title: str = 'google-docs-mcp comment probe',
+    title: str = 'gdocs-scope-mcp comment probe',
     script_id: str | None = None,
 ) -> dict:
     """Deploy and run a probe of Apps Script comment capabilities."""
@@ -241,7 +241,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     inspect.add_argument(
         '--title',
-        default='google-docs-mcp comment probe',
+        default='gdocs-scope-mcp comment probe',
         help='Temporary Apps Script project title',
     )
     inspect.add_argument(

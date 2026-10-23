@@ -6,8 +6,8 @@ import json
 import pytest
 from fastmcp import Client
 
-from google_docs_mcp import docs_edit, server
-from google_docs_mcp.models import AppendSucceedResponse
+from gdocs_scope_mcp import docs_edit, server
+from gdocs_scope_mcp.models import AppendSucceedResponse
 
 EXPECTED_PREVIEW_LIMIT = 200
 

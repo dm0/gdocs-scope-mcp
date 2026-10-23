@@ -550,6 +550,45 @@ server = [
 ]
 
 [[package]]
+name = "gdocs-scope-mcp"
+version = "0.2.0"
+source = { editable = "." }
+dependencies = [
+    { name = "beautifulsoup4" },
+    { name = "fastmcp" },
+    { name = "google-api-python-client" },
+    { name = "google-auth" },
+    { name = "google-auth-httplib2" },
+    { name = "google-auth-oauthlib" },
+    { name = "mistune" },
+    { name = "pydantic" },
+    { name = "rich" },
+    { name = "typing-extensions" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "beautifulsoup4", specifier = "~=4.15" },
+    { name = "fastmcp", specifier = ">=2.10.0" },
+    { name = "google-api-python-client", specifier = ">=2.100.0" },
+    { name = "google-auth", specifier = ">=2.23.0" },
+    { name = "google-auth-httplib2", specifier = ">=0.1.1" },
+    { name = "google-auth-oauthlib", specifier = ">=1.1.0" },
+    { name = "mistune", specifier = "~=3.2" },
+    { name = "pydantic", specifier = "~=2.13" },
+    { name = "rich" },
+    { name = "typing-extensions" },
+]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pytest", specifier = ">=8" }]
+
+[[package]]
 name = "google-api-core"
 version = "2.30.3"
 source = { registry = "https://pypi.org/simple" }
@@ -619,45 +658,6 @@ sdist = { url = "https://files.pythonhosted.org/packages/70/18/90c7fac516e63cf20
 wheels = [
     { url = "https://files.pythonhosted.org/packages/37/d3/d7dff0d58a9e9244b48044bfb6a898bfcc8ecc42e0031d1bebc695344725/google_auth_oauthlib-1.4.0-py3-none-any.whl", hash = "sha256:251314f213a9ee46a5ae73988e84fd7cca8bb68e7ecf4bfd45940f9e7f51d070", size = 19261, upload-time = "2026-05-07T08:02:13.798Z" },
 ]
-
-[[package]]
-name = "google-docs-mcp"
-version = "0.2.0"
-source = { editable = "." }
-dependencies = [
-    { name = "beautifulsoup4" },
-    { name = "fastmcp" },
-    { name = "google-api-python-client" },
-    { name = "google-auth" },
-    { name = "google-auth-httplib2" },
-    { name = "google-auth-oauthlib" },
-    { name = "mistune" },
-    { name = "pydantic" },
-    { name = "rich" },
-    { name = "typing-extensions" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "pytest" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "beautifulsoup4", specifier = "~=4.15" },
-    { name = "fastmcp", specifier = ">=2.10.0" },
-    { name = "google-api-python-client", specifier = ">=2.100.0" },
-    { name = "google-auth", specifier = ">=2.23.0" },
-    { name = "google-auth-httplib2", specifier = ">=0.1.1" },
-    { name = "google-auth-oauthlib", specifier = ">=1.1.0" },
-    { name = "mistune", specifier = "~=3.2" },
-    { name = "pydantic", specifier = "~=2.13" },
-    { name = "rich" },
-    { name = "typing-extensions" },
-]
-
-[package.metadata.requires-dev]
-dev = [{ name = "pytest", specifier = ">=8" }]
 
 [[package]]
 name = "googleapis-common-protos"

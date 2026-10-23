@@ -8,11 +8,11 @@ Works in three modes:
   3. Code exchange  — you already have an auth code, just exchange it
 
 Usage:
-    google-docs-mcp-auth --credentials ~/credentials.json
-    google-docs-mcp-auth --credentials ~/credentials.json --headless
-    google-docs-mcp-auth --credentials ~/credentials.json --code "4/0Afr..."
+    gdocs-scope-mcp-auth --credentials ~/credentials.json
+    gdocs-scope-mcp-auth --credentials ~/credentials.json --headless
+    gdocs-scope-mcp-auth --credentials ~/credentials.json --code "4/0Afr..."
     GOOGLE_DOCS_MCP_CLIENT_ID=... GOOGLE_DOCS_MCP_CLIENT_SECRET=...
-    google-docs-mcp-auth
+    gdocs-scope-mcp-auth
 
 Get credentials.json:
     https://console.cloud.google.com/
@@ -264,26 +264,26 @@ def run_code_exchange(
 def main():
     """Run the command-line entry point for this module."""
     parser = argparse.ArgumentParser(
-        description='Set up Google OAuth credentials for google-docs-mcp',
+        description='Set up Google OAuth credentials for gdocs-scope-mcp',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
   # Normal (local browser opens automatically):
-  google-docs-mcp-auth --credentials ~/credentials.json
+  gdocs-scope-mcp-auth --credentials ~/credentials.json
 
   # Or use env vars instead of a credentials file:
   export GOOGLE_DOCS_MCP_CLIENT_ID=...
   export GOOGLE_DOCS_MCP_CLIENT_SECRET=...
-  google-docs-mcp-auth
+  gdocs-scope-mcp-auth
 
   # Headless / remote server (prints URL, paste back redirect):
-  google-docs-mcp-auth --credentials ~/credentials.json --headless
+  gdocs-scope-mcp-auth --credentials ~/credentials.json --headless
 
   # Already have an auth code:
-  google-docs-mcp-auth --credentials ~/credentials.json --code "4/0Afr..."
+  gdocs-scope-mcp-auth --credentials ~/credentials.json --code "4/0Afr..."
 
   # Custom token output path:
-  google-docs-mcp-auth --credentials ~/credentials.json --out ~/my-token.json
+  gdocs-scope-mcp-auth --credentials ~/credentials.json --out ~/my-token.json
         """,
     )
     parser.add_argument(

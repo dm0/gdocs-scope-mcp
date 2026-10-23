@@ -1,10 +1,48 @@
-# google-docs-mcp
+# gdocs-scope-mcp
 
-> Surgical Google Docs editing for AI agents — preserves history, never touches character indices.
+> Hierarchical Google Docs editing for AI agents working with large documents.
 
-An MCP server that makes Google Docs actually usable for LLMs. **Standalone** — no other tools required beyond a Google Cloud OAuth app.
+`gdocs-scope-mcp` is an independent project based on
+[dbuxton/google-docs-mcp](https://github.com/dbuxton/google-docs-mcp).
+It builds on the original project's text-anchor editing approach and focuses
+on **navigating and editing document sections through their heading hierarchy**.
 
-Compatibility note: the repo, package, CLI, env vars, and default token path now use `google-docs-mcp`. Backward-compatible `google-drive-mcp` command and env-var aliases are still accepted so existing setups do not break immediately.
+An agent can inspect a compact outline, read only the sections it needs, and
+scope replacements or insertions to a heading and its nested subsections.
+This keeps unrelated content out of the agent's context and makes the server
+well suited to large Google Docs with structured headings.
+
+Another goal is **more complete formatting support** when reading and editing
+documents, including richer Markdown conversion and better preservation of
+Google Docs formatting. This is ongoing work: native list and table conversion
+are not yet implemented by the write converter.
+
+Typical workflow:
+
+1. Call `docs_get_tree(doc_id)` to discover headings and their IDs.
+2. Call `docs_read(doc_id, heading_ids=[...])` to read selected section subtrees.
+3. Use `heading_id` with `docs_search_replace`, `docs_insert_before`, or
+   `docs_insert_after` to restrict the edit to the chosen subtree.
+4. Read that section again to verify the result.
+
+Scoped reads reduce the document content sent to the agent. The server still
+fetches the Google Docs document snapshot internally to resolve its structure
+and edit positions.
+
+The Python distribution and CLI are named `gdocs-scope-mcp`; the import package
+is `gdocs_scope_mcp`. The server requires a Google Cloud OAuth app and runs
+standalone over MCP STDIO.
+
+### Migrating from google-docs-mcp
+
+Install this repository and update your MCP launch command to `gdocs-scope-mcp`
+(or use `python -m gdocs_scope_mcp`). Authenticate with `gdocs-scope-mcp-auth`.
+The old `google-docs-mcp` and `google-drive-mcp` CLI aliases are not installed,
+so this project can coexist with the original package.
+
+Existing `GOOGLE_DOCS_MCP_*` settings, legacy `GOOGLE_DRIVE_MCP_*` aliases,
+and the default token path `~/.google-docs-mcp/token.json` are retained.
+Existing credentials can be reused without re-authenticating just for the rename.
 
 Indexing note: when the MCP reads document content before planning index-based edits, it requests `suggestionsViewMode=SUGGESTIONS_INLINE`. That keeps returned indices aligned for later `documents.batchUpdate` calls when the doc contains suggestions.
 
@@ -48,24 +86,24 @@ This server uses the same abstraction as code editors: **search by text, not by 
 ### 1. Run directly from GitHub
 
 ```bash
-uvx --from git+https://github.com/dbuxton/google-docs-mcp google-docs-mcp --help
+uvx --from git+https://github.com/dm0/gdocs-scope-mcp gdocs-scope-mcp
 ```
 
-That command downloads the package, creates an isolated environment, installs dependencies, and runs the `google-docs-mcp` entry point.
+That command downloads the package, creates an isolated environment, installs dependencies, and runs the `gdocs-scope-mcp` entry point.
 
 No PyPI release is required. `uvx` can execute the tool straight from the GitHub repository.
 
 To pin to a branch, tag, or commit, add a ref to the URL:
 
 ```bash
-uvx --from git+https://github.com/dbuxton/google-docs-mcp@main google-docs-mcp --help
+uvx --from git+https://github.com/dm0/gdocs-scope-mcp@main gdocs-scope-mcp
 ```
 
 If you prefer a persistent local install instead of `uvx`, use:
 
 ```bash
-uv tool install --from git+https://github.com/dbuxton/google-docs-mcp google-docs-mcp
-uv tool install --from git+https://github.com/dbuxton/google-docs-mcp google-docs-mcp-auth
+uv tool install git+https://github.com/dm0/gdocs-scope-mcp
+# Installs both gdocs-scope-mcp and gdocs-scope-mcp-auth.
 ```
 
 ### 2. Create a Google Cloud OAuth app
@@ -85,8 +123,8 @@ uv tool install --from git+https://github.com/dbuxton/google-docs-mcp google-doc
 
 **Normal — browser opens automatically:**
 ```bash
-uvx --from git+https://github.com/dbuxton/google-docs-mcp \
-  google-docs-mcp-auth --credentials ~/credentials.json
+uvx --from git+https://github.com/dm0/gdocs-scope-mcp \
+  gdocs-scope-mcp-auth --credentials ~/credentials.json
 ```
 
 **Or use env vars instead of a credentials file:**
@@ -94,25 +132,25 @@ uvx --from git+https://github.com/dbuxton/google-docs-mcp \
 export GOOGLE_DOCS_MCP_CLIENT_ID="your-google-client-id"
 export GOOGLE_DOCS_MCP_CLIENT_SECRET="your-google-client-secret"
 
-uvx --from git+https://github.com/dbuxton/google-docs-mcp \
-  google-docs-mcp-auth
+uvx --from git+https://github.com/dm0/gdocs-scope-mcp \
+  gdocs-scope-mcp-auth
 ```
 
 **Headless / remote server — no browser on device:**
 ```bash
-uvx --from git+https://github.com/dbuxton/google-docs-mcp \
-  google-docs-mcp-auth --credentials ~/credentials.json --headless
+uvx --from git+https://github.com/dm0/gdocs-scope-mcp \
+  gdocs-scope-mcp-auth --credentials ~/credentials.json --headless
 # Prints a URL → open on any device (phone, laptop, etc.)
 # Paste the full redirect URL back into the terminal
 ```
 
 **Already have an auth code:**
 ```bash
-uvx --from git+https://github.com/dbuxton/google-docs-mcp \
-  google-docs-mcp-auth --credentials ~/credentials.json --code "4/0Afr..."
+uvx --from git+https://github.com/dm0/gdocs-scope-mcp \
+  gdocs-scope-mcp-auth --credentials ~/credentials.json --code "4/0Afr..."
 ```
 
-`google-docs-mcp-auth` resolves OAuth client credentials in this order:
+`gdocs-scope-mcp-auth` resolves OAuth client credentials in this order:
 
 1. `--credentials /path/to/credentials.json`
 2. `--client-id` and `--client-secret`
@@ -126,9 +164,9 @@ Token is saved to `~/.google-docs-mcp/token.json` by default. Override with `--o
 ```json
 {
   "mcpServers": {
-    "google-docs": {
+    "gdocs-scope": {
       "command": "uvx",
-      "args": ["--from", "git+https://github.com/dbuxton/google-docs-mcp", "google-docs-mcp"],
+      "args": ["--from", "git+https://github.com/dm0/gdocs-scope-mcp", "gdocs-scope-mcp"],
       "env": {
         "GOOGLE_DOCS_MCP_TOKEN": "/Users/you/.google-docs-mcp/token.json"
       }
@@ -142,9 +180,9 @@ Token is saved to `~/.google-docs-mcp/token.json` by default. Override with `--o
 {
   "mcp": {
     "servers": {
-      "google-docs": {
+      "gdocs-scope": {
         "command": "uvx",
-        "args": ["--from", "git+https://github.com/dbuxton/google-docs-mcp", "google-docs-mcp"],
+        "args": ["--from", "git+https://github.com/dm0/gdocs-scope-mcp", "gdocs-scope-mcp"],
         "env": {
           "GOOGLE_DOCS_MCP_TOKEN": "~/.google-docs-mcp/token.json"
         }
@@ -161,13 +199,13 @@ command-line entry points. From the repository directory, install and run with:
 
 ```bash
 uv sync
-uv run google-docs-mcp
+uv run gdocs-scope-mcp
 ```
 
 Alternatively, install an editable checkout with `pip install -e .` in a virtual
 environment. Add or update dependencies in `pyproject.toml`.
 
-The Python package lives in `src/google_docs_mcp/`; tests live in `tests/`.
+The Python package lives in `src/gdocs_scope_mcp/`; tests live in `tests/`.
 `uv sync` installs the package in editable mode and includes the development
 dependencies. Run the tests with:
 
@@ -178,9 +216,9 @@ uv run pytest
 For pip-based development, install the editable package and pytest with
 `pip install -e . pytest`.
 
-The server can also be started with `uv run -m google_docs_mcp`. Existing
-`google-docs-mcp` and legacy `google-drive-mcp` commands remain available.
-Reinstall existing editable `uv tool` installations after this layout change
+The server can also be started with `uv run -m gdocs_scope_mcp`.
+`gdocs-scope-mcp` and `gdocs-scope-mcp-auth` are the installed commands.
+Reinstall editable `uv tool` installations under the new package name
 so their package paths and command entry points are refreshed.
 
 ### Server diagnostics and logging
@@ -196,23 +234,24 @@ restart it to load those edits. Compare the fingerprint to identify source
 changes and the process ID/startup time to identify a new server process.
 
 Tool calls log their name, duration in milliseconds, and success or failure to
-stderr. Successful calls use `INFO`; raised errors use `ERROR` with a traceback.
+stderr. Successful calls use `INFO`; failures use `ERROR` with a machine-readable
+code. Internal errors retain a traceback.
 Each line includes the process ID; `DEBUG` also logs when a call starts.
 Edit responses with `ok: false` also log at `ERROR`, including their failure
-description. Cancelled calls use `WARNING`. Arguments and returned document
+code. Cancelled calls use `WARNING`. Arguments and returned document
 contents are not included in our tool-call log messages.
 
 Set `GOOGLE_DOCS_MCP_LOG_LEVEL` to `DEBUG`, `INFO` (default), `WARNING`, `ERROR`,
 or `CRITICAL`. For example:
 
 ```bash
-GOOGLE_DOCS_MCP_LOG_LEVEL=DEBUG uv run google-docs-mcp
+GOOGLE_DOCS_MCP_LOG_LEVEL=DEBUG uv run gdocs-scope-mcp
 ```
 
 For a Codex STDIO connection, add the variable to the server's environment:
 
 ```toml
-[mcp_servers.google_docs.env]
+[mcp_servers.gdocs_scope.env]
 GOOGLE_DOCS_MCP_TOKEN = "/home/you/.google-docs-mcp/token.json"
 GOOGLE_DOCS_MCP_LOG_LEVEL = "INFO"
 ```
@@ -227,9 +266,9 @@ stderr in its logs.
 ```json
 {
   "mcpServers": {
-    "google-docs": {
+    "gdocs-scope": {
       "command": "uvx",
-      "args": ["--from", "/absolute/path/to/google-docs-mcp", "google-docs-mcp"],
+      "args": ["--from", "/absolute/path/to/gdocs-scope-mcp", "gdocs-scope-mcp"],
       "env": {
         "GOOGLE_DOCS_MCP_TOKEN": "/Users/you/.google-docs-mcp/token.json"
       }
@@ -251,7 +290,7 @@ Required one-time setup:
 2. Create a standalone Apps Script project to use as the bridge
 3. In that Apps Script project, open **Project Settings** and switch it to the
    **same standard Google Cloud project** as the OAuth client used by
-   `google-docs-mcp`
+   `gdocs-scope-mcp`
 4. In that same Google Cloud project, ensure **Apps Script API** is enabled
 5. Set the bridge script ID in the MCP process environment:
 
@@ -264,7 +303,7 @@ Example `uvx` launch with both token + Apps Script bridge:
 ```bash
 GOOGLE_DOCS_MCP_TOKEN="$HOME/.google-docs-mcp/token.json" \
 GOOGLE_DOCS_MCP_APPS_SCRIPT_ID="your-apps-script-id" \
-uvx --from git+https://github.com/dbuxton/google-docs-mcp google-docs-mcp
+uvx --from git+https://github.com/dm0/gdocs-scope-mcp gdocs-scope-mcp
 ```
 
 If the Apps Script bridge is still using its hidden default project, `scripts.run`
@@ -276,25 +315,26 @@ fails even when account-level Apps Script access is enabled.
 
 ### Document reading
 
-#### `docs_get(doc_id)`
-Read a Google Doc and return its full structure.
+#### `docs_get_tree(doc_id)`
 
-Returns the document title, a list of paragraphs (with text, heading style, and character indices), and the full plain text. Use this first to understand the document before making edits.
+Return a compact document outline with identity/revision metadata and heading
+entries containing `title`, `id`, `level`, and `ancestor_ids`. Use the IDs to
+select sections for reading and editing; body paragraphs are omitted.
 
+```python
+docs_get_tree(doc_id="...")
 ```
-docs_get(doc_id="1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms")
-```
 
-Returns:
-```json
-{
-  "title": "My Document",
-  "paragraphs": [
-    {"text": "Introduction", "style": "HEADING_1", "start": 0, "end": 13},
-    {"text": "This is the body.", "style": "NORMAL_TEXT", "start": 13, "end": 31}
-  ],
-  "full_text": "Introduction\nThis is the body."
-}
+#### `docs_read(doc_id, heading_ids=None)`
+
+Return document content as Markdown in `subset_md`, alongside `document_id`,
+`title`, `revision_id`, `selected_headings`, and `partial`.
+Pass heading IDs from the outline to return only those section subtrees,
+including their nested subsections. Omit `heading_ids` to read the whole document.
+Heading lines include HTML anchors carrying their structural IDs.
+
+```python
+docs_read(doc_id="...", heading_ids=["heading-id-from-outline"])
 ```
 
 ---
@@ -317,7 +357,7 @@ docs_list(query="board deck 2026", limit=5)
 
 All editing tools use **text anchors**, never character indices. The server finds the text and handles the indices internally.
 
-#### `docs_search_replace(doc_id, find, replace, occurrence, regex)`
+#### `docs_search_replace(doc_id, find, replace, occurrence=1, heading_id=None, regex=False)`
 Find text in a document and replace a specific occurrence.
 
 | Param | Type | Default | Description |
@@ -326,13 +366,17 @@ Find text in a document and replace a specific occurrence.
 | `find` | string | required | Text to find |
 | `replace` | string | required | Replacement text |
 | `occurrence` | int | `1` | Which occurrence: `1` = first, `2` = second, `0` = **all** |
+| `heading_id` | string or null | `null` | Restrict search to this heading and its nested subsections |
 | `regex` | bool | `false` | Treat `find` as a Python regex |
 
 ```
-# Replace first occurrence
-docs_search_replace(doc_id="...", find="Q1 2024", replace="Q2 2024")
+# Replace the first occurrence within one section subtree
+docs_search_replace(
+    doc_id="...", find="Q1 2024", replace="Q2 2024",
+    heading_id="heading-id-from-outline",
+)
 
-# Replace all occurrences
+# Replace all occurrences (whole document, literal search only)
 docs_search_replace(doc_id="...", find="ACME Corp", replace="Initech", occurrence=0)
 
 # Regex replace
@@ -341,8 +385,9 @@ docs_search_replace(doc_id="...", find=r"\bDraft\b", replace="Final", regex=true
 
 ---
 
-#### `docs_insert_after(doc_id, anchor, text)`
-Insert a new paragraph immediately after the paragraph containing `anchor`.
+#### `docs_insert_after(doc_id, anchor, text, heading_id=None, rich=True)`
+Insert Markdown or literal text after the paragraph containing `anchor`.
+Pass `heading_id` to search only that section subtree; `rich=False` inserts literal text.
 
 ```
 docs_insert_after(
@@ -354,8 +399,9 @@ docs_insert_after(
 
 ---
 
-#### `docs_insert_before(doc_id, anchor, text)`
-Insert a new paragraph immediately before the paragraph containing `anchor`.
+#### `docs_insert_before(doc_id, anchor, text, heading_id=None, rich=True)`
+Insert Markdown or literal text before the paragraph containing `anchor`.
+Pass `heading_id` to search only that section subtree; `rich=False` inserts literal text.
 
 ```
 docs_insert_before(
@@ -453,7 +499,7 @@ docs_add_comment(
 > A probe helper is included for this workstream:
 >
 > ```bash
-> uv run -m google_docs_mcp.appscript_probe inspect-comment-api --doc-id <DOC_ID>
+> uv run -m gdocs_scope_mcp.appscript_probe inspect-comment-api --doc-id <DOC_ID>
 > ```
 >
 > The probe now creates an API-executable deployment automatically. If account-level Apps Script access is still disabled, it stops with the settings-page message. If execution fails with a permission error, the next blocker is the shared standard Google Cloud project requirement documented at <https://developers.google.com/apps-script/guides/cloud-platform-projects>.

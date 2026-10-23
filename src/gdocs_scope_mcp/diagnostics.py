@@ -36,7 +36,7 @@ def capture_server_info(package_path: Path | None = None) -> ServerInfo:
         digest.update(path.read_bytes())
         digest.update(b'\0')
     return ServerInfo(
-        package_version=version('google-docs-mcp'),
+        package_version=version('gdocs-scope-mcp'),
         source_fingerprint=digest.hexdigest(),
         started_at=datetime.now(timezone.utc),
         pid=os.getpid(),
