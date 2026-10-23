@@ -804,3 +804,71 @@ def test_comment_occurrence_description_is_complete_in_catalog():
     text = ' '.join(asyncio.run(description()).split())
     assert 'first' in text.casefold()
     assert '2, 3' in text
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason='Listing responses omit continuation and completeness metadata.',
+)
+@pytest.mark.parametrize('name', ['docs_list', 'docs_read_comments'])
+@pytest.mark.parametrize('has_more', [False, True])
+def test_listing_reports_page_continuation(contract_api, name, has_more):
+    """Distinguish a terminal page from a page with further results."""
+    if name == 'docs_list':
+        request = contract_api.files.return_value.list.return_value
+        arguments = {}
+    else:
+        request = contract_api.comments.return_value.list.return_value
+        arguments = {'doc_id': 'example'}
+    if has_more:
+        request.execute.return_value['nextPageToken'] = 'next-page'
+
+    _, response = call_tool(name, arguments)
+
+    data = response.structured_content
+    assert data['has_more'] is has_more
+    assert data['next_page_token'] == ('next-page' if has_more else None)
+    assert data['count'] == 1
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason='Listing tools do not accept a continuation token.',
+)
+@pytest.mark.parametrize('name', ['docs_list', 'docs_read_comments'])
+def test_listing_forwards_page_token_to_drive(contract_api, name):
+    """Let an agent request the next page without repeating page one."""
+    arguments = {'page_token': 'second-page'}
+    if name == 'docs_list':
+        resource = contract_api.files.return_value
+    else:
+        resource = contract_api.comments.return_value
+        arguments['doc_id'] = 'example'
+
+    _, response = call_tool(name, arguments, raise_on_error=False)
+
+    assert response.is_error is False
+    resource.list.assert_called_once()
+    assert resource.list.call_args.kwargs['pageToken'] == 'second-page'
+    assert 'nextPageToken' in resource.list.call_args.kwargs['fields']
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason='An empty filtered comment page hides continuation metadata.',
+)
+def test_filtered_comment_page_keeps_continuation(contract_api):
+    """Zero visible comments on this page must not imply no later comments."""
+    resource = contract_api.comments.return_value
+    resource.list.return_value.execute.return_value = {
+        'comments': [{'id': 'resolved', 'resolved': True}],
+        'nextPageToken': 'more-comments',
+    }
+
+    _, response = call_tool('docs_read_comments', {'doc_id': 'example'})
+
+    data = response.structured_content
+    assert data['comments'] == []
+    assert data['count'] == 0
+    assert data['has_more'] is True
+    assert data['next_page_token'] == 'more-comments'
