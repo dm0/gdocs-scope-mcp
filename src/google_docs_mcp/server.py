@@ -494,12 +494,15 @@ def docs_resolve_comment(
     doc_id: str, comment_id: str, reply: str = ''
 ) -> ResolveCommentResponse:
     """
-    Resolve (close) a comment on a Google Doc, optionally with a final reply.
+    Resolve a comment by creating a reply with the resolve action.
+
+    An optional closing message is included in that same reply. Without a
+    message, only the resolve action is sent; no text content is required.
 
     Args:
         doc_id:     Google Doc ID
         comment_id: ID of the comment to resolve (from docs_read_comments)
-        reply:      Optional reply text to post before resolving
+        reply: Optional closing text to include in the resolving reply.
 
     Returns
     -------
@@ -508,19 +511,14 @@ def docs_resolve_comment(
     creds = docs_edit._load_creds()
     drive = build('drive', 'v3', credentials=creds)
 
+    body = {'action': 'resolve'}
     if reply:
-        drive.replies().create(
-            fileId=doc_id,
-            commentId=comment_id,
-            body={'content': reply},
-            fields='id',
-        ).execute()
-
-    drive.comments().update(
+        body['content'] = reply
+    drive.replies().create(
         fileId=doc_id,
         commentId=comment_id,
-        body={'resolved': True},
-        fields='id,resolved',
+        body=body,
+        fields='id',
     ).execute()
     return ResolveCommentResponse(comment_id=comment_id)
 

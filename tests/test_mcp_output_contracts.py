@@ -432,3 +432,58 @@ def test_comment_filtering_and_defaults_survive_typed_output(
         ]
     else:
         assert data['comments'] == []
+
+
+@pytest.mark.parametrize('reply', ['', 'Closing reply'])
+def test_resolve_uses_reply_action_in_one_request(contract_api, reply):
+    """Resolve through replies.create, with optional content on that action."""
+    contract_api.comments.return_value.update.side_effect = AssertionError(
+        'comments.update cannot resolve a comment',
+    )
+
+    _, response = call_tool(
+        'docs_resolve_comment',
+        {
+            'doc_id': 'example',
+            'comment_id': 'comment-id',
+            'reply': reply,
+        },
+    )
+
+    expected_body = {'action': 'resolve'}
+    if reply:
+        expected_body['content'] = reply
+    contract_api.replies.return_value.create.assert_called_once_with(
+        fileId='example',
+        commentId='comment-id',
+        body=expected_body,
+        fields='id',
+    )
+    contract_api.replies.return_value.create.return_value.execute.assert_called_once()
+    contract_api.comments.return_value.update.assert_not_called()
+    assert response.is_error is False
+    assert response.structured_content == {
+        'ok': True,
+        'comment_id': 'comment-id',
+        'resolved': True,
+    }
+    assert json.loads(response.content[0].text) == response.structured_content
+
+
+def test_resolve_failure_does_not_return_success(contract_api):
+    """A failed resolve action stays an MCP error without a success receipt."""
+    request = contract_api.replies.return_value.create.return_value
+    request.execute.side_effect = RuntimeError('Simulated resolve failure')
+
+    _, response = call_tool(
+        'docs_resolve_comment',
+        {
+            'doc_id': 'example',
+            'comment_id': 'comment-id',
+        },
+        raise_on_error=False,
+    )
+
+    assert response.is_error is True
+    assert response.structured_content is None
+    contract_api.comments.return_value.update.assert_not_called()
