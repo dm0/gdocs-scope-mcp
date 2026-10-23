@@ -158,16 +158,19 @@ def html_to_gpars(
 
 
 def gpars_to_requests(
-    paragraphs: list[GoogleDocumentParagraph]
+    paragraphs: list[GoogleDocumentParagraph], *, newline_before: bool = True
 ):
+    """Build requests with breaks before appended or after prepended paragraphs."""
     requests = []
     offset = 0
     for p in paragraphs:
         if not len(p):
             continue
         text_style_requests = []
-        text = '\n'
-        offset += 1
+        insert_index = p.start_index + offset
+        text = '\n' if newline_before else ''
+        if newline_before:
+            offset += 1
         for element in p.elements:
             if isinstance(element, GoogleDocumentTextRun):
                 text += element.content
@@ -187,10 +190,12 @@ def gpars_to_requests(
                         'fields': ','.join(style.keys())
                     }
                 })
+        if not newline_before:
+            text += '\n'
         requests.append({
             'insertText': {
                 'location': {
-                    'index': p.start_index + offset - 1
+                    'index': insert_index
                 },
                 'text': text
             }
@@ -210,13 +215,18 @@ def gpars_to_requests(
             }
         })
         requests.extend(text_style_requests)
+        if not newline_before:
+            offset += 1
     return requests
 
 
-def markdown_to_requests(markdown: str, start: int = 0):
+def markdown_to_requests(
+    markdown: str, start: int = 0, *, newline_before: bool = True
+):
+    """Convert Markdown with paragraph boundaries suited to the insertion side."""
     html = markdown_to_html(markdown)
     gpars = html_to_gpars(html, start)
-    return gpars_to_requests(gpars)
+    return gpars_to_requests(gpars, newline_before=newline_before)
 
 
 if __name__ == '__main__':

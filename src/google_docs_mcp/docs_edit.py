@@ -1016,7 +1016,7 @@ def insert_before(
     heading_id: str | None = None, rich: bool = True
 ) -> InsertSucceedResponse | EditFailedResponse:
     """
-    Insert text as a new paragraph after the paragraph containing `anchor`.
+    Insert Markdown paragraphs before the paragraph containing `anchor`.
 
     The inserted text becomes a separate paragraph (newline appended automatically).
     The search can be scoped to the specified heading (and nested subheadings).
@@ -1045,12 +1045,19 @@ def insert_before(
     # Insert at the start of the paragraph
     insert_index = found.paragraph.start_index
 
-    requests, inserted_text = _build_insert_requests(
-        insert_index,
-        text,
-        suffix='\n',
-        rich=rich,
-    )
+    if rich:
+        requests = markdown_to_requests(
+            text, start=insert_index, newline_before=False,
+        )
+        inserted_text = ''.join(
+            request['insertText']['text']
+            for request in requests if 'insertText' in request
+        )
+    else:
+        inserted_text = text + '\n'
+        requests = [{'insertText': {
+            'location': {'index': insert_index}, 'text': inserted_text,
+        }}]
     service.documents().batchUpdate(
         documentId=doc_id,
         body={'requests': requests},
@@ -1058,7 +1065,7 @@ def insert_before(
 
     return InsertSucceedResponse(
         anchor=found.paragraph.text,
-        insert_position='after',
+        insert_position='before',
         at_index=insert_index,
         rich=rich,
         inserted_text=inserted_text
