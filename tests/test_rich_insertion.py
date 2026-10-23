@@ -264,3 +264,40 @@ def test_inline_markdown_links_and_strikethrough_keep_style(
     assert styles[0]['range'] == {'startIndex': start, 'endIndex': start + 4}
     assert styles[0]['textStyle'] == style
     assert set(styles[0]['fields'].split(',')) == set(style)
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason='Code elements are flattened without code font formatting.',
+)
+@pytest.mark.parametrize('newline_before', [False, True])
+@pytest.mark.parametrize('block', [False, True], ids=['inline', 'block'])
+def test_markdown_code_keeps_literal_text_and_font(block, newline_before):
+    """Keep code text and whitespace while applying a dedicated code font."""
+    code = 'first = 1\n  second = 2' if block else 'word'
+    markdown = f'```python\n{code}\n```' if block else f'A `{code}` end'
+    requests = markdown_to_requests(
+        markdown, start=12, newline_before=newline_before,
+    )
+
+    plain = code if block else f'A {code} end'
+    expected = '\n' + plain if newline_before else plain + '\n'
+    inserted = ''.join(
+        request['insertText']['text'] for request in requests
+        if 'insertText' in request
+    )
+    assert inserted == expected
+    code_styles = [
+        request['updateTextStyle'] for request in requests
+        if 'updateTextStyle' in request
+        and 'weightedFontFamily' in request['updateTextStyle']['textStyle']
+    ]
+    assert code_styles
+    start = 12 + int(newline_before) + (0 if block else 2)
+    assert any(style['range'] == {
+        'startIndex': start, 'endIndex': start + len(code),
+    } for style in code_styles)
+    assert all(
+        style['textStyle']['weightedFontFamily']['fontFamily']
+        for style in code_styles
+    )
