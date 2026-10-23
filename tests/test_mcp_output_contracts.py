@@ -872,3 +872,65 @@ def test_filtered_comment_page_keeps_continuation(contract_api):
     assert data['count'] == 0
     assert data['has_more'] is True
     assert data['next_page_token'] == 'more-comments'
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason='Google-backed tools do not yet declare explicit MCP annotations.',
+)
+@pytest.mark.parametrize(
+    ('name', 'read_only'),
+    [
+        ('docs_get_tree', True), ('docs_read', True),
+        ('docs_list', True), ('docs_read_comments', True),
+        ('docs_search_replace', False), ('docs_insert_before', False),
+        ('docs_insert_after', False), ('docs_delete_paragraph', False),
+        ('docs_append', False), ('docs_batch_replace', False),
+        ('docs_add_comment', False), ('docs_reply_to_comment', False),
+        ('docs_resolve_comment', False), ('docs_delete_comment', False),
+        ('docs_create', False),
+    ],
+)
+def test_google_tools_declare_action_hints(name, read_only):
+    """Distinguish reads from mutations and identify the external service."""
+    async def annotations():
+        async with Client(server.mcp) as client:
+            return next(
+                tool.annotations for tool in await client.list_tools()
+                if tool.name == name
+            )
+
+    hints = asyncio.run(annotations())
+    assert hints is not None
+    assert hints.readOnlyHint is read_only
+    assert hints.openWorldHint is True
+    if read_only:
+        assert hints.destructiveHint is False
+    else:
+        assert hints.destructiveHint is not None
+        assert hints.idempotentHint is not None
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason='Insertion receipts omit document, scope, and truncation metadata.',
+)
+@pytest.mark.parametrize('name', ['docs_insert_before', 'docs_insert_after'])
+def test_insertion_receipts_identify_scope_and_preview_truncation(
+    contract_api, mock_docs, name,
+):
+    """Make the edited document/scope and an incomplete preview explicit."""
+    text = 'X' * 240
+    _, response = call_tool(name, {
+        'doc_id': 'example', 'heading_id': 'nested',
+        'anchor': 'Target phrase', 'text': text, 'rich': False,
+    })
+
+    data = response.structured_content
+    assert data['document_id'] == 'example'
+    assert data['heading_id'] == 'nested'
+    assert data['preview_truncated'] is True
+    assert data['inserted_char_count'] == len(text) + 1
+    assert len(data['inserted_text']) < data['inserted_char_count']
+    mock_docs.batchUpdate.assert_called_once()
+    contract_api.comments.return_value.create.assert_not_called()
