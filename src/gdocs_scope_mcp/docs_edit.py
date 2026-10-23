@@ -983,7 +983,9 @@ def delete_paragraph(doc_id: str, anchor: str) -> dict:
     Delete the paragraph(s) containing `anchor` text.
 
     Deletes ALL paragraphs matching the anchor (case-insensitive substring).
-    Returns count of deleted paragraphs.
+    The mandatory final Body newline remains as an empty paragraph. Count
+    paragraphs whose content was removed, including a cleared final paragraph;
+    an already-empty final paragraph is not counted.
     """
     service = _get_service('docs', 'v1')
     doc = _get_document(service, doc_id)
@@ -1003,28 +1005,35 @@ def delete_paragraph(doc_id: str, anchor: str) -> dict:
     # later indices
     targets.sort(key=lambda p: p.start, reverse=True)
 
+    terminal_newline = doc['body']['content'][-1]['endIndex'] - 1
     requests = []
+    deleted = []
     for t in targets:
+        end = min(t.end, terminal_newline)
+        if t.start >= end:
+            continue
         requests.append(
             {
                 'deleteContentRange': {
                     'range': {
                         'startIndex': t.start,
-                        'endIndex': t.end,
+                        'endIndex': end,
                     }
                 }
             }
         )
+        deleted.append(t.text[:80])
 
-    service.documents().batchUpdate(
-        documentId=doc_id,
-        body={'requests': requests},
-    ).execute()
+    if requests:
+        service.documents().batchUpdate(
+            documentId=doc_id,
+            body={'requests': requests},
+        ).execute()
 
     return {
         'ok': True,
-        'deleted_count': len(targets),
-        'deleted': [t.text[:80] for t in targets],
+        'deleted_count': len(deleted),
+        'deleted': deleted,
     }
 
 

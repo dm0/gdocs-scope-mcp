@@ -318,6 +318,9 @@ def docs_delete_paragraph(doc_id: str, anchor: str) -> DeleteParagraphResponse:
 
     Deletes ALL paragraphs that contain the anchor string (case-insensitive).
     If the anchor matches only one paragraph, only that paragraph is deleted.
+    The required final Body newline remains as an empty paragraph. Clearing
+    final paragraph content counts as one deletion; an already-empty final
+    paragraph is skipped and is not counted.
 
     Args:
         doc_id: Google Doc ID

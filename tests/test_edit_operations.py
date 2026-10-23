@@ -259,10 +259,6 @@ def test_batch_validation_does_not_apply_partial_changes(mock_docs):
     mock_docs.batchUpdate.assert_not_called()
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason='Deletion includes the protected final Body newline.',
-)
 def test_delete_matching_paragraphs_preserves_remaining_text(
     simple_document, mock_docs
 ):
@@ -286,21 +282,13 @@ def test_delete_matching_paragraphs_preserves_remaining_text(
         pytest.param(
             ['Keep before', 'Delete marker', 'Keep after'], id='nonfinal',
         ),
-        *[
-            pytest.param(
-                lines, id=name,
-                marks=pytest.mark.xfail(
-                    strict=True,
-                    reason='Deletion includes the protected final newline.',
-                ),
-            )
-            for name, lines in [
-                ('final', ['Keep before', 'Delete marker']),
-                ('only', ['Delete marker']),
-                ('mixed', ['Keep before', 'Delete marker',
-                           'Keep middle', 'Delete marker']),
-            ]
-        ],
+        pytest.param(['Keep before', 'Delete marker'], id='final'),
+        pytest.param(['Delete marker'], id='only'),
+        pytest.param(
+            ['Keep before', 'Delete marker', 'Keep middle', 'Delete marker'],
+            id='mixed',
+        ),
+        pytest.param(['Delete marker', 'Delete marker'], id='all'),
     ],
 )
 def test_delete_paragraph_preserves_required_body_newline(

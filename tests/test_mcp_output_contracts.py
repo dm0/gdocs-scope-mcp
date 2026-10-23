@@ -81,6 +81,92 @@ def call_tool(name, arguments, *, raise_on_error=True):
     return asyncio.run(call())
 
 
+@pytest.mark.parametrize('only_paragraph', [False, True])
+@pytest.mark.usefixtures('contract_api')
+def test_delete_final_paragraph_through_mcp(
+    simple_document, mock_docs, only_paragraph,
+):
+    """Validate receipts and atomic edits against Body boundaries."""
+    if only_paragraph:
+        simple_document['body']['content'] = (
+            simple_document['body']['content'][:1]
+        )
+    original = '\n' + ''.join(
+        element['paragraph']['elements'][0]['textRun']['content']
+        for element in simple_document['body']['content']
+    )
+    remaining = original
+
+    def apply_batch():
+        nonlocal remaining
+        requests = mock_docs.batchUpdate.call_args.kwargs['body']['requests']
+        starts = []
+        for request in requests:
+            span = request['deleteContentRange']['range']
+            start, end = span['startIndex'], span['endIndex']
+            assert 1 <= start < end < len(remaining)
+            starts.append(start)
+            remaining = remaining[:start] + remaining[end:]
+        assert starts == sorted(starts, reverse=True)
+        return {}
+
+    mock_docs.batchUpdate.return_value.execute.side_effect = apply_batch
+    anchor = 'Introduction' if only_paragraph else 'target PHRASE'
+    tool, result = call_tool(
+        'docs_delete_paragraph', {'doc_id': 'example', 'anchor': anchor},
+    )
+
+    assert not result.is_error
+    validate(result.structured_content, tool.outputSchema)
+    count = 1 if only_paragraph else 3
+    assert result.structured_content['deleted_count'] == count
+    assert len(result.structured_content['deleted']) == count
+    assert remaining == (
+        '\n\n'
+        if only_paragraph else '\nIntroduction\nParent\nNested\nOther\n\n'
+    )
+    mock_docs.batchUpdate.assert_called_once()
+
+
+@pytest.mark.parametrize('with_nonfinal', [False, True])
+@pytest.mark.usefixtures('contract_api')
+def test_delete_skips_empty_final_paragraph(
+    simple_document, mock_docs, with_nonfinal,
+):
+    """Never send an empty range or count the protected empty paragraph."""
+    content = simple_document['body']['content'][:1] if with_nonfinal else []
+    start = content[-1]['endIndex'] if content else 1
+    content.append({
+        'startIndex': start,
+        'endIndex': start + 1,
+        'paragraph': {'elements': [{
+            'startIndex': start,
+            'endIndex': start + 1,
+            'textRun': {'content': '\n'},
+        }]},
+    })
+    simple_document['body']['content'] = content
+    # Empty-anchor validation is separate (#17); exercise current match-all
+    # semantics to cover a matching empty final paragraph.
+    tool, result = call_tool(
+        'docs_delete_paragraph', {'doc_id': 'example', 'anchor': ''},
+    )
+    assert not result.is_error
+    validate(result.structured_content, tool.outputSchema)
+    assert result.structured_content['deleted_count'] == int(with_nonfinal)
+    assert result.structured_content['deleted'] == (
+        ['Introduction'] if with_nonfinal else []
+    )
+    if with_nonfinal:
+        requests = mock_docs.batchUpdate.call_args.kwargs['body']['requests']
+        assert requests == [{'deleteContentRange': {'range': {
+            'startIndex': 1, 'endIndex': start,
+        }}}]
+        mock_docs.batchUpdate.assert_called_once()
+    else:
+        mock_docs.batchUpdate.assert_not_called()
+
+
 TOOL_CASES = [
     ('server_info', {}, {'package_version': version('gdocs-scope-mcp')}),
     ('docs_get_tree', {'doc_id': 'example'}, {'document_id': 'example'}),

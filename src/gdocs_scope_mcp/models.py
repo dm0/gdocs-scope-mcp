@@ -481,7 +481,13 @@ class DeleteParagraphResponse(BaseModel):
     """Report deleted paragraphs using bounded text previews."""
 
     ok: Literal[True] = True
-    deleted_count: int
+    deleted_count: Annotated[
+        int,
+        Field(
+            description='Number of paragraphs removed or cleared, excluding '
+            'an already-empty final Body paragraph',
+        ),
+    ]
     deleted: Annotated[
         list[str],
         Field(
