@@ -188,9 +188,14 @@ def test_mcp_append_exposes_structured_receipt(mock_docs, rich):
         'inserted_char_count',
         'preview_truncated',
     }
-    assert set(tool.outputSchema['properties']) == expected_fields
+    success_schema = next(
+        branch
+        for branch in tool.outputSchema['anyOf']
+        if branch['title'] == 'AppendSucceedResponse'
+    )
+    assert set(success_schema['properties']) == expected_fields
     assert (
-        tool.outputSchema['properties']['appended']['maxLength']
+        success_schema['properties']['appended']['maxLength']
         == EXPECTED_PREVIEW_LIMIT
     )
     assert result.is_error is False

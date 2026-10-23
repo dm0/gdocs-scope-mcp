@@ -353,9 +353,22 @@ class DocumentSubset(DocumentBase):
 
 
 class EditFailedResponse(BaseModel):
-    """A failed document edit response"""
+    """A tool failure with a stable code and recovery guidance."""
 
     ok: Literal[False] = False
+    code: Literal[
+        'HEADING_NOT_FOUND',
+        'TEXT_NOT_FOUND',
+        'OCCURRENCE_NOT_FOUND',
+        'EMPTY_DOCUMENT',
+        'INVALID_ARGUMENT',
+        'AUTHENTICATION_REQUIRED',
+        'PERMISSION_DENIED',
+        'RESOURCE_NOT_FOUND',
+        'RATE_LIMITED',
+        'GOOGLE_API_ERROR',
+        'INTERNAL_ERROR',
+    ]
     description: Annotated[str, Field(description='Failure description')]
     suggested_action: Annotated[
         str, Field(description='Suggested action to resolve the failure')

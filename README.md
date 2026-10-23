@@ -14,10 +14,14 @@ All 16 tools return structured JSON objects with typed output schemas. The
 MCP text content contains the same JSON object for text-only clients; results
 are not JSON-encoded strings, and edit results have no outer `result` wrapper.
 
-- Insert and replace tools expose either their typed success fields with
-  `ok: true` or `ok: false`, `description`, and `suggested_action` directly.
-  These domain failures remain ordinary tool results. Execution exceptions
-  retain MCP's error behavior.
+- Tool failures set MCP `isError: true` and return the same structured object
+  in both result channels: `{ok: false, code, description, suggested_action}`.
+  All output schemas include this error branch. Codes distinguish missing
+  headings, text and occurrences, invalid JSON, authentication/access failures,
+  Google API errors, and internal errors. Follow the recovery guidance; check
+  document/comment state before retrying a failed write. Internal exceptions
+  retain tracebacks in server logs, while clients receive a bounded generic
+  description. Successful response fields are unchanged.
 - `docs_list` returns `{count, documents}` rather than a bare array. Document
   fields retain `id`, `name`, `modifiedTime`, and `webViewLink`; the latter two
   are nullable when Drive omits them.

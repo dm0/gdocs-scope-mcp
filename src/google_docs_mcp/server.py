@@ -69,7 +69,7 @@ from .tool_logging import ToolCallLoggingMiddleware, configure_logging
 SERVER_INFO = capture_server_info()
 
 
-def _edit_response_schema(success_model: type[BaseModel]) -> dict:
+def _tool_response_schema(success_model: type[BaseModel]) -> dict:
     """Expose success/error objects without FastMCP's result wrapper."""
     schema = TypeAdapter(success_model | EditFailedResponse).json_schema(
         mode='serialization',
@@ -85,6 +85,11 @@ mcp = FastMCP(
     middleware=[ToolCallLoggingMiddleware()],
     instructions="""
 Surgical Google Docs editing — search by text, never by character index.
+
+ERRORS:
+    Failures set isError=true and return {ok:false, code, description,
+    suggested_action}. Follow suggested_action; verify document/comment state
+    before retrying a failed write.
 
 DIAGNOSTICS:
     server_info            Read process identity and startup source fingerprint
@@ -144,6 +149,7 @@ to further reduce the scope.
 
 
 @mcp.tool(
+    output_schema=_tool_response_schema(ServerInfo),
     title='Server info',
     annotations={
         'readOnlyHint': True,
@@ -156,7 +162,7 @@ def server_info() -> ServerInfo:
     return SERVER_INFO
 
 
-@mcp.tool
+@mcp.tool(output_schema=_tool_response_schema(DocumentOutline))
 def docs_get_tree(doc_id: str) -> DocumentOutline:
     """
     Fetch the structural outline (headings only) of a Google Doc as a JSON
@@ -173,7 +179,7 @@ def docs_get_tree(doc_id: str) -> DocumentOutline:
     return docs_edit.get_tree(doc_id)
 
 
-@mcp.tool
+@mcp.tool(output_schema=_tool_response_schema(DocumentSubset))
 def docs_read(
     doc_id: str, heading_ids: list[str] | None = None
 ) -> DocumentSubset:
@@ -194,7 +200,7 @@ def docs_read(
     return docs_edit.read(doc_id, heading_ids)
 
 
-@mcp.tool(output_schema=_edit_response_schema(ReplaceSucceedResponse))
+@mcp.tool(output_schema=_tool_response_schema(ReplaceSucceedResponse))
 # Preserve the public positional calling convention.
 def docs_search_replace(  # noqa: PLR0917
     doc_id: str,
@@ -232,7 +238,7 @@ def docs_search_replace(  # noqa: PLR0917
     )
 
 
-@mcp.tool(output_schema=_edit_response_schema(InsertSucceedResponse))
+@mcp.tool(output_schema=_tool_response_schema(InsertSucceedResponse))
 def docs_insert_after(
     doc_id: str,
     anchor: str,
@@ -266,7 +272,7 @@ def docs_insert_after(
     )
 
 
-@mcp.tool(output_schema=_edit_response_schema(InsertSucceedResponse))
+@mcp.tool(output_schema=_tool_response_schema(InsertSucceedResponse))
 def docs_insert_before(
     doc_id: str,
     anchor: str,
@@ -305,7 +311,7 @@ def docs_insert_before(
     )
 
 
-@mcp.tool
+@mcp.tool(output_schema=_tool_response_schema(DeleteParagraphResponse))
 def docs_delete_paragraph(doc_id: str, anchor: str) -> DeleteParagraphResponse:
     """
     Delete the paragraph(s) containing `anchor` text.
@@ -327,7 +333,7 @@ def docs_delete_paragraph(doc_id: str, anchor: str) -> DeleteParagraphResponse:
     )
 
 
-@mcp.tool
+@mcp.tool(output_schema=_tool_response_schema(AppendSucceedResponse))
 def docs_append(
     doc_id: str, text: str, rich: bool = True
 ) -> AppendSucceedResponse:
@@ -357,7 +363,7 @@ def docs_append(
     return docs_edit.append(doc_id, text, rich=rich)
 
 
-@mcp.tool
+@mcp.tool(output_schema=_tool_response_schema(BatchReplaceResponse))
 def docs_batch_replace(
     doc_id: str, replacements_json: str
 ) -> BatchReplaceResponse:
@@ -389,7 +395,7 @@ def docs_batch_replace(
     )
 
 
-@mcp.tool
+@mcp.tool(output_schema=_tool_response_schema(AddCommentResponse))
 # Preserve the public positional calling convention.
 def docs_add_comment(  # noqa: PLR0917
     doc_id: str,
@@ -454,7 +460,7 @@ def docs_add_comment(  # noqa: PLR0917
     return AddCommentResponse.model_validate(result)
 
 
-@mcp.tool
+@mcp.tool(output_schema=_tool_response_schema(ReplyCommentResponse))
 def docs_reply_to_comment(
     doc_id: str, comment_id: str, reply: str
 ) -> ReplyCommentResponse:
@@ -489,7 +495,7 @@ def docs_reply_to_comment(
     )
 
 
-@mcp.tool
+@mcp.tool(output_schema=_tool_response_schema(ResolveCommentResponse))
 def docs_resolve_comment(
     doc_id: str, comment_id: str, reply: str = ''
 ) -> ResolveCommentResponse:
@@ -523,7 +529,7 @@ def docs_resolve_comment(
     return ResolveCommentResponse(comment_id=comment_id)
 
 
-@mcp.tool
+@mcp.tool(output_schema=_tool_response_schema(DeleteCommentResponse))
 def docs_delete_comment(doc_id: str, comment_id: str) -> DeleteCommentResponse:
     """
     Delete a comment from a Google Doc.
@@ -542,7 +548,7 @@ def docs_delete_comment(doc_id: str, comment_id: str) -> DeleteCommentResponse:
     return DeleteCommentResponse(comment_id=comment_id)
 
 
-@mcp.tool
+@mcp.tool(output_schema=_tool_response_schema(ReadCommentsResponse))
 def docs_read_comments(
     doc_id: str, include_resolved: bool = False
 ) -> ReadCommentsResponse:
@@ -612,7 +618,7 @@ def docs_read_comments(
     return ReadCommentsResponse(count=len(results), comments=results)
 
 
-@mcp.tool
+@mcp.tool(output_schema=_tool_response_schema(ListDocumentsResponse))
 def docs_list(query: str = '', limit: int = 20) -> ListDocumentsResponse:
     """
     List Google Docs from Drive, optionally filtered by a search query.
@@ -669,7 +675,7 @@ def docs_list(query: str = '', limit: int = 20) -> ListDocumentsResponse:
     return ListDocumentsResponse(count=len(files), documents=files)
 
 
-@mcp.tool
+@mcp.tool(output_schema=_tool_response_schema(CreateDocumentResponse))
 def docs_create(title: str, initial_text: str = '') -> CreateDocumentResponse:
     """
     Create a new Google Doc with an optional initial paragraph of text.

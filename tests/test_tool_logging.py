@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import re
+from types import SimpleNamespace
 
 import pytest
 from fastmcp import Client, FastMCP
@@ -34,7 +35,9 @@ def logging_server():
     def reject(value: str) -> EditFailedResponse:
         del value
         return EditFailedResponse(
-            description='Missing heading', suggested_action='Read outline',
+            code='HEADING_NOT_FOUND',
+            description='Missing heading',
+            suggested_action='Read outline',
         )
 
     return app
@@ -49,7 +52,13 @@ def logging_server():
     ],
 )
 def test_tool_outcomes_are_logged(
-    logging_server, caplog, *, name, status, level, error,
+    logging_server,
+    caplog,
+    *,
+    name,
+    status,
+    level,
+    error,
 ):
     """Log timing and failures while preserving results and MCP errors."""
     private_value = 'private-document-text'
@@ -57,7 +66,9 @@ def test_tool_outcomes_are_logged(
     async def call():
         async with Client(logging_server) as client:
             return await client.call_tool(
-                name, {'value': private_value}, raise_on_error=False,
+                name,
+                {'value': private_value},
+                raise_on_error=False,
             )
 
     with caplog.at_level(logging.INFO, logger=LOGGER_NAME):
@@ -78,9 +89,10 @@ def test_tool_outcomes_are_logged(
         assert record.exc_info is not None
         assert error in str(record.exc_info[1])
     elif name == 'reject':
-        assert not result.is_error
+        assert result.is_error
         assert result.structured_content['ok'] is False
-        assert error in message
+        assert 'code=HEADING_NOT_FOUND' in message
+        assert error not in message
     else:
         assert not result.is_error
         assert result.structured_content == {'echo': private_value}
@@ -120,3 +132,22 @@ def test_invalid_log_level_is_rejected(monkeypatch):
 
     with pytest.raises(ValueError, match=LOG_LEVEL_ENV):
         configure_logging()
+
+
+def test_cancellation_propagates_and_logs_cancelled(caplog):
+    """A cancelled operation must not become an ordinary failure result."""
+    context = SimpleNamespace(message=SimpleNamespace(name='cancel_probe'))
+
+    async def cancel(_context):
+        raise asyncio.CancelledError
+
+    with (
+        caplog.at_level(logging.INFO, logger=LOGGER_NAME),
+        pytest.raises(asyncio.CancelledError),
+    ):
+        asyncio.run(ToolCallLoggingMiddleware().on_call_tool(context, cancel))
+
+    records = [r for r in caplog.records if r.name == LOGGER_NAME]
+    assert len(records) == 1
+    assert records[0].levelno == logging.WARNING
+    assert 'status=cancelled' in records[0].getMessage()

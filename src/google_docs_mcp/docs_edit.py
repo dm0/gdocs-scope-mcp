@@ -71,6 +71,7 @@ from .models import (
     ReplaceSucceedResponse,
     SearchResult,
 )
+from .tool_errors import ToolFailureError
 
 log = logging.getLogger(__name__)
 
@@ -735,6 +736,7 @@ def search_replace(  # noqa: PLR0917
     )
     if haystack is None:
         return EditFailedResponse(
+            code='HEADING_NOT_FOUND',
             description=f"Heading with id '{heading_id}' was not "
             'found in the document',
             suggested_action=(
@@ -750,6 +752,7 @@ def search_replace(  # noqa: PLR0917
     if not found:
         where = 'document' if heading_id is None else 'requested heading'
         return EditFailedResponse(
+            code='TEXT_NOT_FOUND',
             description=f"A paragraph containing '{find}' was not "
             f'found in the {where}',
             suggested_action=(
@@ -764,6 +767,7 @@ def search_replace(  # noqa: PLR0917
     if target_idx >= len(found):
         where = 'Document' if heading_id is None else 'Requested heading'
         return EditFailedResponse(
+            code='OCCURRENCE_NOT_FOUND',
             description=f'Occurrence {occurrence} not found. {where} has '
             f'{len(found)} occurrence(s) of {find!r}',
             suggested_action=(
@@ -842,6 +846,7 @@ def insert_after(
     )
     if haystack is None:
         return EditFailedResponse(
+            code='HEADING_NOT_FOUND',
             description=f"Heading with id '{heading_id}' was not "
             'found in the document',
             suggested_action=(
@@ -853,6 +858,7 @@ def insert_after(
     if found is None:
         where = 'document' if heading_id is None else 'requested heading'
         return EditFailedResponse(
+            code='TEXT_NOT_FOUND',
             description=f"A paragraph containing anchor '{anchor}' was not "
             f'found in the {where}',
             suggested_action='Run docs_read to verify the exact anchor text',
@@ -916,6 +922,7 @@ def insert_before(
     )
     if haystack is None:
         return EditFailedResponse(
+            code='HEADING_NOT_FOUND',
             description=f"Heading with id '{heading_id}' was not "
             'found in the document',
             suggested_action=(
@@ -927,6 +934,7 @@ def insert_before(
     if found is None:
         where = 'document' if heading_id is None else 'requested heading'
         return EditFailedResponse(
+            code='TEXT_NOT_FOUND',
             description=f"A paragraph containing anchor '{anchor}' was not "
             f'found in the {where}',
             suggested_action='Run docs_read to verify the exact anchor text',
@@ -983,7 +991,13 @@ def delete_paragraph(doc_id: str, anchor: str) -> dict:
 
     targets = [p for p in paragraphs if anchor.lower() in p.text.lower()]
     if not targets:
-        raise ValueError(f'No paragraph containing anchor: {anchor!r}')
+        raise ToolFailureError(
+            EditFailedResponse(
+                code='TEXT_NOT_FOUND',
+                description=f'No paragraph containing anchor: {anchor!r}',
+                suggested_action='Run docs_read to verify the anchor text.',
+            )
+        )
 
     # Sort by start index descending so deleting earlier content doesn't shift
     # later indices
@@ -1024,7 +1038,13 @@ def append(doc_id: str, text: str, rich: bool = True) -> AppendSucceedResponse:
     # Find the last content index (end of the body, before the body's closing)
     body_content = doc.get('body', {}).get('content', [])
     if not body_content:
-        raise ValueError('Document body is empty.')
+        raise ToolFailureError(
+            EditFailedResponse(
+                code='EMPTY_DOCUMENT',
+                description='Document body is empty.',
+                suggested_action='Run docs_read to inspect the document body.',
+            )
+        )
 
     # The last element's endIndex is the body end (exclusive).
     # We insert just before that.
@@ -1109,7 +1129,13 @@ def batch_replace(doc_id: str, replacements: list[dict]) -> dict:
                 search_from = pos + 1
 
         if not matches:
-            raise ValueError(f'Text not found: {find!r}')
+            raise ToolFailureError(
+                EditFailedResponse(
+                    code='TEXT_NOT_FOUND',
+                    description=f'Text not found: {find!r}',
+                    suggested_action='Run docs_read to verify search text.',
+                )
+            )
 
         if occurrence == 0:
             # Replace all
@@ -1122,8 +1148,16 @@ def batch_replace(doc_id: str, replacements: list[dict]) -> dict:
         else:
             idx = occurrence - 1
             if idx >= len(matches):
-                raise ValueError(
-                    f'Occurrence {occurrence} not found for {find!r}'
+                raise ToolFailureError(
+                    EditFailedResponse(
+                        code='OCCURRENCE_NOT_FOUND',
+                        description=(
+                            f'Occurrence {occurrence} not found for {find!r}'
+                        ),
+                        suggested_action=(
+                            'Run docs_read to verify the occurrence number.'
+                        ),
+                    )
                 )
             ft_start, ft_end = matches[idx]
             ds = _full_text_pos_to_doc_index(ft_start, text_map)
@@ -1235,13 +1269,27 @@ def add_comment(  # noqa: PLR0917
         search_from = pos + 1
 
     if not matches:
-        raise ValueError(f'Anchor text not found in document: {anchor_text!r}')
+        raise ToolFailureError(
+            EditFailedResponse(
+                code='TEXT_NOT_FOUND',
+                description=(
+                    f'Anchor text not found in document: {anchor_text!r}'
+                ),
+                suggested_action='Run docs_read to verify the anchor text.',
+            )
+        )
 
     target_idx = occurrence - 1
     if target_idx >= len(matches):
-        raise ValueError(
-            f'Occurrence {occurrence} not found — document has {len(matches)} '
-            f'occurrence(s) of {anchor_text!r}'
+        raise ToolFailureError(
+            EditFailedResponse(
+                code='OCCURRENCE_NOT_FOUND',
+                description=(
+                    f'Occurrence {occurrence} not found — document has '
+                    f'{len(matches)} occurrence(s) of {anchor_text!r}'
+                ),
+                suggested_action='Run docs_read to verify occurrence number.',
+            )
         )
 
     ft_start, ft_end = matches[target_idx]

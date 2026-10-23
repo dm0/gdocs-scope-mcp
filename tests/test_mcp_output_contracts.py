@@ -8,6 +8,10 @@ from unittest.mock import MagicMock
 
 import pytest
 from fastmcp import Client
+from google.auth.exceptions import RefreshError
+from googleapiclient.errors import HttpError
+from httplib2 import Response
+from jsonschema import validate
 
 from google_docs_mcp import docs_edit, server
 from google_docs_mcp.tool_logging import LOGGER_NAME
@@ -250,6 +254,15 @@ def test_all_tools_return_direct_typed_objects(name, arguments, expected):
     assert isinstance(data, dict)
     assert 'result' not in data
     assert json.loads(response.content[0].text) == data
+    validate(data, tool.outputSchema)
+    error_schema = next(
+        branch
+        for branch in tool.outputSchema['anyOf']
+        if branch['title'] == 'EditFailedResponse'
+    )
+    assert {'code', 'description', 'suggested_action'} <= set(
+        error_schema['required']
+    )
     for key, value in expected.items():
         assert data[key] == value
 
@@ -268,7 +281,7 @@ def test_edit_failures_are_direct_objects_and_log_failure(
     caplog,
     name,
 ):
-    """Typed error branches remain unwrapped and middleware sees ok=False."""
+    """Typed error branches are unwrapped and marked as MCP failures."""
     arguments = {'doc_id': 'example', 'heading_id': 'missing'}
     if name == 'docs_search_replace':
         arguments.update(find='Target phrase', replace='Changed')
@@ -276,12 +289,13 @@ def test_edit_failures_are_direct_objects_and_log_failure(
         arguments.update(anchor='Target phrase', text='New')
 
     with caplog.at_level(logging.INFO, logger=LOGGER_NAME):
-        tool, response = call_tool(name, arguments)
+        tool, response = call_tool(name, arguments, raise_on_error=False)
 
-    assert response.is_error is False
+    assert response.is_error is True
     data = response.structured_content
-    assert set(data) == {'ok', 'description', 'suggested_action'}
+    assert set(data) == {'ok', 'code', 'description', 'suggested_action'}
     assert data['ok'] is False
+    assert data['code'] == 'HEADING_NOT_FOUND'
     assert 'missing' in data['description']
     assert json.loads(response.content[0].text) == data
     branches = [
@@ -302,6 +316,193 @@ def test_edit_failures_are_direct_objects_and_log_failure(
     )
     mock_docs.batchUpdate.assert_not_called()
     contract_api.comments.return_value.create.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ('name', 'arguments', 'code'),
+    [
+        (
+            'docs_insert_before',
+            {'anchor': 'absent', 'text': 'New'},
+            'TEXT_NOT_FOUND',
+        ),
+        (
+            'docs_insert_after',
+            {'anchor': 'absent', 'text': 'New'},
+            'TEXT_NOT_FOUND',
+        ),
+        (
+            'docs_search_replace',
+            {'find': 'absent', 'replace': 'New'},
+            'TEXT_NOT_FOUND',
+        ),
+        (
+            'docs_search_replace',
+            {'find': 'Target phrase', 'replace': 'New', 'occurrence': 100},
+            'OCCURRENCE_NOT_FOUND',
+        ),
+        ('docs_delete_paragraph', {'anchor': 'absent'}, 'TEXT_NOT_FOUND'),
+        (
+            'docs_add_comment',
+            {'anchor_text': 'absent', 'comment': 'New'},
+            'TEXT_NOT_FOUND',
+        ),
+        (
+            'docs_add_comment',
+            {
+                'anchor_text': 'Target phrase',
+                'comment': 'New',
+                'occurrence': 100,
+            },
+            'OCCURRENCE_NOT_FOUND',
+        ),
+        (
+            'docs_batch_replace',
+            {'replacements_json': '[{"find":"absent","replace":"new"}]'},
+            'TEXT_NOT_FOUND',
+        ),
+        (
+            'docs_batch_replace',
+            {
+                'replacements_json': (
+                    '[{"find":"Introduction","replace":"new",'
+                    '"occurrence":100}]'
+                )
+            },
+            'OCCURRENCE_NOT_FOUND',
+        ),
+        (
+            'docs_batch_replace',
+            {'replacements_json': '{invalid'},
+            'INVALID_ARGUMENT',
+        ),
+        (
+            'docs_append',
+            {'rich': 'not-a-bool', 'text': 'New'},
+            'INVALID_ARGUMENT',
+        ),
+        ('docs_append', {}, 'INVALID_ARGUMENT'),
+    ],
+)
+def test_expected_failures_have_codes_and_do_not_write(
+    contract_api,
+    mock_docs,
+    *,
+    name,
+    arguments,
+    code,
+    caplog,
+):
+    """Expected failures have recovery fields and perform no API writes."""
+    with caplog.at_level(logging.INFO, logger=LOGGER_NAME):
+        tool, response = call_tool(
+            name,
+            {'doc_id': 'example', **arguments},
+            raise_on_error=False,
+        )
+
+    assert response.is_error
+    data = response.structured_content
+    assert data['ok'] is False
+    assert data['code'] == code
+    assert data['suggested_action']
+    assert json.loads(response.content[0].text) == data
+    validate(data, tool.outputSchema)
+    records = [r for r in caplog.records if r.name == LOGGER_NAME]
+    assert len(records) == 1
+    assert f'code={code}' in records[0].getMessage()
+    assert records[0].exc_info is None
+    mock_docs.batchUpdate.assert_not_called()
+    contract_api.comments.return_value.create.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ('status', 'code'),
+    [
+        (400, 'INVALID_ARGUMENT'),
+        (401, 'AUTHENTICATION_REQUIRED'),
+        (403, 'PERMISSION_DENIED'),
+        (404, 'RESOURCE_NOT_FOUND'),
+        (429, 'RATE_LIMITED'),
+        (503, 'GOOGLE_API_ERROR'),
+    ],
+)
+def test_google_api_errors_have_safe_recovery_fields(
+    contract_api, status, code
+):
+    """Preserve API status without exposing response bodies to the client."""
+    request = contract_api.replies.return_value.create.return_value
+    request.execute.side_effect = HttpError(
+        Response({'status': status}),
+        b'{"error":{"message":"private-api-body"}}',
+    )
+    tool, response = call_tool(
+        'docs_resolve_comment',
+        {'doc_id': 'example', 'comment_id': 'comment-id'},
+        raise_on_error=False,
+    )
+
+    assert response.is_error
+    data = response.structured_content
+    assert data['code'] == code
+    assert str(status) in data['description']
+    assert 'before retrying a write' in data['suggested_action']
+    assert 'private-api-body' not in json.dumps(data)
+    assert json.loads(response.content[0].text) == data
+    validate(data, tool.outputSchema)
+    request.execute.assert_called_once()
+
+
+@pytest.mark.usefixtures('contract_api')
+def test_backend_model_validation_is_internal_error(mock_docs):
+    """Malformed Google data must not be blamed on the caller's arguments."""
+    mock_docs.get.return_value.execute.side_effect = lambda: {
+        'documentId': 'example',
+    }
+    _, response = call_tool(
+        'docs_get_tree',
+        {'doc_id': 'example'},
+        raise_on_error=False,
+    )
+
+    assert response.is_error
+    assert response.structured_content['code'] == 'INTERNAL_ERROR'
+
+
+@pytest.mark.usefixtures('contract_api')
+def test_empty_document_append_has_structured_failure(mock_docs):
+    """An unusable document body fails before sending an insertion."""
+    mock_docs.get.return_value.execute.side_effect = lambda: {'body': {}}
+    _, response = call_tool(
+        'docs_append',
+        {'doc_id': 'example', 'text': 'New'},
+        raise_on_error=False,
+    )
+
+    assert response.is_error
+    assert response.structured_content['code'] == 'EMPTY_DOCUMENT'
+    mock_docs.batchUpdate.assert_not_called()
+
+
+@pytest.mark.usefixtures('contract_api')
+def test_expired_credentials_have_authentication_guidance(monkeypatch):
+    """Credential refresh errors tell the agent how to authenticate again."""
+
+    def expired():
+        raise RefreshError('private-token-details')
+
+    monkeypatch.setattr(docs_edit, '_load_creds', expired)
+    _, response = call_tool(
+        'docs_resolve_comment',
+        {'doc_id': 'example', 'comment_id': 'comment-id'},
+        raise_on_error=False,
+    )
+
+    assert response.is_error
+    data = response.structured_content
+    assert data['code'] == 'AUTHENTICATION_REQUIRED'
+    assert 'google-docs-mcp-auth' in data['suggested_action']
+    assert 'private-token-details' not in json.dumps(data)
 
 
 def test_catalog_contract_covers_every_registered_tool():
@@ -328,7 +529,7 @@ def test_api_errors_remain_mcp_errors(contract_api, name):
     _, response = call_tool(name, arguments, raise_on_error=False)
 
     assert response.is_error is True
-    assert response.structured_content is None
+    assert response.structured_content['code'] == 'INTERNAL_ERROR'
 
 
 def test_comment_bookmark_fields_are_preserved(contract_api, monkeypatch):
@@ -485,5 +686,5 @@ def test_resolve_failure_does_not_return_success(contract_api):
     )
 
     assert response.is_error is True
-    assert response.structured_content is None
+    assert response.structured_content['code'] == 'INTERNAL_ERROR'
     contract_api.comments.return_value.update.assert_not_called()

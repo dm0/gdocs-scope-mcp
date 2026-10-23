@@ -8,6 +8,8 @@ from time import perf_counter
 
 from fastmcp.server.middleware import Middleware, MiddlewareContext
 
+from .tool_errors import ErrorToolResult, failure_from_exception
+
 LOGGER_NAME = 'google_docs_mcp'
 LOG_LEVEL_ENV = 'GOOGLE_DOCS_MCP_LOG_LEVEL'
 logger = logging.getLogger(LOGGER_NAME)
@@ -35,10 +37,10 @@ def configure_logging() -> str:
 
 
 class ToolCallLoggingMiddleware(Middleware):
-    """Record completion time and errors without changing tool behavior."""
+    """Normalize failures and record tool outcomes and duration."""
 
     async def on_call_tool(self, context: MiddlewareContext, call_next):
-        """Time and log a call without changing its result or exception."""
+        """Return structured MCP errors and log the matching outcome."""
         started = perf_counter()
         name = context.message.name
         logger.debug('tool=%s status=started', name)
@@ -51,27 +53,39 @@ class ToolCallLoggingMiddleware(Middleware):
                 (perf_counter() - started) * 1000,
             )
             raise
-        except Exception:
-            logger.exception(
-                'tool=%s status=failure duration_ms=%.3f',
+        # All execution failures need an MCP error; cancellations propagate.
+        except Exception as error:  # noqa: BLE001
+            failure = failure_from_exception(error, name)
+            log_failure = (
+                logger.exception
+                if failure.code == 'INTERNAL_ERROR'
+                else logger.error
+            )
+            log_failure(
+                'tool=%s status=failure duration_ms=%.3f code=%s',
                 name,
                 (perf_counter() - started) * 1000,
+                failure.code,
             )
-            raise
+            return ErrorToolResult(structured_content=failure.model_dump())
 
         duration_ms = (perf_counter() - started) * 1000
         payload = getattr(result, 'structured_content', None)
         if isinstance(payload, dict) and payload.get('ok') is False:
             logger.error(
-                'tool=%s status=failure duration_ms=%.3f error=%s',
+                'tool=%s status=failure duration_ms=%.3f code=%s',
                 name,
                 duration_ms,
-                payload.get('description', 'Edit failed'),
+                payload['code'],
             )
-        else:
-            logger.info(
-                'tool=%s status=success duration_ms=%.3f',
-                name,
-                duration_ms,
+            return ErrorToolResult(
+                content=result.content,
+                structured_content=payload,
+                meta=result.meta,
             )
+        logger.info(
+            'tool=%s status=success duration_ms=%.3f',
+            name,
+            duration_ms,
+        )
         return result
