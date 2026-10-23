@@ -546,6 +546,47 @@ def test_expected_failures_have_codes_and_do_not_write(
 
 
 @pytest.mark.parametrize(
+    'options',
+    [
+        {'heading_id': 'parent'},
+        {'regex': True},
+        {'heading_id': 'parent', 'regex': True},
+    ],
+    ids=['scoped', 'regex', 'scoped-regex'],
+)
+@pytest.mark.usefixtures('contract_api')
+def test_unsupported_replace_all_returns_structured_mcp_error(
+    mock_docs, monkeypatch, options,
+):
+    """Reject unsupported modes before credentials or Google API access."""
+    get_service = MagicMock(
+        side_effect=AssertionError('Unexpected API access'),
+    )
+    monkeypatch.setattr(docs_edit, '_get_service', get_service)
+
+    tool, response = call_tool(
+        'docs_search_replace',
+        {
+            'doc_id': 'example', 'find': 'Target phrase', 'replace': 'Changed',
+            'occurrence': 0, **options,
+        },
+        raise_on_error=False,
+    )
+
+    assert response.is_error
+    data = response.structured_content
+    assert data['ok'] is False
+    assert data['code'] == 'INVALID_ARGUMENT'
+    assert data['description']
+    assert data['suggested_action']
+    assert json.loads(response.content[0].text) == data
+    validate(data, tool.outputSchema)
+    get_service.assert_not_called()
+    mock_docs.batchUpdate.assert_not_called()
+    mock_docs.get.assert_not_called()
+
+
+@pytest.mark.parametrize(
     ('status', 'code'),
     [
         (400, 'INVALID_ARGUMENT'),
