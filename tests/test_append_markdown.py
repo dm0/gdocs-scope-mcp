@@ -1,19 +1,10 @@
-"""Check append's new Markdown path independently of the legacy builder."""
+"""Check append's shared Markdown conversion path and style ranges."""
 
 from google_docs_mcp import docs_edit
 
 
-def test_append_does_not_use_legacy_builder(monkeypatch, mock_docs):
-    """Native paragraph and inline styles come from the new converter alone."""
-
-    def unexpected_legacy_call(*_args, **_kwargs):
-        raise AssertionError('Append must not call the legacy builder')
-
-    monkeypatch.setattr(
-        docs_edit,
-        '_build_insert_requests',
-        unexpected_legacy_call,
-    )
+def test_append_converts_headings_and_emphasis(mock_docs):
+    """Append produces native paragraph and inline styles from Markdown."""
     docs_edit.append('example', '### Append heading\n\nA **bold** word.')
 
     mock_docs.batchUpdate.assert_called_once()

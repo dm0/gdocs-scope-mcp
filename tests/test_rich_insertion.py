@@ -1,9 +1,9 @@
-"""Verify the supported formatting subset in the existing insertion builder."""
+"""Verify the shared converter and literal insertion entry points."""
 
 import pytest
 
-from google_docs_mcp.docs_edit import _build_insert_requests
-from google_docs_mcp.md2requests import markdown_to_html
+from google_docs_mcp import docs_edit
+from google_docs_mcp.md2requests import markdown_to_html, markdown_to_requests
 
 
 @pytest.mark.parametrize(
@@ -15,20 +15,24 @@ from google_docs_mcp.md2requests import markdown_to_html
         ('######## Heading', 'HEADING_6'),
     ],
 )
-def test_rich_heading_insertion(markdown, style):
-    """Existing heading syntax produces native paragraph styles."""
-    requests, text = _build_insert_requests(
-        12, markdown, suffix='\n', rich=True
+@pytest.mark.parametrize('newline_before', [False, True])
+def test_rich_heading_insertion(markdown, style, newline_before):
+    """Heading styles cover only heading text on either insertion side."""
+    requests = markdown_to_requests(
+        markdown,
+        start=12,
+        newline_before=newline_before,
     )
 
     plain = markdown.split(' ', 1)[1]
-    assert text == plain + '\n'
+    text = '\n' + plain if newline_before else plain + '\n'
+    start = 13 if newline_before else 12
     assert requests[0] == {
         'insertText': {'location': {'index': 12}, 'text': text},
     }
     assert requests[1] == {
         'updateParagraphStyle': {
-            'range': {'startIndex': 12, 'endIndex': 12 + len(plain)},
+            'range': {'startIndex': start, 'endIndex': start + len(plain)},
             'paragraphStyle': {'namedStyleType': style},
             'fields': 'namedStyleType',
         }
@@ -43,86 +47,56 @@ def test_rich_heading_insertion(markdown, style):
         ('***word***', {'bold': True, 'italic': True}),
     ],
 )
-def test_emphasis_styles_cover_only_inserted_word(markdown, style):
+@pytest.mark.parametrize('newline_before', [False, True])
+def test_emphasis_styles_cover_only_inserted_word(
+    markdown,
+    style,
+    newline_before,
+):
     """Inline emphasis strips delimiters and formats only its text range."""
-    requests, text = _build_insert_requests(
-        12,
+    requests = markdown_to_requests(
         f'A {markdown} end',
-        suffix='\n',
-        rich=True,
+        start=12,
+        newline_before=newline_before,
     )
 
-    assert text == 'A word end\n'
+    assert requests[0]['insertText']['text'] == (
+        '\nA word end' if newline_before else 'A word end\n'
+    )
     updates = [
         r['updateTextStyle'] for r in requests if 'updateTextStyle' in r
     ]
     assert len(updates) == 1
-    assert updates[0]['range'] == {'startIndex': 14, 'endIndex': 18}
+    start = 15 if newline_before else 14
+    assert updates[0]['range'] == {'startIndex': start, 'endIndex': start + 4}
     assert updates[0]['textStyle'] == style
     assert set(updates[0]['fields'].split(',')) == set(style)
 
 
 @pytest.mark.parametrize(
-    ('items', 'preset'),
-    [
-        ('- one\n- two', 'BULLET_DISC_CIRCLE_SQUARE'),
-        ('* one\n* two', 'BULLET_DISC_CIRCLE_SQUARE'),
-        ('1. one\n2. two', 'NUMBERED_DECIMAL_NESTED'),
-        ('1) one\n2) two', 'NUMBERED_DECIMAL_NESTED'),
-    ],
-)
-def test_consecutive_list_items_share_native_list(items, preset):
-    """Consecutive items become one native list to preserve numbering."""
-    requests, text = _build_insert_requests(12, items, suffix='\n', rich=True)
-
-    assert text == 'one\ntwo\n'
-    bullets = [
-        r['createParagraphBullets']
-        for r in requests
-        if 'createParagraphBullets' in r
-    ]
-    assert bullets == [
-        {
-            'range': {'startIndex': 12, 'endIndex': 20},
-            'bulletPreset': preset,
-        }
-    ]
-
-
-def test_normal_paragraph_separates_numbered_lists():
-    """Ordinary text separates numbered list groups."""
-    requests, text = _build_insert_requests(
-        1,
-        '1. one\nordinary\n1. two',
-        suffix='\n',
-        rich=True,
-    )
-
-    assert text == 'one\nordinary\ntwo\n'
-    bullets = [
-        r['createParagraphBullets']
-        for r in requests
-        if 'createParagraphBullets' in r
-    ]
-    assert [b['range'] for b in bullets] == [
-        {'startIndex': 1, 'endIndex': 5},
-        {'startIndex': 14, 'endIndex': 18},
-    ]
-
-
-@pytest.mark.parametrize(
     'text', ['# literal\n- item\n**bold**', '', 'one\n\ntwo']
 )
-def test_literal_insertion_preserves_input_exactly(text):
+@pytest.mark.parametrize('side', ['before', 'after'])
+def test_literal_insertion_preserves_input_exactly(mock_docs, text, side):
     """Literal mode preserves markup and blank lines without formatting."""
-    requests, inserted = _build_insert_requests(
-        7, text, suffix='\n', rich=False
+    insert = getattr(docs_edit, f'insert_{side}')
+    result = insert(
+        'example',
+        'Introduction',
+        text,
+        rich=False,
     )
 
-    assert inserted == text + '\n'
+    inserted = text + '\n' if side == 'before' else '\n' + text
+    assert result.inserted_text == inserted
+    mock_docs.batchUpdate.assert_called_once()
+    requests = mock_docs.batchUpdate.call_args.kwargs['body']['requests']
     assert requests == [
         {
-            'insertText': {'location': {'index': 7}, 'text': text + '\n'},
+            'insertText': {
+                'location': {'index': result.at_index},
+                'text': inserted,
+            },
         }
     ]
 

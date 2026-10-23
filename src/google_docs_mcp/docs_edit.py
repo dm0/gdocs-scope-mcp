@@ -10,11 +10,11 @@ Usage (CLI):
 Commands: get, search_replace, insert_after, insert_before,
           delete_paragraph, append, batch_replace.
 
-Rich mode is ON by default and supports a small markdown-like subset:
+Rich mode uses the shared Markdown converter for paragraphs and inline styles:
     # / ## / ### headings
-    - item / * item bullet lists
-    1. item / 1) item numbered lists
     **bold**, *italic*, ***bold italic***
+
+Native lists and tables are not yet implemented by the converter.
 
 Auth (in priority order):
     1. GOOGLE_DOCS_MCP_TOKEN env var  → path to standalone token JSON
@@ -46,7 +46,7 @@ import urllib.parse
 import urllib.request
 import uuid
 from contextlib import suppress
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 from google.auth.transport.requests import Request
@@ -56,7 +56,6 @@ from googleapiclient.discovery import build
 # isort: split
 from .md2requests import markdown_to_requests
 from .models import (
-    HEADING_LEVELS,
     DocumentOutline,
     DocumentParagraph,
     DocumentSection,
@@ -442,26 +441,6 @@ class Paragraph:
     runs: list[TextRun]
 
 
-@dataclass
-class InlineStyleSpan:
-    """Describe an inline style over a range of inserted text."""
-
-    start: int
-    end: int
-    bold: bool = False
-    italic: bool = False
-
-
-@dataclass
-class RichParagraph:
-    """Store parsed paragraph text, style, and list instructions."""
-
-    text: str
-    style: str = 'NORMAL_TEXT'
-    bullet_preset: str | None = None
-    inline_styles: list[InlineStyleSpan] = field(default_factory=list)
-
-
 def _extract_paragraphs(doc: dict) -> list[Paragraph]:
     """Extract paragraphs with full structure from a Docs API response."""
     paragraphs = []
@@ -609,237 +588,6 @@ def _full_text_pos_to_doc_index(
     raise ValueError(
         f'Position {pos} is not within any text run in the document.'
     )
-
-
-def _parse_inline_rich_text(text: str) -> tuple[str, list[InlineStyleSpan]]:
-    """
-    Parse a very small markdown-like subset into plain text plus style spans.
-
-    Supported forms:
-      ***bold italic***
-      **bold**
-      *italic*
-
-    This intentionally stays conservative and line-local.
-    """
-    out: list[str] = []
-    spans: list[InlineStyleSpan] = []
-    i = 0
-
-    def emit_styled(
-        inner: str, *, bold: bool = False, italic: bool = False
-    ) -> None:
-        start = len(''.join(out))
-        out.append(inner)
-        end = start + len(inner)
-        spans.append(
-            InlineStyleSpan(start=start, end=end, bold=bold, italic=italic)
-        )
-
-    while i < len(text):
-        if text.startswith('***', i):
-            j = text.find('***', i + 3)
-            if j != -1 and j > i + 3:
-                emit_styled(text[i + 3 : j], bold=True, italic=True)
-                i = j + 3
-                continue
-        if text.startswith('**', i):
-            j = text.find('**', i + 2)
-            if j != -1 and j > i + 2:
-                emit_styled(text[i + 2 : j], bold=True)
-                i = j + 2
-                continue
-        if text.startswith('*', i):
-            j = text.find('*', i + 1)
-            if j != -1 and j > i + 1:
-                emit_styled(text[i + 1 : j], italic=True)
-                i = j + 1
-                continue
-        out.append(text[i])
-        i += 1
-
-    return ''.join(out), spans
-
-
-def _parse_rich_text(text: str) -> list[RichParagraph]:
-    """
-    Parse a small markdown-like subset into paragraph/list/style instructions.
-
-    Supported block forms:
-      # Title
-      ## Subtitle
-      ### Heading 1
-      #### Heading 2
-      ##### Heading 3
-      ###### Heading 4
-      ####### Heading 5
-      ######## Heading 6
-      - bullet item
-      * bullet item
-      1. numbered item
-      1) numbered item
-    """
-    lines = text.split('\n')
-    paragraphs: list[RichParagraph] = []
-
-    heading_map = {
-        f'{"#" * (style.level + 1)} ': style.value
-        for style in reversed(GoogleDocumentNamedStyleType)
-        if style.level < len(HEADING_LEVELS)
-    }
-
-    for raw_line in lines:
-        line = raw_line
-        style = GoogleDocumentNamedStyleType.NORMAL_TEXT.value
-        bullet_preset: str | None = None
-
-        for prefix, h_style in heading_map.items():
-            if line.startswith(prefix):
-                style = h_style
-                line = line[len(prefix) :]
-                break
-        else:
-            bullet_match = re.match(r'^\s*[-*]\s+(.+)$', line)
-            numbered_match = re.match(r'^\s*\d+[.)]\s+(.+)$', line)
-            if bullet_match:
-                bullet_preset = 'BULLET_DISC_CIRCLE_SQUARE'
-                line = bullet_match.group(1)
-            elif numbered_match:
-                bullet_preset = 'NUMBERED_DECIMAL_NESTED'
-                line = numbered_match.group(1)
-
-        plain_text, inline_styles = _parse_inline_rich_text(line)
-        paragraphs.append(
-            RichParagraph(
-                text=plain_text,
-                style=style,
-                bullet_preset=bullet_preset,
-                inline_styles=inline_styles,
-            )
-        )
-
-    return paragraphs
-
-
-def _build_insert_requests(
-    insert_index: int,
-    text: str,
-    *,
-    prefix: str = '',
-    suffix: str = '',
-    rich: bool = False,
-) -> tuple[list[dict], str]:
-    """
-    Build Docs batchUpdate requests for plain or rich text insertion.
-    """
-    if not rich:
-        inserted_text = f'{prefix}{text}{suffix}'
-        return [
-            {
-                'insertText': {
-                    'location': {'index': insert_index},
-                    'text': inserted_text,
-                }
-            }
-        ], inserted_text
-
-    paragraphs = _parse_rich_text(text)
-    plain_body = '\n'.join(p.text for p in paragraphs)
-    inserted_text = f'{prefix}{plain_body}{suffix}'
-    requests: list[dict] = [
-        {
-            'insertText': {
-                'location': {'index': insert_index},
-                'text': inserted_text,
-            }
-        }
-    ]
-
-    cursor = insert_index + len(prefix)
-    paragraph_positions: list[tuple[RichParagraph, int, int, int]] = []
-    for idx, para in enumerate(paragraphs):
-        start = cursor
-        end = start + len(para.text)
-        paragraph_end = (
-            end + 1
-        )  # Paragraph terminator newline (inserted or existing body newline)
-        paragraph_positions.append((para, start, end, paragraph_end))
-        cursor = end
-        if idx < len(paragraphs) - 1:
-            cursor += 1
-
-    for para, start, end, _paragraph_end in paragraph_positions:
-        requests.append(
-            {
-                'updateParagraphStyle': {
-                    'range': {
-                        'startIndex': start,
-                        'endIndex': max(end, start),
-                    },
-                    'paragraphStyle': {'namedStyleType': para.style},
-                    'fields': 'namedStyleType',
-                }
-            }
-        )
-
-        for span in para.inline_styles:
-            if span.end <= span.start:
-                continue
-            text_style = {}
-            fields = []
-            if span.bold:
-                text_style['bold'] = True
-                fields.append('bold')
-            if span.italic:
-                text_style['italic'] = True
-                fields.append('italic')
-            if text_style:
-                requests.append(
-                    {
-                        'updateTextStyle': {
-                            'range': {
-                                'startIndex': start + span.start,
-                                'endIndex': start + span.end,
-                            },
-                            'textStyle': text_style,
-                            'fields': ','.join(fields),
-                        }
-                    }
-                )
-
-    # Group consecutive list items so numbered lists don't reset on every line.
-    i = 0
-    while i < len(paragraph_positions):
-        para, start, end, paragraph_end = paragraph_positions[i]
-        if not para.bullet_preset:
-            i += 1
-            continue
-        bullet_preset = para.bullet_preset
-        group_start = start
-        group_end = paragraph_end
-        j = i + 1
-        while j < len(paragraph_positions):
-            next_para, _next_start, _next_end, next_paragraph_end = (
-                paragraph_positions[j]
-            )
-            if next_para.bullet_preset != bullet_preset:
-                break
-            group_end = next_paragraph_end
-            j += 1
-        requests.append(
-            {
-                'createParagraphBullets': {
-                    'range': {
-                        'startIndex': group_start,
-                        'endIndex': group_end,
-                    },
-                    'bulletPreset': bullet_preset,
-                }
-            }
-        )
-        i = j
-
-    return requests, inserted_text
 
 
 def _normalize_anchor_excerpt(anchor_text: str, limit: int = 220) -> str:

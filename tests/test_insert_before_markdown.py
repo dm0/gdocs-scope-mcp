@@ -8,17 +8,6 @@ from fastmcp import Client
 from google_docs_mcp import docs_edit, server
 
 
-@pytest.fixture
-def no_legacy_builder(monkeypatch):
-    """Fail if the migrated insertion falls back to the old Markdown parser."""
-
-    def unexpected_call(*_args, **_kwargs):
-        raise AssertionError('insert_before must use the new converter')
-
-    monkeypatch.setattr(docs_edit, '_build_insert_requests', unexpected_call)
-
-
-@pytest.mark.usefixtures('no_legacy_builder')
 @pytest.mark.parametrize(
     ('anchor', 'scope', 'prefix', 'suffix'),
     [
@@ -74,7 +63,6 @@ def test_markdown_before_anchor_keeps_paragraph_boundaries(
     )
 
 
-@pytest.mark.usefixtures('no_legacy_builder')
 def test_literal_before_anchor_bypasses_markdown(
     monkeypatch,
     simple_document,

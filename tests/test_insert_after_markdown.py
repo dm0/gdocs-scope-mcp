@@ -8,17 +8,6 @@ from fastmcp import Client
 from google_docs_mcp import docs_edit, server
 
 
-@pytest.fixture
-def no_legacy_builder(monkeypatch):
-    """Reject the legacy Markdown parser for either insertion mode."""
-
-    def unexpected_call(*_args, **_kwargs):
-        raise AssertionError('insert_after must use the new converter')
-
-    monkeypatch.setattr(docs_edit, '_build_insert_requests', unexpected_call)
-
-
-@pytest.mark.usefixtures('no_legacy_builder')
 @pytest.mark.parametrize(
     ('anchor', 'scope', 'prefix', 'suffix'),
     [
@@ -89,7 +78,6 @@ def test_rich_after_keeps_anchor_and_following_paragraphs(
     )
 
 
-@pytest.mark.usefixtures('no_legacy_builder')
 @pytest.mark.parametrize('scope', ['nested', 'other'])
 def test_literal_after_bypasses_both_parsers(
     monkeypatch,
