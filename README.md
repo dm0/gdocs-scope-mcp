@@ -326,9 +326,11 @@ fails even when account-level Apps Script access is enabled.
 
 #### `docs_get_tree(doc_id)`
 
-Return a compact document outline with identity/revision metadata and heading
-entries containing `title`, `id`, `level`, and `ancestor_ids`. Use the IDs to
-select sections for reading and editing; body paragraphs are omitted.
+Return an object with `document_id`, `title`, `revision_id`, and a flat
+`sections` array. Each section contains `title`, `id`, `level`, and
+`ancestor_ids`; hierarchy is expressed through ancestor IDs rather than nested
+section objects. Use the IDs to select section subtrees for reading and
+editing; body paragraphs are omitted.
 
 ```python
 docs_get_tree(doc_id="...")
@@ -336,8 +338,8 @@ docs_get_tree(doc_id="...")
 
 #### `docs_read(doc_id, heading_ids=None)`
 
-Return document content as Markdown in `subset_md`, alongside `document_id`,
-`title`, `revision_id`, `selected_headings`, and `partial`.
+Return document content as an array of Markdown strings in `subset_md`,
+alongside `document_id`, `title`, `revision_id`, `selected_headings`, and `partial`.
 Pass heading IDs from the outline to return only those section subtrees,
 including their nested subsections. Omit `heading_ids` to read the whole document.
 Heading lines include HTML anchors carrying their structural IDs.
@@ -354,7 +356,11 @@ List Google Docs from Drive, optionally filtered by a search query.
 | Param | Type | Default | Description |
 |-------|------|---------|-------------|
 | `query` | string | `""` | Search terms (searches title and content) |
-| `limit` | int | `20` | Maximum results |
+| `limit` | int | `20` | Maximum results, capped at 100 |
+
+Returns `{count, documents}`. Each document has `id`, `name`, `modifiedTime`,
+and `webViewLink`; the last two can be null. Only one page is fetched, and
+`count` is the number returned, not the total number of matching documents.
 
 ```
 docs_list(query="board deck 2026", limit=5)
@@ -389,8 +395,14 @@ docs_search_replace(
 docs_search_replace(doc_id="...", find="ACME Corp", replace="Initech", occurrence=0)
 
 # Regex replace
-docs_search_replace(doc_id="...", find=r"\bDraft\b", replace="Final", regex=true)
+docs_search_replace(doc_id="...", find=r"\bDraft\b", replace="Final", regex=True)
 ```
+
+Returns `ok`, `replaced` (up to 80 characters), `at_index`,
+`occurrences_found`, and `occurrences_changed`. Targeted replacements populate
+`at_index` and `occurrences_found`; whole-document literal replace-all populates
+`occurrences_changed`. Unused index/count fields are null. Replace-all requires
+`regex=False` and `heading_id=None`.
 
 ---
 
@@ -406,6 +418,9 @@ docs_insert_after(
 )
 ```
 
+Returns `ok`, `anchor` (up to 80 characters), `insert_position`, `at_index`,
+`rich`, and `inserted_text` (up to 200 characters).
+
 ---
 
 #### `docs_insert_before(doc_id, anchor, text, heading_id=None, rich=True)`
@@ -420,6 +435,9 @@ docs_insert_before(
 )
 ```
 
+Returns the same receipt fields as `docs_insert_after`, with
+`insert_position="before"`.
+
 ---
 
 #### `docs_delete_paragraph(doc_id, anchor)`
@@ -429,14 +447,26 @@ Delete all paragraphs containing `anchor` text (case-insensitive).
 docs_delete_paragraph(doc_id="...", anchor="[PLACEHOLDER — DELETE ME]")
 ```
 
+Returns `{ok, deleted_count, deleted}` with paragraph previews of up to 80
+characters in reverse document order. The final Body newline is preserved;
+clearing a final paragraph counts as one deletion, while an already-empty
+final paragraph is skipped.
+
 ---
 
-#### `docs_append(doc_id, text)`
-Append a new paragraph at the end of the document.
+#### `docs_append(doc_id, text, rich=True)`
+Append Markdown paragraphs or literal text at the end of the document, adding
+a paragraph break before the content. With `rich=True`, separate paragraphs
+with blank lines; headings and emphasis use the shared converter. Native lists
+and tables are not implemented. Set `rich=False` to preserve text literally.
 
 ```
 docs_append(doc_id="...", text="Document last updated: March 2026.")
 ```
+
+Returns `ok`, `document_id`, `rich`, diagnostic `at_index`, `appended` (a
+plain-text preview of up to 200 Unicode code points), `inserted_char_count`
+(including added paragraph breaks), and `preview_truncated`.
 
 ---
 
@@ -446,11 +476,11 @@ Apply multiple find→replace operations **atomically** in a single API call. Ei
 ```
 docs_batch_replace(
   doc_id="...",
-  replacements_json='[
+  replacements_json='''[
     {"find": "[CLIENT]", "replace": "Acme Corp", "occurrence": 0},
     {"find": "[DATE]", "replace": "10 March 2026", "occurrence": 0},
     {"find": "DRAFT", "replace": "FINAL"}
-  ]'
+  ]'''
 )
 ```
 
@@ -462,6 +492,10 @@ Each item in the array:
 | `replace` | string | required | Replacement text |
 | `occurrence` | int | `1` | `1` = first, `0` = all |
 | `regex` | bool | `false` | Regex mode |
+
+Returns `{ok, applied, changes}`. Each change has `replaced`, `with` (the
+replacement text), and `at_index`; changes are returned in document order.
+`replacements_json` is a JSON string, not a native array argument.
 
 ---
 
@@ -486,7 +520,7 @@ Add a comment anchored to specific text in the document.
 | `doc_id` | string | required | Google Doc ID |
 | `comment` | string | required | Comment text |
 | `anchor_text` | string | required | Text in the document to attach the comment to |
-| `occurrence` | int | `1` | Which occurrence of `anchor_text` to use |
+| `occurrence` | int | `1` | `1` = first occurrence of `anchor_text`; `2`, `3`, etc. select later matches |
 | `include_anchor_text` | bool | `true` | Append the matched anchor text into the comment body |
 | `bookmark_jump` | bool | `false` | Use the Apps Script bridge to create a bookmark and append a jump URL |
 
@@ -497,9 +531,13 @@ docs_add_comment(
   doc_id="...",
   anchor_text="unable to perform the Employee's duties",
   comment="Legal risk: 3-month absence threshold may not satisfy Equality Act 2010 duty to make reasonable adjustments before terminating.",
-  bookmark_jump=true
+  bookmark_jump=True
 )
 ```
+
+Returns `ok`, `comment_id`, `anchored_to`, `at_index`, `named_range_id`, and
+`comment_content`, plus `bookmark_id`, `bookmark_url`, and `apps_script_id`
+(null when bookmarks are disabled).
 
 > **Note:** The current implementation uses Drive comments plus a Docs named range. In the Docs UI these still show as *"Original content deleted"* rather than as proper inline highlights. The comments are fully readable via `docs_read_comments` and the Docs 💬 panel.
 >
@@ -516,14 +554,17 @@ docs_add_comment(
 ---
 
 #### `docs_read_comments(doc_id, include_resolved)`
-List all comments on a document.
+Read one page of up to 100 comments on a document.
 
 | Param | Type | Default | Description |
 |-------|------|---------|-------------|
 | `doc_id` | string | required | Google Doc ID |
 | `include_resolved` | bool | `false` | Include resolved/deleted comments |
 
-Returns an array of comments with `id`, `content`, `author`, `anchored` (bool), `named_range_id`, `quoted_text`, `resolved`, `deleted`, `created`.
+Returns `{count, comments}`. Each comment has `id`, `content`, `author`,
+`anchored` (bool), `named_range_id`, `quoted_text`, `resolved`, `deleted`, and
+`created`. The count covers returned items after filtering; additional pages
+are not fetched.
 
 ```
 docs_read_comments(doc_id="...")
@@ -548,16 +589,19 @@ docs_reply_to_comment(
 )
 ```
 
+Returns `{ok, reply_id, comment_id, content}`.
+
 ---
 
 #### `docs_resolve_comment(doc_id, comment_id, reply)`
-Resolve (close) a comment, optionally posting a final reply first.
+Resolve (close) a comment using one resolving reply action. Optional closing
+text is included in that same request; without text, only the action is sent.
 
 | Param | Type | Default | Description |
 |-------|------|---------|-------------|
 | `doc_id` | string | required | Google Doc ID |
 | `comment_id` | string | required | Comment ID |
-| `reply` | string | `""` | Optional reply to post before resolving |
+| `reply` | string | `""` | Optional closing text included in the resolving reply |
 
 ```
 docs_resolve_comment(
@@ -567,6 +611,8 @@ docs_resolve_comment(
 )
 ```
 
+Returns `{ok, comment_id, resolved}` with `resolved=true`.
+
 ---
 
 #### `docs_delete_comment(doc_id, comment_id)`
@@ -575,6 +621,8 @@ Permanently delete a comment.
 ```
 docs_delete_comment(doc_id="...", comment_id="AAAB1iPyaUY")
 ```
+
+Returns `{ok, comment_id}`.
 
 ---
 

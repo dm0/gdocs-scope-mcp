@@ -165,9 +165,12 @@ def server_info() -> ServerInfo:
 @mcp.tool(output_schema=_tool_response_schema(DocumentOutline))
 def docs_get_tree(doc_id: str) -> DocumentOutline:
     """
-    Fetch the structural outline (headings only) of a Google Doc as a JSON
+    Fetch a Google Doc's structural outline as a JSON object.
 
-    array.
+    The object contains document_id, title, revision_id, and a flat sections
+    collection. Each section has id, title, level, and ancestor_ids. Hierarchy
+    is represented by ancestor_ids, not nested section objects. Body
+    paragraphs are omitted.
 
     Use this tool FIRST when encountering a document to locate target sections
     via their heading IDs, avoiding the need to read a massive document all at
@@ -187,13 +190,18 @@ def docs_read(
     Read a Google document's content converted to Markdown.
 
     You can read the entire document, or isolate specific sections by passing
-    a list of target heading_ids. Isolating sections reduces token usage on
-    large files.
+    a list of target heading_ids, including their nested subsections.
+    Isolating sections reduces token usage on large files.
 
     Args:
         doc_id: Google Doc ID from the URL.
         heading_ids: Optional list of heading IDs to fetch.
             Pass null or omit this field entirely to read the whole document.
+
+    Returns
+    -------
+        A structured object with document_id, title, revision_id, subset_md
+        (an array of Markdown strings), selected_headings, and partial.
     """
     if isinstance(heading_ids, str):
         heading_ids = [heading_ids]
@@ -221,17 +229,20 @@ def docs_search_replace(  # noqa: PLR0917
         doc_id:     Google Doc ID
         find:       Text to search for (or regex pattern if regex=True)
         replace:    Text to replace it with
-        occurrence: Occurrence number to replace, 1-base.
-                    1 = first , 2 = second, etc. Use 0 to replace ALL
+        occurrence: Occurrence number to replace, 1-based (default 1 = first).
+                    Use 2 for the second, etc. Use 0 to replace ALL
                     occurrences. Replace all is only supported in non regular
                     expression mode (regex=False) and heading_id is None.
-        heading_id: Restrict search and replaced to this heading and its
+        heading_id: Restrict search and replacement to this heading and its
                     subheadings. Use docs_get_tree to find heading IDs.
         regex:      If True, treat `find` as a Python regular expression
 
     Returns
     -------
-        JSON with: ok, replaced (original text), at_index, occurrences_found
+        A structured object with ok, replaced (up to 80 characters), at_index,
+        occurrences_found, and occurrences_changed. Targeted replacements
+        populate at_index and occurrences_found; replace-all populates
+        occurrences_changed. Unused index/count fields are null.
     """
     return docs_edit.search_replace(
         doc_id, find, replace, occurrence, heading_id, regex
@@ -437,9 +448,8 @@ def docs_add_comment(  # noqa: PLR0917
         anchor_text: Exact text in the document to attach the comment to.
                      Use a short, unique phrase (a few words) for reliable
                      matching.
-        occurrence:  Which occurrence of anchor_text to use (default 1 =
-        first).
-                     Use 2, 3, etc. if the text appears multiple times.
+        occurrence: Which occurrence of anchor_text to use (default 1 = first).
+            Use 2, 3, etc. if the text appears multiple times.
         include_anchor_text: If True (default), append the matched anchor text
                      excerpt into the comment body for human readability.
         bookmark_jump: If True, create an Apps Script bookmark and append a

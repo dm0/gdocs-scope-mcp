@@ -854,10 +854,6 @@ def test_invalid_tool_constraints_fail_before_api_access(
     contract_api.comments.return_value.create.assert_not_called()
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason='Outline description still promises a JSON array.',
-)
 def test_outline_description_matches_object_and_flat_hierarchy():
     """Describe the object wrapper and hierarchy expressed by ancestors."""
     async def description():
@@ -869,14 +865,14 @@ def test_outline_description_matches_object_and_flat_hierarchy():
 
     text = ' '.join(asyncio.run(description()).split())
     assert 'JSON array' not in text
+    assert 'JSON object' in text
+    for field in ('document_id', 'title', 'revision_id'):
+        assert field in text
+    assert 'flat sections' in text
     assert 'sections' in text
     assert 'ancestor_ids' in text
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason='The public comment occurrence description is truncated.',
-)
 def test_comment_occurrence_description_is_complete_in_catalog():
     """Keep the first-occurrence explanation visible in the public schema."""
     async def description():
@@ -889,6 +885,7 @@ def test_comment_occurrence_description_is_complete_in_catalog():
 
     text = ' '.join(asyncio.run(description()).split())
     assert 'first' in text.casefold()
+    assert 'default 1 = first' in text
     assert '2, 3' in text
 
 
