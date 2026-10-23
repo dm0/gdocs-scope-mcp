@@ -64,6 +64,28 @@ def test_targeted_occurrence_replace(simple_document, mock_docs):
     )
 
 
+@pytest.mark.xfail(
+    strict=True,
+    reason='First replacement reports the size of an early-stopped search.',
+)
+@pytest.mark.parametrize(
+    ('heading_id', 'expected_total'), [(None, 3), ('parent', 2)],
+    ids=['document', 'heading-subtree'],
+)
+def test_first_replace_reports_total_matches_in_scope(
+    mock_docs, heading_id, expected_total,
+):
+    """Do not present an early-stopped search count as the scope's total."""
+    result = docs_edit.search_replace(
+        'example', 'target phrase', 'Changed',
+        occurrence=1, heading_id=heading_id,
+    )
+
+    assert result.ok is True
+    assert result.occurrences_found == expected_total
+    mock_docs.batchUpdate.assert_called_once()
+
+
 @pytest.mark.parametrize(
     'kwargs',
     [
