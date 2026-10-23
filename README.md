@@ -33,6 +33,15 @@ The Python distribution and CLI are named `gdocs-scope-mcp`; the import package
 is `gdocs_scope_mcp`. The server requires a Google Cloud OAuth app and runs
 standalone over MCP STDIO.
 
+The package version is derived from Git tags by
+[setuptools-scm](https://setuptools-scm.readthedocs.io/). A clean checkout at
+`v0.3.0` builds as `0.3.0`; commits after that tag and tracked local changes
+produce development versions. Build from a Git checkout with its version tags
+available, or from a generated source distribution, which preserves the version.
+The server reports the version recorded when the package was built or installed;
+after changing tags or commits in an editable checkout, run
+`uv sync --reinstall-package gdocs-scope-mcp` to refresh it.
+
 ### Migrating from google-docs-mcp
 
 Install this repository and update your MCP launch command to `gdocs-scope-mcp`

@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+requires = ["setuptools>=68", "setuptools-scm>=8", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "gdocs-scope-mcp"
-version = "0.2.0"
+dynamic = ["version"]
 description = "MCP server for hierarchical, section-scoped editing of large Google Docs"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -36,6 +36,8 @@ dev = ["pytest>=8"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools_scm]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
