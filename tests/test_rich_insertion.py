@@ -205,3 +205,29 @@ def test_markdown_lists_create_item_paragraphs_and_native_bullets(
     ]
     assert bullets
     assert all(item['bulletPreset'] for item in bullets)
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason='Markdown table cells are flattened without native table requests.',
+)
+@pytest.mark.parametrize('newline_before', [False, True])
+def test_markdown_table_creates_native_structure_and_cell_text(newline_before):
+    """Retain a rectangular table and insert each value into its own cell."""
+    markdown = '| A | B |\n| --- | --- |\n| C | D |'
+    assert '<table>' in markdown_to_html(markdown)
+
+    requests = markdown_to_requests(
+        markdown, start=12, newline_before=newline_before,
+    )
+
+    tables = [r['insertTable'] for r in requests if 'insertTable' in r]
+    assert len(tables) == 1
+    expected_shape = {'rows': 2, 'columns': 2}
+    for dimension, size in expected_shape.items():
+        assert tables[0][dimension] == size
+    values = [
+        r['insertText']['text'].strip('\n') for r in requests
+        if 'insertText' in r and r['insertText']['text'].strip('\n')
+    ]
+    assert sorted(values) == ['A', 'B', 'C', 'D']
