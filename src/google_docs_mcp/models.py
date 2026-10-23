@@ -399,6 +399,46 @@ class InsertSucceedResponse(BaseModel):
     ]
 
 
+APPEND_PREVIEW_LIMIT = 200
+
+
+class AppendSucceedResponse(BaseModel):
+    """Describe appended content without exposing Google API requests."""
+
+    ok: Literal[True] = True
+    document_id: Annotated[str, Field(description='Edited Google Doc ID')]
+    rich: Annotated[
+        bool, Field(description='Whether the input was parsed as Markdown')
+    ]
+    at_index: Annotated[
+        int,
+        Field(
+            ge=1,
+            description='Google Docs API insertion index; diagnostic only',
+        ),
+    ]
+    appended: Annotated[
+        str,
+        Field(
+            max_length=APPEND_PREVIEW_LIMIT,
+            description='Inserted plain-text preview, including paragraph '
+            'breaks; at most 200 Unicode code points',
+        ),
+    ]
+    inserted_char_count: Annotated[
+        int,
+        Field(
+            ge=0,
+            description='Full inserted length in Unicode code points, '
+            'including automatically added paragraph breaks',
+        ),
+    ]
+    preview_truncated: Annotated[
+        bool,
+        Field(description='Whether appended omits text after the preview'),
+    ]
+
+
 class ReplaceSucceedResponse(BaseModel):
     """Result of successful text replacement request"""
 

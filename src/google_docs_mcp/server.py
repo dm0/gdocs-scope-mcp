@@ -47,6 +47,7 @@ from googleapiclient.discovery import build
 from . import docs_edit
 from .diagnostics import ServerInfo, capture_server_info
 from .models import (
+    AppendSucceedResponse,
     DocumentOutline,
     DocumentSubset,
     EditFailedResponse,
@@ -305,27 +306,31 @@ def docs_delete_paragraph(doc_id: str, anchor: str) -> str:
 
 
 @mcp.tool
-def docs_append(doc_id: str, text: str, rich: bool = True) -> list[dict]:
+def docs_append(
+    doc_id: str, text: str, rich: bool = True
+) -> AppendSucceedResponse:
     """
-    Append a new paragraph at the end of a Google Doc.
+    Append Markdown paragraphs or literal text at the end of a Google Doc.
 
-    Rich formatting is ON by default. Set rich=False to append literal text.
+    A paragraph break is added before the appended content automatically.
+    With rich=True, separate Markdown paragraphs with blank lines. Headings
+    map as follows: # is TITLE, ## is SUBTITLE, ### is HEADING_1, and so on.
+    Bold, italic, and combined emphasis are supported. Native lists and
+    tables are not implemented by the converter.
 
-    Supported rich subset:
-      - # / ## / ### headings
-      - - item / * item bullet lists
-      - 1. item / 1) item numbered lists
-      - **bold**, *italic*, ***bold italic***
+    With rich=False, preserve Markdown delimiters and line breaks literally.
 
     Args:
         doc_id: Google Doc ID
-        text:   Text to append as the final paragraph
-        rich:   If True (default), interpret simple markdown-like formatting
-        natively
+        text: Markdown or literal content to append, according to rich.
+        rich: Parse Markdown if True (default); insert literal text if False.
 
     Returns
     -------
-        JSON with: ok, appended (text preview), at_index
+        A structured receipt with document_id, rich, diagnostic at_index,
+        appended (plain-text preview up to 200 Unicode code points),
+        inserted_char_count (including paragraph breaks), preview_truncated,
+        and ok=True. Read the document to verify formatting.
     """
     return docs_edit.append(doc_id, text, rich=rich)
 

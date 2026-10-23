@@ -56,6 +56,8 @@ from googleapiclient.discovery import build
 # isort: split
 from .md2requests import markdown_to_requests
 from .models import (
+    APPEND_PREVIEW_LIMIT,
+    AppendSucceedResponse,
     DocumentOutline,
     DocumentParagraph,
     DocumentSection,
@@ -1012,10 +1014,9 @@ def delete_paragraph(doc_id: str, anchor: str) -> dict:
     }
 
 
-# Retain the public rich option until append migration is complete.
-def append(doc_id: str, text: str, rich: bool = True) -> dict:  # noqa: ARG001
+def append(doc_id: str, text: str, rich: bool = True) -> AppendSucceedResponse:
     """
-    Append text as a new paragraph at the end of the document.
+    Append Markdown or literal text and return a compact typed receipt.
     """
     service = _get_service('docs', 'v1')
     doc = _get_document(service, doc_id)
@@ -1030,15 +1031,36 @@ def append(doc_id: str, text: str, rich: bool = True) -> dict:  # noqa: ARG001
     last_elem = body_content[-1]
     insert_index = last_elem['endIndex'] - 1
 
-    requests = markdown_to_requests(text, start=insert_index)
+    if rich:
+        requests = markdown_to_requests(text, start=insert_index)
+        inserted_text = ''.join(
+            request['insertText']['text']
+            for request in requests
+            if 'insertText' in request
+        )
+    else:
+        inserted_text = '\n' + text
+        requests = [
+            {
+                'insertText': {
+                    'location': {'index': insert_index},
+                    'text': inserted_text,
+                }
+            }
+        ]
     service.documents().batchUpdate(
         documentId=doc_id,
         body={'requests': requests},
     ).execute()
 
-    requests.append({'insert_index': insert_index, 'last_elem': last_elem})
-
-    return requests
+    return AppendSucceedResponse(
+        document_id=doc_id,
+        rich=rich,
+        at_index=insert_index,
+        appended=inserted_text[:APPEND_PREVIEW_LIMIT],
+        inserted_char_count=len(inserted_text),
+        preview_truncated=len(inserted_text) > APPEND_PREVIEW_LIMIT,
+    )
 
 
 def batch_replace(doc_id: str, replacements: list[dict]) -> dict:
@@ -1474,7 +1496,11 @@ def main():
         elif args.command == 'delete_paragraph':
             result = delete_paragraph(args.doc_id, args.anchor)
         elif args.command == 'append':
-            result = append(args.doc_id, args.text, rich=args.rich)
+            result = append(
+                args.doc_id,
+                args.text,
+                rich=args.rich,
+            ).model_dump(mode='json')
         elif args.command == 'batch_replace':
             replacements = json.loads(args.replacements)
             result = batch_replace(args.doc_id, replacements)

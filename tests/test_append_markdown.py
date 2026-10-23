@@ -1,11 +1,23 @@
 """Check append's shared Markdown conversion path and style ranges."""
 
-from google_docs_mcp import docs_edit
+import asyncio
+import json
+
+import pytest
+from fastmcp import Client
+
+from google_docs_mcp import docs_edit, server
+from google_docs_mcp.models import AppendSucceedResponse
+
+EXPECTED_PREVIEW_LIMIT = 200
 
 
-def test_append_converts_headings_and_emphasis(mock_docs):
+def test_append_converts_headings_and_emphasis(simple_document, mock_docs):
     """Append produces native paragraph and inline styles from Markdown."""
-    docs_edit.append('example', '### Append heading\n\nA **bold** word.')
+    result = docs_edit.append(
+        'example',
+        '### Append heading\n\nA **bold** word.',
+    )
 
     mock_docs.batchUpdate.assert_called_once()
     requests = mock_docs.batchUpdate.call_args.kwargs['body']['requests']
@@ -26,6 +38,16 @@ def test_append_converts_headings_and_emphasis(mock_docs):
         r['insertText']['text'] for r in requests if 'insertText' in r
     )
     assert inserted == '\nAppend heading\nA bold word.'
+    assert isinstance(result, AppendSucceedResponse)
+    assert result.model_dump() == {
+        'ok': True,
+        'document_id': 'example',
+        'rich': True,
+        'at_index': simple_document['body']['content'][-1]['endIndex'] - 1,
+        'appended': inserted,
+        'inserted_char_count': len(inserted),
+        'preview_truncated': False,
+    }
 
 
 def test_append_preserves_boundaries_and_style_offsets(
@@ -70,3 +92,144 @@ def test_append_preserves_boundaries_and_style_offsets(
         '\nHeading\nA bold and italic word.\nLast.\n'
     )
     assert styles == [('bold', {'bold': True}), ('italic', {'italic': True})]
+
+
+@pytest.mark.parametrize(
+    'text',
+    [
+        '**буквально**\n\n# Heading 😊',
+        '',
+        'one\n\ntwo\n',
+    ],
+)
+def test_literal_append_preserves_input_without_conversion(
+    monkeypatch,
+    simple_document,
+    mock_docs,
+    apply_insertions,
+    text,
+):
+    """Literal append bypasses Markdown and preserves delimiters and breaks."""
+
+    def unexpected_conversion(*_args, **_kwargs):
+        raise AssertionError('Literal append must not parse Markdown')
+
+    monkeypatch.setattr(
+        docs_edit, 'markdown_to_requests', unexpected_conversion
+    )
+    result = docs_edit.append('example', text, rich=False)
+
+    mock_docs.batchUpdate.assert_called_once_with(
+        documentId='example',
+        body={
+            'requests': [
+                {
+                    'insertText': {
+                        'location': {'index': result.at_index},
+                        'text': '\n' + text,
+                    },
+                }
+            ]
+        },
+    )
+    requests = mock_docs.batchUpdate.call_args.kwargs['body']['requests']
+    actual, styles = apply_insertions(simple_document, requests)
+    original = '\n' + ''.join(
+        item['paragraph']['elements'][0]['textRun']['content']
+        for item in simple_document['body']['content']
+    )
+    assert actual == original[:-1] + '\n' + text + '\n'
+    assert styles == []
+    assert result.rich is False
+    assert result.appended == '\n' + text
+    assert result.inserted_char_count == len(text) + 1
+    assert result.preview_truncated is False
+
+
+@pytest.mark.parametrize('rich', [False, True])
+@pytest.mark.parametrize('length', [199, 200])
+def test_append_preview_reports_truncation(mock_docs, rich, length):
+    """Preview bounds and total counts include the paragraph break."""
+    result = docs_edit.append('example', 'я' * length, rich=rich)
+
+    inserted = '\n' + 'я' * length
+    assert result.appended == inserted[:EXPECTED_PREVIEW_LIMIT]
+    assert result.inserted_char_count == len(inserted)
+    assert result.preview_truncated is (len(inserted) > EXPECTED_PREVIEW_LIMIT)
+    mock_docs.batchUpdate.assert_called_once()
+
+
+@pytest.mark.parametrize('rich', [False, True])
+def test_mcp_append_exposes_structured_receipt(mock_docs, rich):
+    """The MCP schema and both result channels expose the typed fields."""
+
+    async def call():
+        async with Client(server.mcp) as client:
+            tools = await client.list_tools()
+            tool = next(tool for tool in tools if tool.name == 'docs_append')
+            result = await client.call_tool(
+                'docs_append',
+                {
+                    'doc_id': 'example',
+                    'text': '**word**',
+                    'rich': rich,
+                },
+            )
+            return tool, result
+
+    tool, result = asyncio.run(call())
+
+    expected_fields = {
+        'ok',
+        'document_id',
+        'rich',
+        'at_index',
+        'appended',
+        'inserted_char_count',
+        'preview_truncated',
+    }
+    assert set(tool.outputSchema['properties']) == expected_fields
+    assert (
+        tool.outputSchema['properties']['appended']['maxLength']
+        == EXPECTED_PREVIEW_LIMIT
+    )
+    assert result.is_error is False
+    assert set(result.structured_content) == expected_fields
+    assert json.loads(result.content[0].text) == result.structured_content
+    assert result.structured_content['appended'] == (
+        '\nword' if rich else '\n**word**'
+    )
+    assert result.structured_content['rich'] is rich
+    mock_docs.batchUpdate.assert_called_once()
+
+
+def test_append_does_not_report_success_when_update_fails(mock_docs):
+    """A failed API update propagates without producing a success receipt."""
+    mock_docs.batchUpdate.return_value.execute.side_effect = RuntimeError(
+        'Simulated update failure',
+    )
+
+    with pytest.raises(RuntimeError, match='Simulated update failure'):
+        docs_edit.append('example', 'New paragraph')
+
+
+def test_append_cli_serializes_typed_receipt(monkeypatch, mock_docs, capsys):
+    """The CLI keeps emitting JSON after append gains a Pydantic result."""
+    monkeypatch.setattr(
+        'sys.argv',
+        [
+            'docs_edit',
+            'append',
+            'example',
+            '--text',
+            '**word**',
+        ],
+    )
+
+    docs_edit.main()
+
+    result = json.loads(capsys.readouterr().out)
+    assert result['ok'] is True
+    assert result['document_id'] == 'example'
+    assert result['appended'] == '\nword'
+    mock_docs.batchUpdate.assert_called_once()
