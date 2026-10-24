@@ -4,12 +4,6 @@ Edit Google Docs through text anchors and batch updates.
 Edits Google Docs in-place using real batchUpdate requests, preserving
 document history, comments, and suggestions. LLMs never touch indices.
 
-Usage (CLI):
-    uv run -m gdocs_scope_mcp.docs_edit <command> <docId> [options]
-
-Commands: get, search_replace, insert_after, insert_before,
-          delete_paragraph, append, batch_replace.
-
 Rich mode uses the shared Markdown converter for paragraphs and inline styles:
     # / ## / ### headings
     **bold**, *italic*, ***bold italic***
@@ -33,13 +27,11 @@ Python API:
 
 from __future__ import annotations
 
-import argparse
 import json
 import logging
 import os
 import re
 import subprocess
-import sys
 import tempfile
 import urllib.error
 import urllib.parse
@@ -1568,192 +1560,3 @@ def add_comment(  # noqa: PLR0917
         if bookmark is not None
         else None,
     }
-
-
-# ---------------------------------------------------------------------------
-# CLI
-# ---------------------------------------------------------------------------
-
-
-def _build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(
-        description='Surgical Google Docs editor — LLMs never touch indices.',
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    p.add_argument(
-        '--json',
-        action='store_true',
-        help='Output JSON (default for scripting)',
-    )
-
-    sub = p.add_subparsers(dest='command', required=True)
-
-    # get
-    g = sub.add_parser('get', help='Get document structure')
-    g.add_argument('doc_id')
-
-    # search_replace
-    sr = sub.add_parser('search_replace', help='Search and replace text')
-    sr.add_argument('doc_id')
-    sr.add_argument('--find', required=True)
-    sr.add_argument('--replace', required=True)
-    sr.add_argument(
-        '--occurrence',
-        type=int,
-        default=1,
-        help='Which occurrence (1=first, 0=all)',
-    )
-    sr.add_argument('--regex', action='store_true')
-
-    # insert_after
-    ia = sub.add_parser('insert_after', help='Insert paragraph after anchor')
-    ia.add_argument('doc_id')
-    ia.add_argument('--anchor', required=True)
-    ia.add_argument('--text', required=True)
-    ia.set_defaults(rich=True)
-    ia.add_argument(
-        '--plain',
-        dest='rich',
-        action='store_false',
-        help='Insert literal text without rich formatting',
-    )
-
-    # insert_before
-    ib = sub.add_parser('insert_before', help='Insert paragraph before anchor')
-    ib.add_argument('doc_id')
-    ib.add_argument('--anchor', required=True)
-    ib.add_argument('--text', required=True)
-    ib.set_defaults(rich=True)
-    ib.add_argument(
-        '--plain',
-        dest='rich',
-        action='store_false',
-        help='Insert literal text without rich formatting',
-    )
-
-    # delete_paragraph
-    dp = sub.add_parser(
-        'delete_paragraph', help='Delete paragraph(s) matching anchor'
-    )
-    dp.add_argument('doc_id')
-    dp.add_argument('--anchor', required=True)
-
-    # append
-    ap = sub.add_parser('append', help='Append text to end of document')
-    ap.add_argument('doc_id')
-    ap.add_argument('--text', required=True)
-    ap.set_defaults(rich=True)
-    ap.add_argument(
-        '--plain',
-        dest='rich',
-        action='store_false',
-        help='Insert literal text without rich formatting',
-    )
-
-    # batch_replace
-    br = sub.add_parser('batch_replace', help='Multiple replacements (atomic)')
-    br.add_argument('doc_id')
-    br.add_argument(
-        '--replacements',
-        required=True,
-        help='JSON array: [{"find":"...","replace":"...","occurrence":1}]',
-    )
-
-    # add_comment
-    ac = sub.add_parser(
-        'add_comment', help='Add a comment anchored to specific text'
-    )
-    ac.add_argument('doc_id')
-    ac.add_argument(
-        '--anchor',
-        required=True,
-        help='Text in the document to anchor the comment to',
-    )
-    ac.add_argument('--comment', required=True, help='Comment text to post')
-    ac.add_argument(
-        '--occurrence',
-        type=int,
-        default=1,
-        help='Which occurrence to anchor to (default 1)',
-    )
-    ac.add_argument(
-        '--no-include-anchor-text',
-        action='store_true',
-        help='Do not append the anchored text excerpt into the comment body',
-    )
-    ac.add_argument(
-        '--bookmark-jump',
-        action='store_true',
-        help=(
-            'Create an Apps Script bookmark and append a #bookmark jump URL '
-            'into the comment body'
-        ),
-    )
-    ac.add_argument(
-        '--apps-script-id',
-        help=f'Override {APPS_SCRIPT_ID_ENV_VAR} for bookmark-jump mode',
-    )
-
-    return p
-
-
-def main():
-    """Run the command-line entry point for this module."""
-    logging.basicConfig(level=logging.WARNING)
-    parser = _build_parser()
-    args = parser.parse_args()
-
-    try:
-        if args.command == 'get':
-            result = read(args.doc_id)
-        elif args.command == 'search_replace':
-            result = search_replace(
-                args.doc_id,
-                args.find,
-                args.replace,
-                args.occurrence,
-                args.regex,
-            )
-        elif args.command == 'insert_after':
-            result = insert_after(
-                args.doc_id, args.anchor, args.text, rich=args.rich
-            )
-        elif args.command == 'insert_before':
-            result = insert_before(
-                args.doc_id, args.anchor, args.text, rich=args.rich
-            )
-        elif args.command == 'delete_paragraph':
-            result = delete_paragraph(args.doc_id, args.anchor)
-        elif args.command == 'append':
-            result = append(
-                args.doc_id,
-                args.text,
-                rich=args.rich,
-            ).model_dump(mode='json')
-        elif args.command == 'batch_replace':
-            replacements = json.loads(args.replacements)
-            result = batch_replace(args.doc_id, replacements)
-        elif args.command == 'add_comment':
-            result = add_comment(
-                args.doc_id,
-                args.comment,
-                args.anchor,
-                args.occurrence,
-                include_anchor_text=not args.no_include_anchor_text,
-                bookmark_jump=args.bookmark_jump,
-                apps_script_id=args.apps_script_id,
-            )
-        else:
-            parser.print_help()
-            sys.exit(1)
-
-        print(json.dumps(result, indent=2))
-
-    # This boundary intentionally handles all errors without propagating.
-    except Exception as e:  # noqa: BLE001
-        print(json.dumps({'ok': False, 'error': str(e)}), file=sys.stderr)
-        sys.exit(1)
-
-
-if __name__ == '__main__':
-    main()

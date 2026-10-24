@@ -220,25 +220,3 @@ def test_append_does_not_report_success_when_update_fails(mock_docs):
 
     with pytest.raises(RuntimeError, match='Simulated update failure'):
         docs_edit.append('example', 'New paragraph')
-
-
-def test_append_cli_serializes_typed_receipt(monkeypatch, mock_docs, capsys):
-    """The CLI keeps emitting JSON after append gains a Pydantic result."""
-    monkeypatch.setattr(
-        'sys.argv',
-        [
-            'docs_edit',
-            'append',
-            'example',
-            '--text',
-            '**word**',
-        ],
-    )
-
-    docs_edit.main()
-
-    result = json.loads(capsys.readouterr().out)
-    assert result['ok'] is True
-    assert result['document_id'] == 'example'
-    assert result['appended'] == '\nword'
-    mock_docs.batchUpdate.assert_called_once()

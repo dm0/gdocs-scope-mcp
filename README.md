@@ -33,6 +33,18 @@ The Python distribution and CLI are named `gdocs-scope-mcp`; the import package
 is `gdocs_scope_mcp`. The server requires a Google Cloud OAuth app and runs
 standalone over MCP STDIO.
 
+For shell access to document operations, use the FastMCP client CLI against
+the server rather than a separate editing interface:
+
+```bash
+uv run --locked fastmcp call --command gdocs-scope-mcp \
+  --target docs_read --input-json '{"doc_id":"YOUR_DOCUMENT_ID"}' --json
+```
+
+Run this from the project checkout. Each invocation launches a separate STDIO
+server process and uses the MCP tools' input validation and response contracts.
+The former `python -m gdocs_scope_mcp.docs_edit` editing CLI has been removed.
+
 The package version is derived from Git tags by
 [setuptools-scm](https://setuptools-scm.readthedocs.io/). A clean checkout at
 `v0.3.0` builds as `0.3.0`; commits after that tag and tracked local changes
