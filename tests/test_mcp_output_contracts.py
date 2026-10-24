@@ -1299,7 +1299,7 @@ def test_long_anchor_has_explicit_preview_metadata(receipt_document, name):
 def test_replacement_preview_and_match_completeness(
     simple_document, length,
 ):
-    """Keep full counts and explicitly distinguish early-stop matches."""
+    """Keep complete counts even when the text preview is truncated."""
     original = '😀' * length
     paragraph = simple_document['body']['content'][0]['paragraph']
     paragraph['elements'][0]['textRun']['content'] = original + '\n'
@@ -1311,26 +1311,31 @@ def test_replacement_preview_and_match_completeness(
     assert data['replaced_char_count'] == length
     assert data['preview_truncated'] is (length > EXPECTED_SHORT_PREVIEW_LIMIT)
     assert data['applied'] == 1
-    assert data['occurrences_found_complete'] is False
+    assert data['occurrences_found_complete'] is True
+    assert data['occurrences_found'] == 1
     assert data['occurrences_changed'] is None
     assert json.loads(response.content[0].text) == data
     validate(data, tool.outputSchema)
 
 
 @pytest.mark.parametrize('occurrence', [1, 2])
+@pytest.mark.parametrize('heading_id', [None, 'parent'])
 @pytest.mark.usefixtures('contract_api')
-def test_replacement_scope_and_count_metadata(occurrence):
-    """Expose scoped counts without changing the existing search strategy."""
+def test_replacement_scope_and_count_metadata(occurrence, heading_id):
+    """Expose total counts while changing only the selected occurrence."""
     _, response = call_tool('docs_search_replace', {
         'doc_id': 'example', 'find': 'Target phrase', 'replace': 'New',
-        'heading_id': 'parent', 'occurrence': occurrence,
+        'heading_id': heading_id, 'occurrence': occurrence,
     })
     data = response.structured_content
     assert data['document_id'] == 'example'
-    assert data['scope'] == 'heading_subtree'
-    assert data['heading_id'] == 'parent'
+    assert data['scope'] == (
+        'document' if heading_id is None else 'heading_subtree'
+    )
+    assert data['heading_id'] == heading_id
     assert data['applied'] == 1
-    assert data['occurrences_found_complete'] is (occurrence != 1)
+    assert data['occurrences_found_complete'] is True
+    assert data['occurrences_found'] == (3 if heading_id is None else 2)
 
 
 @pytest.mark.usefixtures('contract_api')

@@ -523,16 +523,22 @@ class ReplaceSucceedResponse(DocumentEditReceipt):
     ] = None
     occurrences_found: Annotated[
         int | None,
-        Field(description='Matches found in the effective scope; see '
-              'occurrences_found_complete. Targeted search is '
-              'case-insensitive.'),
+        Field(description='Complete pre-edit match count in the effective '
+              'scope for targeted replacement, including occurrence=1. '
+              'Targeted search is case-insensitive; null for native '
+              'replace-all.'),
     ] = None
     occurrences_changed: Annotated[
         int | None,
         Field(description='Native literal replace-all changed count; '
               'case-sensitive, not a pre-edit match count'),
     ] = None
-    occurrences_found_complete: bool = False
+    occurrences_found_complete: bool = Field(
+        default=False,
+        description='True for every targeted replacement, whose match count '
+        'covers the entire effective scope; false for native replace-all, '
+        'which returns a changed count rather than a pre-edit match count.',
+    )
     applied: Annotated[
         int, Field(ge=0, description='Number of replacements applied; '
                    'distinct from the pre-edit match count')

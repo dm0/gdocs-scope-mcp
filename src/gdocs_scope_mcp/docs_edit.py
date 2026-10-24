@@ -66,7 +66,6 @@ from .models import (
     GoogleDocumentTable,
     InsertSucceedResponse,
     ReplaceSucceedResponse,
-    SearchResult,
 )
 from .text_indices import utf16_length
 from .tool_errors import ToolFailureError
@@ -864,11 +863,7 @@ def search_replace(  # noqa: PLR0911, PLR0917
             ),
         )
 
-    found = (
-        haystack.find_first(find, False, regex)
-        if occurrence == 1
-        else haystack.find_all(find, False, regex)
-    )
+    found = haystack.find_all(find, False, regex)
     if not found:
         where = 'document' if heading_id is None else 'requested heading'
         return EditFailedResponse(
@@ -879,9 +874,6 @@ def search_replace(  # noqa: PLR0911, PLR0917
                 'Run docs_read to verify the exact text to search for'
             ),
         )
-
-    if isinstance(found, SearchResult):
-        found = [found]
 
     target_idx = occurrence - 1
     if target_idx >= len(found):
@@ -961,7 +953,7 @@ def search_replace(  # noqa: PLR0911, PLR0917
         document_id=doc_id, heading_id=heading_id,
         scope='heading_subtree' if heading_id is not None else 'document',
         replaced=old_text, at_index=doc_start, occurrences_found=len(found),
-        occurrences_found_complete=occurrence != 1,
+        occurrences_found_complete=True,
         applied=1,
         replaced_char_count=len(old_text),
         preview_truncated=len(old_text) > SHORT_PREVIEW_LIMIT,
