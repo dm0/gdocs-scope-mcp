@@ -945,7 +945,7 @@ class GoogleDocumentBullet(BaseModel, populate_by_name=True):
 
 
 def _unnest_paragraph_element(data: dict) -> dict:
-    kinds = {'textRun', 'horizontalRule,inlineObjectElement'}
+    kinds = {'textRun', 'horizontalRule', 'inlineObjectElement'}
     present_kinds = kinds.intersection(data.keys())
     if present_kinds:
         kind = next(iter(present_kinds))
