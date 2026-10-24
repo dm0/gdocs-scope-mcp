@@ -490,6 +490,18 @@ def _extract_paragraphs(doc: dict) -> list[Paragraph]:
 # def _paragraph_to_md(item: dict[str, ]):
 
 
+def _paragraph_text_map(elements: list[dict]) -> list[tuple[int, int, str]]:
+    """Keep original run positions while omitting non-text display elements."""
+    text_map = []
+    offset = 0
+    for element in elements:
+        if 'textRun' in element:
+            text = element['textRun']['content']
+            text_map.append((offset, element['startIndex'], text))
+            offset += len(text)
+    return text_map
+
+
 def _table_source_paragraphs(table: dict) -> list[DocumentParagraph]:
     """Retain cell paragraphs and their terminal boundaries in source order."""
     paragraphs = []
@@ -497,13 +509,14 @@ def _table_source_paragraphs(table: dict) -> list[DocumentParagraph]:
         for cell in row['tableCells']:
             for item in cell['content']:
                 if 'paragraph' in item:
+                    text_map = _paragraph_text_map(
+                        item['paragraph']['elements'],
+                    )
                     paragraphs.append(DocumentParagraph(
                         start_index=item['startIndex'],
                         end_index=item['endIndex'],
-                        text=''.join(
-                            element.get('textRun', {}).get('content', '')
-                            for element in item['paragraph']['elements']
-                        ),
+                        text=''.join(run[2] for run in text_map),
+                        text_map=text_map,
                         markdown='',
                         table_cell_end_index=cell['endIndex'] - 1,
                     ))
@@ -527,10 +540,9 @@ def _parse_document_tree(doc: dict) -> DocumentTree:
     top_level: list[DocumentSection] = [last]
 
     # Model validators flatten API payloads in place; retain source text first.
-    source_texts = [
-        ''.join(
-            element.get('textRun', {}).get('content', '')
-            for element in source.get('paragraph', {}).get('elements', [])
+    source_maps = [
+        _paragraph_text_map(
+            source.get('paragraph', {}).get('elements', []),
         )
         for source in doc['body']['content']
     ]
@@ -542,8 +554,8 @@ def _parse_document_tree(doc: dict) -> DocumentTree:
 
     headings = {}
 
-    for source_text, elem in zip(
-        source_texts, google_doc.body.content, strict=True,
+    for text_map, elem in zip(
+        source_maps, google_doc.body.content, strict=True,
     ):
         if not isinstance(elem, GoogleDocumentParagraph):
             # Display markup does not extend the preceding editable paragraph.
@@ -555,7 +567,8 @@ def _parse_document_tree(doc: dict) -> DocumentTree:
             start_index=elem.start_index,
             end_index=elem.end_index,
             # Rendered paragraph separators are not editable source characters.
-            text=source_text,
+            text=''.join(run[2] for run in text_map),
+            text_map=text_map,
             markdown=elem.to_markdown(google_doc),
         )
         if elem.paragraph_style.heading_id is None:
@@ -646,8 +659,15 @@ def _full_text_range_to_doc_indices(
     text_map: list[tuple[int, int, str]],
 ) -> tuple[int, int]:
     """Reject a text range spanning omitted document structure."""
-    doc_start = _full_text_pos_to_doc_index(start, text_map)
-    doc_end = _full_text_pos_to_doc_index(end, text_map, end=True)
+    try:
+        doc_start = _full_text_pos_to_doc_index(start, text_map)
+        doc_end = _full_text_pos_to_doc_index(end, text_map, end=True)
+    except ValueError:
+        raise ToolFailureError(EditFailedResponse(
+            code='INVALID_ARGUMENT',
+            description='The match has no reliable text-run source range.',
+            suggested_action='Target nonempty text within a source text run.',
+        )) from None
     if doc_end - doc_start != utf16_length(full_text[start:end]):
         raise ToolFailureError(EditFailedResponse(
             code='INVALID_ARGUMENT',
@@ -863,22 +883,18 @@ def search_replace(  # noqa: PLR0911, PLR0917
 
     target = found[target_idx]
 
-    doc_start = target.paragraph.start_index + utf16_length(
-        target.paragraph.text[:target.start_index],
-    )
-    doc_end = target.paragraph.start_index + utf16_length(
-        target.paragraph.text[:target.end_index],
-    )
+    try:
+        doc_start, doc_end = _full_text_range_to_doc_indices(
+            target.start_index, target.end_index,
+            target.paragraph.text, target.paragraph.text_map,
+        )
+    except ToolFailureError as error:
+        return error.failure
 
     old_text = target.paragraph.text[target.start_index : target.end_index]
 
     cell_end = target.paragraph.table_cell_end_index
-    if cell_end is not None and (
-        doc_end > cell_end
-        or utf16_length(target.paragraph.text) != (
-            target.paragraph.end_index - target.paragraph.start_index
-        )
-    ):
+    if cell_end is not None and doc_end > cell_end:
         return EditFailedResponse(
             code='INVALID_ARGUMENT',
             description=(

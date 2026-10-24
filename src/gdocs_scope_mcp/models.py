@@ -127,6 +127,10 @@ class DocumentParagraph(BaseModel):
     text: str
     markdown: str
     table_cell_end_index: int | None = None
+    # Python offset, original API UTF-16 start, unmodified run content.
+    text_map: list[tuple[int, int, str]] = Field(
+        default_factory=list, exclude=True,
+    )
 
 
 class SearchResult(BaseModel):
