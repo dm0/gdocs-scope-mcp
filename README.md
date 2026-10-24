@@ -175,12 +175,12 @@ these receipt fields (other fields omitted):
 
 Replacement adds `replaced_char_count`, `preview_truncated`, and `applied`
 (actual changes, distinct from matches found). `occurrences_found_complete`
-is false for the first-occurrence search because it stops early; later
-occurrences use the existing full search. Native literal replace-all reports
+is true for every targeted replacement: `occurrences_found` counts all pre-edit
+matches in the effective scope, while `applied=1`, including when the replacement
+is empty (deletion). Native literal replace-all reports
 `occurrences_changed` and `applied`, with `occurrences_found=null` and
 `occurrences_found_complete=false`. Targeted matching is case-insensitive;
-native literal replace-all is case-sensitive. These metadata do not change
-search behavior or resolve the separate match-count issue #16. For native
+native literal replace-all is case-sensitive. For native
 replace-all, `replaced` previews the search string and its length, rather than
 an individual matched item.
 
@@ -539,8 +539,8 @@ docs_search_replace(doc_id="...", find=r"\bDraft\b", replace="Final", regex=True
 Returns document/scope metadata, `ok`, `replaced` (up to 80 code points),
 `replaced_char_count`, `preview_truncated`, diagnostic `at_index`, `applied`,
 `occurrences_found`, `occurrences_found_complete`, and `occurrences_changed`.
-Targeted replacements populate `at_index` and `occurrences_found`; the first
-occurrence search may stop before all matches are found. Whole-document
+Targeted replacements populate `at_index` and the complete pre-edit count
+`occurrences_found`, including when replacing the first occurrence. Whole-document
 literal replace-all populates `occurrences_changed`. Unused index/count fields
 are null. Replace-all requires `regex=False` and `heading_id=None`.
 

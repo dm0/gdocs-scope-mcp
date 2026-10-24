@@ -92,26 +92,33 @@ def test_targeted_occurrence_replace(simple_document, mock_docs, regex):
     )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason='First replacement reports the size of an early-stopped search.',
-)
 @pytest.mark.parametrize(
     ('heading_id', 'expected_total'), [(None, 3), ('parent', 2)],
     ids=['document', 'heading-subtree'],
 )
+@pytest.mark.parametrize('regex', [False, True])
+@pytest.mark.parametrize('replacement', ['Changed', ''])
 def test_first_replace_reports_total_matches_in_scope(
-    mock_docs, heading_id, expected_total,
+    simple_document, mock_docs, *, heading_id, expected_total, regex,
+    replacement,
 ):
-    """Do not present an early-stopped search count as the scope's total."""
+    """Count every case-insensitive match but only replace or delete one."""
     result = docs_edit.search_replace(
-        'example', 'target phrase', 'Changed',
-        occurrence=1, heading_id=heading_id,
+        'example', r'target\sphrase' if regex else 'target phrase',
+        replacement,
+        occurrence=1, heading_id=heading_id, regex=regex,
     )
 
     assert result.ok is True
     assert result.occurrences_found == expected_total
-    mock_docs.batchUpdate.assert_called_once()
+    assert result.occurrences_found_complete is True
+    assert result.occurrences_changed is None
+    assert result.applied == 1
+    assert result.replaced == 'Target phrase'
+    assert edited_text(simple_document, mock_docs) == (
+        f'\nIntroduction\nParent\n{replacement}\nNested\n'
+        'Target phrase again\nOther\nTarget phrase elsewhere\n'
+    )
 
 
 @pytest.mark.parametrize(

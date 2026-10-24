@@ -105,9 +105,9 @@ EDIT RECEIPTS:
     heading_id.
     at_index is diagnostic only. Text previews have explicit full lengths and
     truncation flags; batch/deletion preview lists contain at most 100 items.
-    Use applied/deleted_count for totals, not preview-list lengths. A first
-    replacement search has occurrences_found_complete=false; do not interpret
-    its occurrences_found as a complete total.
+    Use applied/deleted_count for totals, not preview-list lengths. Targeted
+    replacements report the complete pre-edit match count in the effective
+    scope, including occurrence=1. Native replace-all reports only changes.
 
 EDITING TOOLS:
     docs_get_tree          Read hierarchical document tree (headings)
@@ -290,9 +290,11 @@ def docs_search_replace(  # noqa: PLR0917
         occurrences_changed. Unused index/count fields are null.
         Includes document_id, scope, heading_id, applied (changes),
         replaced_char_count (Unicode code points), and preview_truncated.
-        occurrences_found_complete is False for early-stopped first-match
-        searches and True for later-occurrence searches. Native replace-all
-        has no pre-edit match count; replaced previews the search string.
+        occurrences_found_complete is True for every targeted replacement;
+        occurrences_found counts all pre-edit matches in the effective scope,
+        while applied=1, including when replace is empty (deletion).
+        Native replace-all has occurrences_found=null and completeness=False;
+        replaced previews the search string.
         Targeted matching is case-insensitive; native literal replace-all
         is case-sensitive. at_index is diagnostic only.
     """
