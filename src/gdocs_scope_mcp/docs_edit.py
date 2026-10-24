@@ -502,11 +502,21 @@ def _parse_document_tree(doc: dict) -> DocumentTree:
     )
     top_level: list[DocumentSection] = [last]
 
+    # Model validators flatten API payloads in place; retain source text first.
+    source_texts = [
+        ''.join(
+            element.get('textRun', {}).get('content', '')
+            for element in source.get('paragraph', {}).get('elements', [])
+        )
+        for source in doc['body']['content']
+    ]
     google_doc = GoogleDocument.model_validate(doc)
 
     headings = {}
 
-    for elem in google_doc.body.content:
+    for source_text, elem in zip(
+        source_texts, google_doc.body.content, strict=True,
+    ):
         if not isinstance(elem, GoogleDocumentParagraph):
             last.paragraphs[-1].markdown += elem.to_markdown(google_doc)
             last.paragraphs[-1].text += elem.to_text(google_doc)
@@ -515,7 +525,8 @@ def _parse_document_tree(doc: dict) -> DocumentTree:
         paragraph = DocumentParagraph(
             start_index=elem.start_index,
             end_index=elem.end_index,
-            text=elem.to_text(google_doc),
+            # Rendered paragraph separators are not editable source characters.
+            text=source_text,
             markdown=elem.to_markdown(google_doc),
         )
         if elem.paragraph_style.heading_id is None:

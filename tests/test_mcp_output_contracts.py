@@ -1143,7 +1143,7 @@ def test_long_anchor_has_explicit_preview_metadata(receipt_document, name):
     })
     data = response.structured_content
     assert data['anchor'] == anchor[:80]
-    assert data['anchor_char_count'] == len(anchor + '\n\n')
+    assert data['anchor_char_count'] == len(anchor + '\n')
     assert data['anchor_preview_truncated'] is True
     assert json.loads(response.content[0].text) == data
     validate(data, tool.outputSchema)

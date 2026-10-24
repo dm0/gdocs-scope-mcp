@@ -11,8 +11,9 @@ from gdocs_scope_mcp import docs_edit
 def edited_text(document, mock_docs):
     """Apply emitted ASCII edits to an independent text buffer."""
     text = '\n' + ''.join(
-        item['paragraph']['elements'][0]['textRun']['content']
+        element['textRun']['content']
         for item in document['body']['content']
+        for element in item['paragraph']['elements']
     )
     mock_docs.batchUpdate.assert_called_once()
     assert mock_docs.batchUpdate.call_args.kwargs['documentId'] == 'example'
@@ -25,6 +26,32 @@ def edited_text(document, mock_docs):
             span = request['deleteContentRange']['range']
             text = text[: span['startIndex']] + text[span['endIndex'] :]
     return text
+
+
+@pytest.mark.parametrize('heading_id', [None, 'boundary'])
+@pytest.mark.parametrize('occurrence', [1, 2])
+@pytest.mark.parametrize('replacement', ['FIXED', ''])
+@pytest.mark.parametrize('split_runs', [False, True])
+def test_regex_paragraph_boundary_preserves_next_paragraph(
+    boundary_document, mock_docs, *, heading_id, occurrence, replacement,
+    split_runs,
+):
+    """A regex consuming a paragraph terminator preserves its neighbour."""
+    document = boundary_document(split_runs=split_runs)
+    result = docs_edit.search_replace(
+        'example', r'(?<=Prefix)\W+|(?<=Middle)\W+', replacement,
+        heading_id=heading_id, occurrence=occurrence, regex=True,
+    )
+    expected_match = ' !\n' if occurrence == 1 else ' ?\n'
+    original = '\nPrefix !\nMiddle ?\nBoundarySentinel\n'
+
+    assert result.ok is True
+    assert result.replaced == expected_match
+    assert result.replaced_char_count == len(expected_match)
+    assert result.at_index == original.index(expected_match)
+    assert edited_text(document, mock_docs) == original.replace(
+        expected_match, replacement, 1,
+    )
 
 
 @pytest.mark.parametrize('replacement', ['Changed', ''])

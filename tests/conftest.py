@@ -75,6 +75,41 @@ def mock_docs(monkeypatch, simple_document):
 
 
 @pytest.fixture
+def boundary_document(simple_document):
+    """Build adjacent API paragraphs with independently indexed text runs."""
+    def build(*, split_runs=False):
+        content = []
+        index = 1
+        for number, text in enumerate([
+            'Prefix !\n', 'Middle ?\n', 'BoundarySentinel\n',
+        ]):
+            start = index
+            runs = (
+                [text[:-2], text[-2:-1], text[-1:]] if split_runs else [text]
+            )
+            elements = []
+            for run in runs:
+                elements.append({
+                    'startIndex': index, 'endIndex': index + len(run),
+                    'textRun': {'content': run, 'textStyle': {}},
+                })
+                index += len(run)
+            style = {'namedStyleType': 'NORMAL_TEXT'}
+            if number == 0:
+                style = {
+                    'namedStyleType': 'HEADING_1', 'headingId': 'boundary',
+                }
+            content.append({
+                'startIndex': start, 'endIndex': index,
+                'paragraph': {'paragraphStyle': style, 'elements': elements},
+            })
+        simple_document['body']['content'] = content
+        return simple_document
+
+    return build
+
+
+@pytest.fixture
 def apply_insertions():
     """Provide an ASCII text buffer that checks insert and style ranges."""
 
