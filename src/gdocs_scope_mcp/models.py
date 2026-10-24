@@ -993,7 +993,12 @@ class GoogleDocumentParagraph(GoogleDocumentStructuralElement):
             )
             return f'{prefix} {anchor}{text}\n\n'
         if self.bullet:
-            list_props = doc.lists[self.bullet.list_id]
+            list_props = doc.lists.get(self.bullet.list_id)
+            if list_props is None:
+                raise ValueError(
+                    'Paragraph references missing list definition: '
+                    f'{self.bullet.list_id!r}',
+                )
             level = self.bullet.nesting_level
             level_props = list_props.list_properties.nesting_levels[level]
             if (
@@ -1139,7 +1144,7 @@ class GoogleDocument(BaseModel, populate_by_name=True):
 
     title: str
     body: GoogleDocumentBody
-    lists: dict[str, GoogleDocumentList]
+    lists: dict[str, GoogleDocumentList] = Field(default_factory=dict)
     inline_objects: Annotated[
         dict[str, GoogleDocumentInlineObject],
         Field(alias='inlineObjects', default_factory=dict),

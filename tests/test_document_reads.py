@@ -3,12 +3,15 @@
 # Fixture counts and offsets are intentional expectations in these tests.
 # ruff: noqa: PLR2004
 
+from copy import deepcopy
+
 import pytest
 from pydantic import TypeAdapter
 
 from gdocs_scope_mcp import docs_edit
 from gdocs_scope_mcp.models import (
     GoogleDocument,
+    GoogleDocumentList,
     GoogleDocumentParagraphElement,
 )
 
@@ -26,26 +29,22 @@ def test_absent_inline_objects_defaults_to_independent_empty_map(
     assert first.inline_objects is not second.inline_objects
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason='GoogleDocument still requires the lists collection explicitly.',
-)
 def test_absent_lists_defaults_to_independent_empty_map(simple_document):
     """Accept omitted list metadata when no paragraph references a list."""
     del simple_document['lists']
 
-    first = GoogleDocument.model_validate(simple_document)
-    second = GoogleDocument.model_validate(simple_document)
+    first = GoogleDocument.model_validate(deepcopy(simple_document))
+    second = GoogleDocument.model_validate(deepcopy(simple_document))
 
     assert first.lists == {}
     assert second.lists == {}
     assert first.lists is not second.lists
+    first.lists['first-only'] = GoogleDocumentList(
+        list_properties={'nestingLevels': []},
+    )
+    assert second.lists == {}
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason='Missing lists metadata prevents outline and content reads.',
-)
 @pytest.mark.parametrize('operation', ['get_tree', 'read'])
 def test_reads_work_when_api_omits_lists(
     simple_document, mock_docs, operation,
@@ -57,6 +56,79 @@ def test_reads_work_when_api_omits_lists(
 
     assert result.document_id == 'example'
     mock_docs.batchUpdate.assert_not_called()
+
+
+@pytest.mark.parametrize('operation', ['get_tree', 'read'])
+def test_reads_with_both_optional_collections_omitted(
+    simple_document, mock_docs, operation,
+):
+    """Omitted empty maps preserve headings and content."""
+    del simple_document['lists']
+    del simple_document['inlineObjects']
+    result = getattr(docs_edit, operation)('example')
+    assert result.document_id == 'example'
+    if operation == 'read':
+        assert 'Introduction' in ''.join(result.subset_md)
+        assert 'Target phrase elsewhere' in ''.join(result.subset_md)
+    else:
+        assert [section.id for section in result.sections] == [
+            '', 'parent', 'nested', 'other',
+        ]
+    mock_docs.batchUpdate.assert_not_called()
+
+
+@pytest.mark.parametrize('omit_inline_objects', [False, True])
+def test_targeted_edits_work_without_empty_lists(
+    simple_document, mock_docs, omit_inline_objects,
+):
+    """Default collection metadata does not prevent heading-scoped edits."""
+    del simple_document['lists']
+    if omit_inline_objects:
+        del simple_document['inlineObjects']
+    result = docs_edit.search_replace(
+        'example', 'Target phrase', 'Changed', heading_id='parent',
+    )
+    assert result.ok is True
+    assert result.heading_id == 'parent'
+    mock_docs.batchUpdate.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    ('glyph', 'prefix'),
+    [('DECIMAL', '1.'), ('GLYPH_TYPE_UNSPECIFIED', '-')],
+)
+def test_supplied_list_definitions_keep_rendering(
+    simple_document, glyph, prefix,
+):
+    """Preserve supplied list IDs and numbering metadata."""
+    simple_document['body']['content'][0]['paragraph']['bullet'] = {
+        'listId': 'list-id', 'textStyle': {},
+    }
+    simple_document['lists'] = {'list-id': {'listProperties': {
+        'nestingLevels': [{'glyphType': glyph}],
+    }}}
+    document = GoogleDocument.model_validate(simple_document)
+    assert document.body.content[0].bullet.list_id == 'list-id'
+    assert document.to_markdown().startswith(f'{prefix} Introduction\n')
+
+
+@pytest.mark.parametrize('omit_lists', [False, True])
+def test_missing_list_definition_is_not_invented(simple_document, omit_lists):
+    """Retain the reference, but refuse to guess Markdown list formatting."""
+    simple_document['body']['content'][0]['paragraph']['bullet'] = {
+        'listId': 'missing-list', 'textStyle': {},
+    }
+    if omit_lists:
+        del simple_document['lists']
+    document = GoogleDocument.model_validate(simple_document)
+    assert document.lists == {}
+    assert document.body.content[0].bullet.list_id == 'missing-list'
+    assert 'Introduction' in document.to_text()
+    with pytest.raises(
+        ValueError, match=r'missing list definition.*missing-list',
+    ):
+        document.to_markdown()
+    assert document.lists == {}
 
 
 def test_reads_work_when_api_omits_inline_objects(simple_document, mock_docs):

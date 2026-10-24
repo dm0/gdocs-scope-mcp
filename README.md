@@ -82,6 +82,11 @@ List counts describe returned items, not the total in Drive or the document.
 These tools still fetch only one page. Clients using the previous JSON-string
 or `result`-wrapped outputs must switch to the direct structured objects.
 
+Document reads accept omitted empty `lists` and `inlineObjects` collections.
+Supplied list definitions retain their formatting. If a paragraph references
+a missing list definition, Markdown rendering fails rather than guessing its
+numbering or bullet style; the parser retains the original list ID and text.
+
 ### Action annotations and edit receipts
 
 All Google-backed tools declare `openWorldHint=true`; `server_info` is local
