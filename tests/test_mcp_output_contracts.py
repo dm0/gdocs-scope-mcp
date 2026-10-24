@@ -30,9 +30,9 @@ EXPECTED_RECEIPT_ITEM_LIMIT = 100
             'regex': True, 'heading_id': 'owner',
         }),
         ('docs_batch_replace', {
-            'replacements_json': json.dumps([{
+            'replacements': [{
                 'find': 'Before table\nAfter table', 'replace': 'X',
-            }]),
+            }],
         }),
         ('docs_add_comment', {
             'comment': 'Comment', 'anchor_text': 'Before table\nAfter table',
@@ -192,10 +192,10 @@ def test_delete_final_paragraph_through_mcp(
 
 @pytest.mark.parametrize('with_nonfinal', [False, True])
 @pytest.mark.usefixtures('contract_api')
-def test_delete_skips_empty_final_paragraph(
+def test_empty_anchor_cannot_delete_document_with_empty_final_paragraph(
     simple_document, mock_docs, with_nonfinal,
 ):
-    """Never send an empty range or count the protected empty paragraph."""
+    """Reject match-all deletion even when a protected paragraph is empty."""
     content = simple_document['body']['content'][:1] if with_nonfinal else []
     start = content[-1]['endIndex'] if content else 1
     content.append({
@@ -208,25 +208,15 @@ def test_delete_skips_empty_final_paragraph(
         }]},
     })
     simple_document['body']['content'] = content
-    # Empty-anchor validation is separate (#17); exercise current match-all
-    # semantics to cover a matching empty final paragraph.
     tool, result = call_tool(
         'docs_delete_paragraph', {'doc_id': 'example', 'anchor': ''},
+        raise_on_error=False,
     )
-    assert not result.is_error
+    assert result.is_error
     validate(result.structured_content, tool.outputSchema)
-    assert result.structured_content['deleted_count'] == int(with_nonfinal)
-    assert result.structured_content['deleted'] == (
-        ['Introduction'] if with_nonfinal else []
-    )
-    if with_nonfinal:
-        requests = mock_docs.batchUpdate.call_args.kwargs['body']['requests']
-        assert requests == [{'deleteContentRange': {'range': {
-            'startIndex': 1, 'endIndex': start,
-        }}}]
-        mock_docs.batchUpdate.assert_called_once()
-    else:
-        mock_docs.batchUpdate.assert_not_called()
+    assert result.structured_content['code'] == 'INVALID_ARGUMENT'
+    mock_docs.get.assert_not_called()
+    mock_docs.batchUpdate.assert_not_called()
 
 
 TOOL_CASES = [
@@ -280,11 +270,9 @@ TOOL_CASES = [
         'docs_batch_replace',
         {
             'doc_id': 'example',
-            'replacements_json': json.dumps(
-                [
-                    {'find': 'Introduction', 'replace': 'Changed'},
-                ]
-            ),
+            'replacements': [
+                {'find': 'Introduction', 'replace': 'Changed'},
+            ],
         },
         {
             'ok': True,
@@ -519,22 +507,22 @@ def test_edit_failures_are_direct_objects_and_log_failure(
         ),
         (
             'docs_batch_replace',
-            {'replacements_json': '[{"find":"absent","replace":"new"}]'},
+            {'replacements': [{'find': 'absent', 'replace': 'new'}]},
             'TEXT_NOT_FOUND',
         ),
         (
             'docs_batch_replace',
             {
-                'replacements_json': (
-                    '[{"find":"Introduction","replace":"new",'
-                    '"occurrence":100}]'
-                )
+                'replacements': [
+                    {'find': 'Introduction', 'replace': 'new',
+                     'occurrence': 100},
+                ],
             },
             'OCCURRENCE_NOT_FOUND',
         ),
         (
             'docs_batch_replace',
-            {'replacements_json': '{invalid'},
+            {'replacements': '{invalid'},
             'INVALID_ARGUMENT',
         ),
         (
@@ -895,10 +883,6 @@ def test_resolve_failure_does_not_return_success(contract_api):
     contract_api.comments.return_value.update.assert_not_called()
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason='Batch replacements are exposed as an opaque JSON string.',
-)
 def test_typed_batch_input_schema_exposes_replacement_fields():
     """Expose item fields for constructing validated replacement objects."""
     async def schema():
@@ -909,18 +893,22 @@ def test_typed_batch_input_schema_exposes_replacement_fields():
                 if tool.name == 'docs_batch_replace'
             )
 
-    item_array = asyncio.run(schema())['properties']['replacements']
+    input_schema = asyncio.run(schema())
+    assert 'replacements_json' not in input_schema['properties']
+    assert 'replacements' in input_schema['required']
+    item_array = input_schema['properties']['replacements']
     assert item_array['type'] == 'array'
+    assert item_array['minItems'] == 1
     item = item_array['items']
     assert item['type'] == 'object'
+    assert item['additionalProperties'] is False
     assert {'find', 'replace'} <= set(item['required'])
+    assert item['properties']['find']['minLength'] == 1
     assert item['properties']['occurrence']['minimum'] == 0
+    assert item['properties']['occurrence']['default'] == 1
+    assert item['properties']['regex']['default'] is False
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason='The batch tool does not accept a typed replacements array.',
-)
 def test_typed_batch_input_accepts_structured_replacements(
     contract_api, mock_docs,
 ):
@@ -939,10 +927,6 @@ def test_typed_batch_input_accepts_structured_replacements(
     contract_api.files.return_value.list.assert_not_called()
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason='Tool constraints are not consistently validated before API calls.',
-)
 @pytest.mark.parametrize(
     ('name', 'arguments'),
     [
@@ -954,23 +938,152 @@ def test_typed_batch_input_accepts_structured_replacements(
                               'occurrence': 0}),
         ('docs_list', {'limit': 0}),
         ('docs_list', {'limit': -1}),
-        ('docs_batch_replace', {'replacements_json': '[{"replace":"New"}]'}),
+        ('docs_batch_replace', {'replacements': [{'replace': 'New'}]}),
     ],
 )
 def test_invalid_tool_constraints_fail_before_api_access(
-    contract_api, mock_docs, name, arguments,
+    contract_api, mock_docs, monkeypatch, name, arguments,
 ):
     """Reject invalid ranges, empty anchors, and incomplete replacements."""
+    credentials = MagicMock()
+    monkeypatch.setattr(docs_edit, '_load_creds', credentials)
     if name != 'docs_list':
         arguments = {'doc_id': 'example', **arguments}
     _, response = call_tool(name, arguments, raise_on_error=False)
 
     assert response.is_error
     assert response.structured_content['code'] == 'INVALID_ARGUMENT'
+    assert response.structured_content['suggested_action']
+    credentials.assert_not_called()
     mock_docs.get.assert_not_called()
     mock_docs.batchUpdate.assert_not_called()
     contract_api.files.return_value.list.assert_not_called()
     contract_api.comments.return_value.create.assert_not_called()
+
+
+@pytest.mark.parametrize('invalid', [
+    {}, {'find': 'Introduction'},
+    {'find': '', 'replace': 'X'},
+    {'find': 123, 'replace': 'X'},
+    {'find': 'Introduction', 'replace': None},
+    {'find': 'Introduction', 'replace': 123},
+    {'find': 'Introduction', 'replace': 'X', 'occurrence': -1},
+    {'find': 'Introduction', 'replace': 'X', 'occurrence': True},
+    {'find': 'Introduction', 'replace': 'X', 'occurrence': 1.0},
+    {'find': 'Introduction', 'replace': 'X', 'occurrence': '1'},
+    {'find': 'Introduction', 'replace': 'X', 'regex': 'false'},
+    {'find': 'Introduction', 'replace': 'X', 'regex': 0},
+    {'find': 'Introduction', 'replace': 'X', 'unknown': 'value'},
+    {'find': '[', 'replace': 'X', 'regex': True},
+    None, 'not an object',
+])
+@pytest.mark.usefixtures('contract_api')
+def test_entire_batch_is_validated_before_credentials(
+    mock_docs, monkeypatch, invalid,
+):
+    """An invalid later item prevents reads and writes for earlier items."""
+    credentials = MagicMock()
+    monkeypatch.setattr(docs_edit, '_load_creds', credentials)
+    tool, response = call_tool('docs_batch_replace', {
+        'doc_id': 'example',
+        'replacements': [
+            {'find': 'Introduction', 'replace': 'Changed'}, invalid,
+        ],
+    }, raise_on_error=False)
+    assert response.is_error
+    assert response.structured_content['code'] == 'INVALID_ARGUMENT'
+    assert response.structured_content['suggested_action']
+    validate(response.structured_content, tool.outputSchema)
+    credentials.assert_not_called()
+    mock_docs.get.assert_not_called()
+    mock_docs.batchUpdate.assert_not_called()
+
+
+@pytest.mark.parametrize('arguments', [
+    {}, {'replacements': []}, {'replacements': None},
+    {'replacements': '[{"find":"Introduction","replace":"X"}]'},
+    {'replacements': {'find': 'Introduction', 'replace': 'X'}},
+    {'replacements_json': '[{"find":"Introduction","replace":"X"}]'},
+])
+@pytest.mark.usefixtures('contract_api')
+def test_batch_requires_nonempty_object_array(
+    mock_docs, arguments,
+):
+    """Reject removed inputs and empty batches without document access."""
+    _, response = call_tool('docs_batch_replace', {
+        'doc_id': 'example', **arguments,
+    }, raise_on_error=False)
+    assert response.is_error
+    assert response.structured_content['code'] == 'INVALID_ARGUMENT'
+    mock_docs.get.assert_not_called()
+    mock_docs.batchUpdate.assert_not_called()
+
+
+@pytest.mark.parametrize(('name', 'arguments'), [
+    ('docs_search_replace', {'find': '', 'replace': 'X'}),
+    ('docs_search_replace', {'find': 'Introduction', 'replace': 'X',
+                             'occurrence': '1'}),
+    ('docs_search_replace', {'find': 'Introduction', 'replace': 'X',
+                             'occurrence': False}),
+    ('docs_insert_after', {'anchor': '', 'text': 'X'}),
+    ('docs_add_comment', {'anchor_text': '', 'comment': 'X'}),
+    ('docs_add_comment', {'anchor_text': 'Introduction', 'comment': 'X',
+                          'occurrence': -1}),
+    ('docs_list', {'limit': '20'}),
+    ('docs_list', {'limit': True}),
+    ('docs_list', {'limit': 1.5}),
+])
+@pytest.mark.usefixtures('contract_api')
+def test_input_types_and_empty_searches_fail_before_credentials(
+    mock_docs, monkeypatch, name, arguments,
+):
+    """Protect both insertion sides and distinguish integers from booleans."""
+    credentials = MagicMock()
+    monkeypatch.setattr(docs_edit, '_load_creds', credentials)
+    _, response = call_tool(name, {
+        **({'doc_id': 'example'} if name != 'docs_list' else {}),
+        **arguments,
+    }, raise_on_error=False)
+    assert response.is_error
+    assert response.structured_content['code'] == 'INVALID_ARGUMENT'
+    credentials.assert_not_called()
+    mock_docs.get.assert_not_called()
+    mock_docs.batchUpdate.assert_not_called()
+
+
+@pytest.mark.parametrize('regex', [False, True])
+@pytest.mark.usefixtures('contract_api')
+def test_typed_batch_allows_deletion_and_replace_all(
+    mock_docs, regex,
+):
+    """Empty replacement text deletes every selected literal or regex match."""
+    _, response = call_tool('docs_batch_replace', {
+        'doc_id': 'example',
+        'replacements': [{
+            'find': 'Target phrase', 'replace': '',
+            'occurrence': 0, 'regex': regex,
+        }],
+    })
+    assert response.is_error is False
+    expected_matches = 3
+    assert response.structured_content['applied'] == expected_matches
+    requests = mock_docs.batchUpdate.call_args.kwargs['body']['requests']
+    assert len(requests) == expected_matches
+    assert all('deleteContentRange' in request for request in requests)
+    mock_docs.batchUpdate.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    ('limit', 'page_size'), [(1, 1), (100, 100), (101, 100)],
+)
+def test_positive_listing_limit_preserves_upper_cap(
+    contract_api, limit, page_size,
+):
+    """Accept positive integers while retaining the existing page-size cap."""
+    _, response = call_tool('docs_list', {'limit': limit})
+    assert response.is_error is False
+    request = contract_api.files.return_value.list.call_args.kwargs
+    assert request['pageSize'] == page_size
 
 
 def test_outline_description_matches_object_and_flat_hierarchy():
@@ -1249,10 +1362,10 @@ def test_batch_preview_limits_do_not_limit_edits(
     receipt_document(originals)
     tool, response = call_tool('docs_batch_replace', {
         'doc_id': 'example',
-        'replacements_json': json.dumps([
+        'replacements': [
             {'find': original, 'replace': replacement}
             for original in originals
-        ]),
+        ],
     })
     data = response.structured_content
     assert data['applied'] == count

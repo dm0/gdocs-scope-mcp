@@ -1,7 +1,5 @@
 """Translate tool failures into structured MCP errors."""
 
-from json import JSONDecodeError
-
 from fastmcp.tools.base import ToolResult
 from google.auth.exceptions import RefreshError
 from googleapiclient.errors import HttpError
@@ -56,15 +54,6 @@ def failure_from_exception(
             code='INVALID_ARGUMENT',
             description=f'Invalid tool arguments: {fields}.',
             suggested_action='Check required fields and types in inputSchema.',
-        )
-    if (
-        isinstance(error, JSONDecodeError)
-        and tool_name == 'docs_batch_replace'
-    ):
-        return EditFailedResponse(
-            code='INVALID_ARGUMENT',
-            description='replacements_json is not valid JSON.',
-            suggested_action='Pass a JSON array of replacement objects.',
         )
     if isinstance(error, RefreshError):
         return EditFailedResponse(

@@ -64,6 +64,12 @@ from .models import (
     ReplyCommentResponse,
     ResolveCommentResponse,
 )
+from .tool_inputs import (
+    NonemptyText,
+    PositiveInteger,
+    ReplacementOccurrence,
+    Replacements,
+)
 from .tool_logging import ToolCallLoggingMiddleware, configure_logging
 
 SERVER_INFO = capture_server_info()
@@ -246,9 +252,9 @@ def docs_read(
 # Preserve the public positional calling convention.
 def docs_search_replace(  # noqa: PLR0917
     doc_id: str,
-    find: str,
+    find: NonemptyText,
     replace: str,
-    occurrence: int = 1,
+    occurrence: ReplacementOccurrence = 1,
     heading_id: str | None = None,
     regex: bool = False,
 ) -> ReplaceSucceedResponse | EditFailedResponse:
@@ -301,7 +307,7 @@ def docs_search_replace(  # noqa: PLR0917
 )
 def docs_insert_after(
     doc_id: str,
-    anchor: str,
+    anchor: NonemptyText,
     text: str,
     heading_id: str | None = None,
     rich: bool = True,
@@ -353,7 +359,7 @@ def docs_insert_after(
 )
 def docs_insert_before(
     doc_id: str,
-    anchor: str,
+    anchor: NonemptyText,
     text: str,
     heading_id: str | None = None,
     rich: bool = True,
@@ -408,7 +414,9 @@ def docs_insert_before(
         'openWorldHint': True,
     },
 )
-def docs_delete_paragraph(doc_id: str, anchor: str) -> DeleteParagraphResponse:
+def docs_delete_paragraph(
+    doc_id: str, anchor: NonemptyText,
+) -> DeleteParagraphResponse:
     """
     Delete the paragraph(s) containing `anchor` text.
 
@@ -486,7 +494,7 @@ def docs_append(
     },
 )
 def docs_batch_replace(
-    doc_id: str, replacements_json: str
+    doc_id: str, replacements: Replacements,
 ) -> BatchReplaceResponse:
     """
     Apply multiple find→replace operations atomically in a single batchUpdate.
@@ -496,14 +504,19 @@ def docs_batch_replace(
 
     Args:
         doc_id:           Google Doc ID
-        replacements_json: JSON array of replacements, e.g.:
-                          '[{"find": "Q1", "replace": "Q2"},
+        replacements: Nonempty array of typed replacement objects, e.g.:
+                          [{"find": "Q1", "replace": "Q2"},
                             {"find": "draft", "replace": "final", "occurrence":
-                            0}]'
+                            0}]
 
                           Each item: {"find": str, "replace": str,
                                       "occurrence": int (default 1, 0=all),
                                       "regex": bool (default false)}
+                          find must be nonempty; replace="" deletes text.
+                          Types are strict; unknown fields, negative
+                          occurrences and invalid regex patterns are rejected
+                          before API access. occurrence=0 supports literal
+                          and regex replace-all within this batch tool.
 
     Returns
     -------
@@ -516,9 +529,10 @@ def docs_batch_replace(
         preview_truncated/replacement_preview_truncated flags. Indices are
         diagnostic only.
     """
-    replacements = json.loads(replacements_json)
     return BatchReplaceResponse.model_validate(
-        docs_edit.batch_replace(doc_id, replacements),
+        docs_edit.batch_replace(
+            doc_id, [replacement.model_dump() for replacement in replacements],
+        ),
     )
 
 
@@ -535,8 +549,8 @@ def docs_batch_replace(
 def docs_add_comment(  # noqa: PLR0917
     doc_id: str,
     comment: str,
-    anchor_text: str,
-    occurrence: int = 1,
+    anchor_text: NonemptyText,
+    occurrence: PositiveInteger = 1,
     include_anchor_text: bool = True,
     bookmark_jump: bool = False,
 ) -> AddCommentResponse:
@@ -798,13 +812,15 @@ def docs_read_comments(
         'openWorldHint': True,
     },
 )
-def docs_list(query: str = '', limit: int = 20) -> ListDocumentsResponse:
+def docs_list(
+    query: str = '', limit: PositiveInteger = 20,
+) -> ListDocumentsResponse:
     """
     List Google Docs from Drive, optionally filtered by a search query.
 
     Args:
         query: Optional search terms (searches title and content)
-        limit: Maximum number of results (default 20, capped at 100).
+        limit: Positive integer maximum (default 20, values above 100 capped).
 
     Returns
     -------
