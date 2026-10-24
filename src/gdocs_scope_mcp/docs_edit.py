@@ -74,6 +74,7 @@ from .models import (
     ReplaceSucceedResponse,
     SearchResult,
 )
+from .text_indices import utf16_length
 from .tool_errors import ToolFailureError
 
 log = logging.getLogger(__name__)
@@ -576,32 +577,37 @@ def _parse_document_tree(doc: dict) -> DocumentTree:
 
 def _build_full_text_map(
     paragraphs: list[Paragraph],
-) -> tuple[str, list[tuple[int, int, int]]]:
+) -> tuple[str, list[tuple[int, int, str]]]:
     """
     Return (full_text, text_map) where:
 
     - full_text is all characters concatenated from all text runs
-    - text_map is list of (offset_in_full_text, doc_start_index, length)
-      allowing mapping from full_text position → document index
+    - text_map retains (Python offset, API start index, original run text),
+      allowing conversion to UTF-16 without losing source-run boundaries.
     """
     parts = []
     text_map = []
     offset = 0
     for para in paragraphs:
         for run in para.runs:
-            text_map.append((offset, run.start, len(run.text)))
+            text_map.append((offset, run.start, run.text))
             parts.append(run.text)
             offset += len(run.text)
     return ''.join(parts), text_map
 
 
 def _full_text_pos_to_doc_index(
-    pos: int, text_map: list[tuple[int, int, int]]
+    pos: int, text_map: list[tuple[int, int, str]], *, end: bool = False,
 ) -> int:
-    """Map a position in concatenated text to a document character index."""
-    for ft_offset, doc_start, length in text_map:
-        if ft_offset <= pos < ft_offset + length:
-            return doc_start + (pos - ft_offset)
+    """Map Python offsets to UTF-16; range ends prefer the preceding run."""
+    for ft_offset, doc_start, text in text_map:
+        run_end = ft_offset + len(text)
+        if ft_offset <= pos < run_end or (end and ft_offset < pos == run_end):
+            return doc_start + utf16_length(text[:pos - ft_offset])
+    if text_map:
+        ft_offset, doc_start, text = text_map[-1]
+        if pos == ft_offset + len(text):
+            return doc_start + utf16_length(text)
     raise ValueError(
         f'Position {pos} is not within any text run in the document.'
     )
@@ -810,8 +816,12 @@ def search_replace(  # noqa: PLR0917
 
     target = found[target_idx]
 
-    doc_start = target.paragraph.start_index + target.start_index
-    doc_end = target.paragraph.start_index + target.end_index
+    doc_start = target.paragraph.start_index + utf16_length(
+        target.paragraph.text[:target.start_index],
+    )
+    doc_end = target.paragraph.start_index + utf16_length(
+        target.paragraph.text[:target.end_index],
+    )
 
     old_text = target.paragraph.text[target.start_index : target.end_index]
 
@@ -830,8 +840,8 @@ def search_replace(  # noqa: PLR0917
             {
                 'deleteContentRange': {
                     'range': {
-                        'startIndex': doc_start + len(replace),
-                        'endIndex': doc_end + len(replace),
+                        'startIndex': doc_start + utf16_length(replace),
+                        'endIndex': doc_end + utf16_length(replace),
                     }
                 }
             }
@@ -1215,7 +1225,7 @@ def batch_replace(doc_id: str, replacements: list[dict]) -> dict:
             # Replace all
             for ft_start, ft_end in matches:
                 ds = _full_text_pos_to_doc_index(ft_start, text_map)
-                de = _full_text_pos_to_doc_index(ft_end - 1, text_map) + 1
+                de = _full_text_pos_to_doc_index(ft_end, text_map, end=True)
                 changes.append(
                     (ds, de, replace_text, full_text[ft_start:ft_end])
                 )
@@ -1235,7 +1245,7 @@ def batch_replace(doc_id: str, replacements: list[dict]) -> dict:
                 )
             ft_start, ft_end = matches[idx]
             ds = _full_text_pos_to_doc_index(ft_start, text_map)
-            de = _full_text_pos_to_doc_index(ft_end - 1, text_map) + 1
+            de = _full_text_pos_to_doc_index(ft_end, text_map, end=True)
             changes.append((ds, de, replace_text, full_text[ft_start:ft_end]))
 
     # Sort by doc_start DESCENDING (apply end-of-doc first so indices stay
@@ -1258,8 +1268,8 @@ def batch_replace(doc_id: str, replacements: list[dict]) -> dict:
                 {
                     'deleteContentRange': {
                         'range': {
-                            'startIndex': ds + len(replace_text),
-                            'endIndex': de + len(replace_text),
+                            'startIndex': ds + utf16_length(replace_text),
+                            'endIndex': de + utf16_length(replace_text),
                         }
                     }
                 }
@@ -1379,7 +1389,7 @@ def add_comment(  # noqa: PLR0917
 
     ft_start, ft_end = matches[target_idx]
     doc_start = _full_text_pos_to_doc_index(ft_start, text_map)
-    doc_end = _full_text_pos_to_doc_index(ft_end - 1, text_map) + 1
+    doc_end = _full_text_pos_to_doc_index(ft_end, text_map, end=True)
 
     # Create a named range at the anchor position
     range_name = f'comment-anchor-{uuid.uuid4().hex[:12]}'

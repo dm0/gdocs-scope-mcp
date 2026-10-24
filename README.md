@@ -112,6 +112,11 @@ are API diagnostics; identify edits using document, scope, and operation IDs.
 
 All preview lengths use Unicode code points, not bytes or Google Docs UTF-16
 indices. Inserted lengths include automatically added paragraph breaks.
+API positions and ranges, including `at_index`, use UTF-16 code units:
+`😀` occupies two index units but counts as one character in receipt lengths.
+Text search and slicing retain Python code-point offsets; targeted edits,
+batch replacements, comment anchors, and rich-text formatting convert these
+offsets to UTF-16 when constructing Google Docs requests.
 Before/after insertion adds `inserted_char_count`, `preview_truncated`,
 `anchor_char_count`, and `anchor_preview_truncated`. The insertion preview
 remains at most 200 code points and the anchor preview at most 80. Append
