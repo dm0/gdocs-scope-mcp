@@ -1,5 +1,7 @@
 """Translate tool failures into structured MCP errors."""
 
+from http import HTTPStatus
+
 from fastmcp.tools.base import ToolResult
 from google.auth.exceptions import RefreshError
 from googleapiclient.errors import HttpError
@@ -85,6 +87,14 @@ def failure_from_exception(
                 'Inspect server logs and Google API availability.',
             ),
         )
+        if status == HTTPStatus.BAD_REQUEST and tool_name in {
+            'docs_list', 'docs_read_comments',
+        }:
+            action = (
+                'Check listing arguments. If a page token is invalid or '
+                'expired, omit page_token to restart pagination with the '
+                'same query and filters; deduplicate items already seen.'
+            )
         return EditFailedResponse(
             code=code,
             description=f'Google API request failed with HTTP {status}.',

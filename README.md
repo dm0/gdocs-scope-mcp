@@ -81,17 +81,20 @@ are not JSON-encoded strings, and edit results have no outer `result` wrapper.
   document/comment state before retrying a failed write. Internal exceptions
   retain tracebacks in server logs, while clients receive a bounded generic
   description. Successful response fields are unchanged.
-- `docs_list` returns `{count, documents}` rather than a bare array. Document
+- `docs_list` returns `{count, documents, next_page_token, has_more}`. Document
   fields retain `id`, `name`, `modifiedTime`, and `webViewLink`; the latter two
   are nullable when Drive omits them.
-- `docs_read_comments` returns `{count, comments}`. Each comment exposes its
+- `docs_read_comments` returns `{count, comments, next_page_token, has_more}`.
+  Each comment exposes its
   text, author, anchor metadata, and resolved/deleted state as typed fields.
 - Existing fields such as `with` in batch changes and bookmark metadata in
   comment creation are preserved. Batch input now uses the typed
   `replacements` array; the old `replacements_json` parameter was removed.
 
 List counts describe returned items, not the total in Drive or the document.
-These tools still fetch only one page. Clients using the previous JSON-string
+Each call fetches one page; pass `next_page_token` as `page_token` to continue.
+Continue until the token is null, even if a page has zero returned items.
+Clients using the previous JSON-string
 or `result`-wrapped outputs must switch to the direct structured objects.
 
 Document reads accept omitted empty `lists` and `inlineObjects` collections.
@@ -488,20 +491,41 @@ docs_read(doc_id="...", heading_ids=["heading-id-from-outline"])
 
 ---
 
-#### `docs_list(query, limit)`
+#### `docs_list(query, limit, page_token=None)`
 List Google Docs from Drive, optionally filtered by a search query.
 
 | Param | Type | Default | Description |
 |-------|------|---------|-------------|
 | `query` | string | `""` | Search terms (searches title and content) |
-| `limit` | int | `20` | Positive integer maximum; values above 100 are capped |
+| `limit` | int | `20` | Positive per-page maximum; values above 100 are capped |
+| `page_token` | string or null | null | Continuation token from the previous page |
 
-Returns `{count, documents}`. Each document has `id`, `name`, `modifiedTime`,
+Returns `{count, documents, next_page_token, has_more}`.
+Each document has `id`, `name`, `modifiedTime`,
 and `webViewLink`; the last two can be null. Only one page is fetched, and
 `count` is the number returned, not the total number of matching documents.
+`has_more` indicates an API continuation token, not an estimated remaining count.
+Preserve query, limit, and shared-drive settings when continuing. If Google
+rejects an invalid/expired token, restart without it and deduplicate items.
 
 ```
 docs_list(query="board deck 2026", limit=5)
+```
+
+For example, a Python MCP client can traverse pages using the same arguments:
+
+```python
+documents = []
+page_token = None
+while True:
+    result = await client.call_tool("docs_list", {
+        "query": "board deck 2026", "limit": 5, "page_token": page_token,
+    })
+    page = result.structured_content
+    documents.extend(page["documents"])
+    page_token = page["next_page_token"]
+    if page_token is None:
+        break
 ```
 
 ---
@@ -719,18 +743,24 @@ Returns `ok`, `comment_id`, `anchored_to`, `at_index`, `named_range_id`, and
 
 ---
 
-#### `docs_read_comments(doc_id, include_resolved)`
+#### `docs_read_comments(doc_id, include_resolved=False, page_token=None)`
 Read one page of up to 100 comments on a document.
 
 | Param | Type | Default | Description |
 |-------|------|---------|-------------|
 | `doc_id` | string | required | Google Doc ID |
 | `include_resolved` | bool | `false` | Include resolved/deleted comments |
+| `page_token` | string or null | null | Continuation token from the previous page |
 
-Returns `{count, comments}`. Each comment has `id`, `content`, `author`,
+Returns `{count, comments, next_page_token, has_more}`.
+Each comment has `id`, `content`, `author`,
 `anchored` (bool), `named_range_id`, `quoted_text`, `resolved`, `deleted`, and
 `created`. The count covers returned items after filtering; additional pages
-are not fetched.
+are not fetched automatically. Continue with `page_token=next_page_token`, keeping
+`doc_id` and `include_resolved` unchanged, until the token is null. A page with
+no visible comments can still have `has_more=true` because filtering happens
+after fetching. Invalid/expired tokens return a structured error with guidance
+to restart without a token and deduplicate previously seen items.
 
 ```
 docs_read_comments(doc_id="...")

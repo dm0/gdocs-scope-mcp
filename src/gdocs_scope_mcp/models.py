@@ -13,6 +13,7 @@ from pydantic import (
     Discriminator,
     Field,
     PlainSerializer,
+    computed_field,
     field_validator,
 )
 from typing_extensions import Self
@@ -675,10 +676,29 @@ class DocumentComment(BaseModel):
     created: str
 
 
-class ReadCommentsResponse(BaseModel):
+class ListingPage(BaseModel):
+    """Describe one API page without implying a collection-wide total."""
+
+    count: int = Field(
+        ge=0, description='Items returned on this page after filtering; '
+        'not the total number of items in the collection.',
+    )
+    next_page_token: str | None = Field(
+        default=None, description='Opaque continuation token; null on the '
+        'terminal page. Reuse with the same query and filters.',
+    )
+
+    @computed_field(description='Whether the API returned a continuation '
+                    'token, even if this page contains no visible items.')
+    @property
+    def has_more(self) -> bool:
+        """Derive continuation from the API token rather than item count."""
+        return bool(self.next_page_token)
+
+
+class ReadCommentsResponse(ListingPage):
     """Return comments from the fetched page with a count of included items."""
 
-    count: int
     comments: list[DocumentComment]
 
 
@@ -693,10 +713,9 @@ class DocumentListItem(BaseModel):
     web_view_link: Annotated[str | None, Field(alias='webViewLink')] = None
 
 
-class ListDocumentsResponse(BaseModel):
+class ListDocumentsResponse(ListingPage):
     """Return a typed document list and the number of returned items."""
 
-    count: int
     documents: list[DocumentListItem]
 
 
