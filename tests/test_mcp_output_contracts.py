@@ -21,6 +21,38 @@ EXPECTED_TEXT_PREVIEW_LIMIT = 200
 EXPECTED_RECEIPT_ITEM_LIMIT = 100
 
 
+@pytest.mark.usefixtures('contract_api', 'table_document')
+@pytest.mark.parametrize(
+    ('name', 'arguments'),
+    [
+        ('docs_search_replace', {
+            'find': r'(?<=tail)\W+', 'replace': 'X',
+            'regex': True, 'heading_id': 'owner',
+        }),
+        ('docs_batch_replace', {
+            'replacements_json': json.dumps([{
+                'find': 'Before table\nAfter table', 'replace': 'X',
+            }]),
+        }),
+        ('docs_add_comment', {
+            'comment': 'Comment', 'anchor_text': 'Before table\nAfter table',
+        }),
+    ],
+)
+def test_table_structural_boundaries_fail_through_mcp(
+    mock_docs, name, arguments,
+):
+    """Report protected-cell and cross-table matches before any write."""
+    tool, result = call_tool(
+        name, {'doc_id': 'example', **arguments}, raise_on_error=False,
+    )
+    assert result.is_error is True
+    assert result.structured_content['code'] == 'INVALID_ARGUMENT'
+    assert result.structured_content['suggested_action']
+    validate(result.structured_content, tool.outputSchema)
+    mock_docs.batchUpdate.assert_not_called()
+
+
 @pytest.fixture
 def contract_api(monkeypatch, mock_docs):
     """Provide Docs and Drive responses without using real credentials."""

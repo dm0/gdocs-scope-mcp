@@ -450,10 +450,6 @@ def test_delete_paragraph_preserves_required_body_newline(
     assert result['deleted_count'] == lines.count('Delete marker')
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason='Table text is merged into a paragraph with wrong source indices.',
-)
 @pytest.mark.parametrize(
     'operation', ['replace', 'insert_before', 'insert_after'],
 )

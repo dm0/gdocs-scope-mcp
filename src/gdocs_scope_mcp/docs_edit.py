@@ -70,6 +70,7 @@ from .models import (
     GoogleDocument,
     GoogleDocumentNamedStyleType,
     GoogleDocumentParagraph,
+    GoogleDocumentTable,
     InsertSucceedResponse,
     ReplaceSucceedResponse,
     SearchResult,
@@ -489,6 +490,28 @@ def _extract_paragraphs(doc: dict) -> list[Paragraph]:
 # def _paragraph_to_md(item: dict[str, ]):
 
 
+def _table_source_paragraphs(table: dict) -> list[DocumentParagraph]:
+    """Retain cell paragraphs and their terminal boundaries in source order."""
+    paragraphs = []
+    for row in table['tableRows']:
+        for cell in row['tableCells']:
+            for item in cell['content']:
+                if 'paragraph' in item:
+                    paragraphs.append(DocumentParagraph(
+                        start_index=item['startIndex'],
+                        end_index=item['endIndex'],
+                        text=''.join(
+                            element.get('textRun', {}).get('content', '')
+                            for element in item['paragraph']['elements']
+                        ),
+                        markdown='',
+                        table_cell_end_index=cell['endIndex'] - 1,
+                    ))
+                elif 'table' in item:
+                    paragraphs.extend(_table_source_paragraphs(item['table']))
+    return paragraphs
+
+
 def _parse_document_tree(doc: dict) -> DocumentTree:
     """Extract document hierarchy from a Docs API response."""
 
@@ -511,6 +534,10 @@ def _parse_document_tree(doc: dict) -> DocumentTree:
         )
         for source in doc['body']['content']
     ]
+    table_paragraphs = {
+        source['startIndex']: _table_source_paragraphs(source['table'])
+        for source in doc['body']['content'] if 'table' in source
+    }
     google_doc = GoogleDocument.model_validate(doc)
 
     headings = {}
@@ -519,9 +546,10 @@ def _parse_document_tree(doc: dict) -> DocumentTree:
         source_texts, google_doc.body.content, strict=True,
     ):
         if not isinstance(elem, GoogleDocumentParagraph):
+            # Display markup does not extend the preceding editable paragraph.
             last.paragraphs[-1].markdown += elem.to_markdown(google_doc)
-            last.paragraphs[-1].text += elem.to_text(google_doc)
-            last.paragraphs[-1].end_index = elem.end_index
+            if isinstance(elem, GoogleDocumentTable):
+                last.paragraphs.extend(table_paragraphs[elem.start_index])
             continue
         paragraph = DocumentParagraph(
             start_index=elem.start_index,
@@ -613,6 +641,25 @@ def _full_text_pos_to_doc_index(
     )
 
 
+def _full_text_range_to_doc_indices(
+    start: int, end: int, full_text: str,
+    text_map: list[tuple[int, int, str]],
+) -> tuple[int, int]:
+    """Reject a text range spanning omitted document structure."""
+    doc_start = _full_text_pos_to_doc_index(start, text_map)
+    doc_end = _full_text_pos_to_doc_index(end, text_map, end=True)
+    if doc_end - doc_start != utf16_length(full_text[start:end]):
+        raise ToolFailureError(EditFailedResponse(
+            code='INVALID_ARGUMENT',
+            description='The match crosses non-contiguous document structure.',
+            suggested_action=(
+                'Target text within a single paragraph or contiguous body '
+                'paragraphs; do not match across tables or non-text objects.'
+            ),
+        ))
+    return doc_start, doc_end
+
+
 def _normalize_anchor_excerpt(anchor_text: str, limit: int = 220) -> str:
     compact = re.sub(r'\s+', ' ', anchor_text.strip())
     if len(compact) <= limit:
@@ -692,7 +739,7 @@ def get_full_tree(doc_id: str) -> DocumentTree:
 
 
 # Preserve the public positional calling convention.
-def search_replace(  # noqa: PLR0917
+def search_replace(  # noqa: PLR0911, PLR0917
     doc_id: str,
     find: str,
     replace: str,
@@ -824,6 +871,25 @@ def search_replace(  # noqa: PLR0917
     )
 
     old_text = target.paragraph.text[target.start_index : target.end_index]
+
+    cell_end = target.paragraph.table_cell_end_index
+    if cell_end is not None and (
+        doc_end > cell_end
+        or utf16_length(target.paragraph.text) != (
+            target.paragraph.end_index - target.paragraph.start_index
+        )
+    ):
+        return EditFailedResponse(
+            code='INVALID_ARGUMENT',
+            description=(
+                'The table-cell match includes a protected cell boundary '
+                'or text whose source positions cannot be mapped reliably.'
+            ),
+            suggested_action=(
+                'Read the cell and target text within one paragraph, '
+                'excluding its final cell newline and non-text elements.'
+            ),
+        )
 
     # Apply: delete old text, then insert replacement at same position
     requests = []
@@ -1224,8 +1290,9 @@ def batch_replace(doc_id: str, replacements: list[dict]) -> dict:
         if occurrence == 0:
             # Replace all
             for ft_start, ft_end in matches:
-                ds = _full_text_pos_to_doc_index(ft_start, text_map)
-                de = _full_text_pos_to_doc_index(ft_end, text_map, end=True)
+                ds, de = _full_text_range_to_doc_indices(
+                    ft_start, ft_end, full_text, text_map,
+                )
                 changes.append(
                     (ds, de, replace_text, full_text[ft_start:ft_end])
                 )
@@ -1244,8 +1311,9 @@ def batch_replace(doc_id: str, replacements: list[dict]) -> dict:
                     )
                 )
             ft_start, ft_end = matches[idx]
-            ds = _full_text_pos_to_doc_index(ft_start, text_map)
-            de = _full_text_pos_to_doc_index(ft_end, text_map, end=True)
+            ds, de = _full_text_range_to_doc_indices(
+                ft_start, ft_end, full_text, text_map,
+            )
             changes.append((ds, de, replace_text, full_text[ft_start:ft_end]))
 
     # Sort by doc_start DESCENDING (apply end-of-doc first so indices stay
@@ -1388,8 +1456,9 @@ def add_comment(  # noqa: PLR0917
         )
 
     ft_start, ft_end = matches[target_idx]
-    doc_start = _full_text_pos_to_doc_index(ft_start, text_map)
-    doc_end = _full_text_pos_to_doc_index(ft_end, text_map, end=True)
+    doc_start, doc_end = _full_text_range_to_doc_indices(
+        ft_start, ft_end, full_text, text_map,
+    )
 
     # Create a named range at the anchor position
     range_name = f'comment-anchor-{uuid.uuid4().hex[:12]}'
