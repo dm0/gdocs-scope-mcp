@@ -296,16 +296,12 @@ def test_multiple_selected_sections_keep_document_order(mock_docs):
     mock_docs.batchUpdate.assert_not_called()
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason='Paragraph element discrimination omits rules and inline objects.',
-)
 @pytest.mark.parametrize(
     ('kind', 'payload'),
     [
-        ('horizontalRule', {'textStyle': {}}),
+        ('horizontalRule', {'textStyle': {'bold': True}}),
         ('inlineObjectElement', {
-            'inlineObjectId': 'fixture-image', 'textStyle': {},
+            'inlineObjectId': 'fixture-image', 'textStyle': {'bold': True},
         }),
     ],
 )
@@ -318,14 +314,11 @@ def test_non_text_paragraph_elements_keep_their_type(kind, payload):
     assert element.type == kind
     assert element.start_index == 1
     assert element.end_index == 2
+    assert element.text_style.bold is True
     if kind == 'inlineObjectElement':
         assert element.inline_object_id == 'fixture-image'
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason='Inline image elements are parsed as empty base elements.',
-)
 def test_captured_inline_images_are_included_in_reads(
     captured_document, mock_docs,
 ):
@@ -342,18 +335,17 @@ def test_captured_inline_images_are_included_in_reads(
     mock_docs.get.return_value.execute.side_effect = None
     mock_docs.get.return_value.execute.return_value = captured_document
 
+    document = GoogleDocument.model_validate(deepcopy(captured_document))
     result = docs_edit.read('example')
 
     markdown = ''.join(result.subset_md)
     for image in expected_images:
         assert image in markdown
+    for index in range(len(expected_images)):
+        assert f'Fixture image {index}' in document.to_text()
     mock_docs.batchUpdate.assert_not_called()
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason='Horizontal rules are parsed as empty base elements.',
-)
 def test_horizontal_rule_is_included_in_reads(simple_document, mock_docs):
     """Expose the document's horizontal rule in the Markdown read result."""
     simple_document['body']['content'] = [{
@@ -372,7 +364,56 @@ def test_horizontal_rule_is_included_in_reads(simple_document, mock_docs):
     result = docs_edit.read('example')
 
     assert '\n---\n' in ''.join(result.subset_md)
+    assert '\n---\n' in GoogleDocument.model_validate(
+        deepcopy(simple_document),
+    ).to_text()
     mock_docs.batchUpdate.assert_not_called()
+
+
+def test_text_runs_and_unknown_elements_keep_existing_behavior(
+    simple_document,
+):
+    """Recognized runs render normally; unknown element kinds remain opaque."""
+    adapter = TypeAdapter(GoogleDocumentParagraphElement)
+    document = GoogleDocument.model_validate(deepcopy(simple_document))
+    text = adapter.validate_python({
+        'startIndex': 5, 'endIndex': 10,
+        'textRun': {'content': 'Word\n', 'textStyle': {'italic': True}},
+    })
+    assert text.type == 'textRun'
+    assert (text.start_index, text.end_index) == (5, 10)
+    assert text.to_text(document) == 'Word'
+    assert text.to_markdown(document) == '<i>Word</i>'
+
+    unknown = adapter.validate_python({
+        'startIndex': 10, 'endIndex': 11,
+        'futureElement': {'someMetadata': 'opaque'},
+    })
+    assert unknown.type == 'base'
+    assert (unknown.start_index, unknown.end_index) == (10, 11)
+    assert unknown.to_text(document) == ''
+    assert unknown.to_markdown(document) == ''
+
+
+@pytest.mark.parametrize('title', ['Image title', None])
+def test_inline_object_title_is_optional_in_plain_text(simple_document, title):
+    """Resolve a typed image reference without inventing a missing title."""
+    simple_document['inlineObjects'] = {'image-id': {
+        'objectId': 'image-id',
+        'inlineObjectProperties': {'embeddedObject': {
+            'title': title,
+            'imageProperties': {'contentUri': 'https://example.com/image.png'},
+        }},
+    }}
+    document = GoogleDocument.model_validate(simple_document)
+    element = TypeAdapter(GoogleDocumentParagraphElement).validate_python({
+        'startIndex': 1, 'endIndex': 2,
+        'inlineObjectElement': {'inlineObjectId': 'image-id', 'textStyle': {}},
+    })
+    assert element.to_text(document) == (title or '')
+    assert element.to_markdown(document) == (
+        f'![{title or ""}](https://example.com/image.png)'
+    )
 
 
 @pytest.mark.xfail(

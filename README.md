@@ -86,6 +86,11 @@ Document reads accept omitted empty `lists` and `inlineObjects` collections.
 Supplied list definitions retain their formatting. If a paragraph references
 a missing list definition, Markdown rendering fails rather than guessing its
 numbering or bullet style; the parser retains the original list ID and text.
+Reads render supported inline images as Markdown image references and horizontal
+rules as `---`. Plain-text rendering uses image titles when available and keeps
+rule separators. Unknown paragraph elements retain the existing empty fallback.
+This read support does not establish safe edit-position mapping around non-text
+elements or implement image insertion from Markdown.
 
 ### Action annotations and edit receipts
 
