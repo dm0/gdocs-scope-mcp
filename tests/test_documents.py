@@ -100,10 +100,6 @@ def regex_document():
     )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason='Case-insensitive search lowercases regex character-class escapes.',
-)
 @pytest.mark.parametrize('scope', ['document', 'section'])
 @pytest.mark.parametrize('first', [False, True])
 @pytest.mark.parametrize(
@@ -129,6 +125,43 @@ def test_case_insensitive_regex_preserves_character_classes(
         expected_spans = expected_spans[:1]
     else:
         matches = target.find_all(pattern, case_sensitive=False, regex=True)
+
+    assert [
+        (match.start_index, match.end_index) for match in matches
+    ] == expected_spans
+
+
+@pytest.mark.parametrize('scope', ['document', 'section'])
+@pytest.mark.parametrize('first', [False, True])
+@pytest.mark.parametrize(
+    ('text', 'pattern', 'case_sensitive', 'regex', 'expected_spans'),
+    [
+        ('İ Target TARGET\n', 'target', False, True, [(2, 8), (9, 15)]),
+        ('İ ı ſ K\n', '[ISK]', False, True,
+         [(0, 1), (2, 3), (4, 5), (6, 7)]),
+        ('ПрИвЕт привет\n', 'ПРИВЕТ', False, True, [(0, 6), (7, 13)]),
+        ('Ab7 !\n', r'\S+', True, True, [(0, 3), (4, 5)]),
+        ('Ab7 AB7\n', 'Ab7', True, True, [(0, 3)]),
+        ('Ab7 AB7\n', 'aB7', False, False, [(0, 3), (4, 7)]),
+    ],
+)
+def test_search_case_handling_preserves_source_offsets(
+    regex_document, *, scope, first, text, pattern, case_sensitive, regex,
+    expected_spans,
+):
+    """Match Unicode regexes on original text and retain other search modes."""
+    section = regex_document.headings['example']
+    section.paragraphs[0] = DocumentParagraph(
+        start_index=1, end_index=1 + len(text), text=text, markdown=text,
+    )
+    target = regex_document if scope == 'document' else section
+    if first:
+        match = target.find_first(pattern, case_sensitive, regex)
+        assert match is not None
+        matches = [match]
+        expected_spans = expected_spans[:1]
+    else:
+        matches = target.find_all(pattern, case_sensitive, regex)
 
     assert [
         (match.start_index, match.end_index) for match in matches

@@ -171,6 +171,48 @@ def test_first_regex_match_reaches_nested_section(simple_document, mock_docs):
     )
 
 
+@pytest.mark.parametrize('heading_id', [None, 'nested'])
+@pytest.mark.parametrize('occurrence', [1, 2])
+@pytest.mark.parametrize(
+    ('text', 'pattern', 'matched', 'offsets'),
+    [
+        ('Ab7 !\n', r'\S+', ['Ab7', '!'], [0, 4]),
+        ('İ Target TARGET\n', 'target', ['Target', 'TARGET'], [2, 9]),
+    ],
+)
+def test_case_insensitive_regex_replaces_original_text(
+    simple_document, mock_docs, *, heading_id, occurrence,
+    text, pattern, matched, offsets,
+):
+    """Replace the selected original span without touching adjacent text."""
+    paragraph = simple_document['body']['content'][4]
+    paragraph['startIndex'] = 1
+    paragraph['endIndex'] = 1 + len(text)
+    paragraph['paragraph']['paragraphStyle'] = {
+        'namedStyleType': 'HEADING_1', 'headingId': 'nested',
+    }
+    paragraph['paragraph']['elements'][0]['startIndex'] = 1
+    paragraph['paragraph']['elements'][0]['endIndex'] = 1 + len(text)
+    paragraph['paragraph']['elements'][0]['textRun']['content'] = text
+    simple_document['body']['content'] = [paragraph]
+    result = docs_edit.search_replace(
+        'example', pattern, 'X', occurrence=occurrence,
+        heading_id=heading_id, regex=True,
+    )
+
+    assert result.ok is True
+    assert result.replaced == matched[occurrence - 1]
+    assert result.at_index == paragraph['startIndex'] + offsets[occurrence - 1]
+    original = '\n' + ''.join(
+        item['paragraph']['elements'][0]['textRun']['content']
+        for item in simple_document['body']['content']
+    )
+    start = result.at_index
+    assert edited_text(simple_document, mock_docs) == (
+        original[:start] + 'X' + original[start + len(result.replaced):]
+    )
+
+
 @pytest.mark.parametrize(
     ('heading_id', 'find'),
     [(None, 'Introduction'), ('parent', 'Parent'), ('nested', 'Nested')],

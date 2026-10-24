@@ -161,15 +161,16 @@ class DocumentSection(DocumentOutlineItem):
         first: bool = False,
         regex: bool = False,
     ) -> list[SearchResult]:
-        if not case_sensitive:
+        if not case_sensitive and not regex:
             search = search.lower()
+        flags = 0 if case_sensitive else re.IGNORECASE
         results = []
         for par in self.paragraphs:
-            text = par.text if case_sensitive else par.text.lower()
+            text = par.text if case_sensitive or regex else par.text.lower()
             pos = 0
             if regex:
                 if first:
-                    if match := re.search(search, text):
+                    if match := re.search(search, text, flags=flags):
                         results.append(
                             SearchResult(
                                 paragraph=par,
@@ -188,7 +189,7 @@ class DocumentSection(DocumentOutlineItem):
                             start_index=match.start(),
                             end_index=match.end(),
                         )
-                        for match in re.finditer(search, text)
+                        for match in re.finditer(search, text, flags=flags)
                     ]
                 )
             else:
@@ -287,8 +288,6 @@ class DocumentTree(DocumentBase):
         first: bool = False,
         regex: bool = False,
     ) -> list[SearchResult]:
-        if not case_sensitive:
-            search = search.lower()
         results = []
         for child in self.sections:
             found = child._find_text(
