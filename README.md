@@ -89,8 +89,13 @@ numbering or bullet style; the parser retains the original list ID and text.
 Reads render supported inline images as Markdown image references and horizontal
 rules as `---`. Plain-text rendering uses image titles when available and keeps
 rule separators. Unknown paragraph elements retain the existing empty fallback.
-This read support does not establish safe edit-position mapping around non-text
-elements or implement image insertion from Markdown.
+Targeted text replacements use original text-run positions, including UTF-16
+offsets, to preserve adjacent non-text elements. A match spanning an omitted
+object or horizontal rule is rejected with `INVALID_ARGUMENT` before writing.
+This does not implement editing the objects themselves or inserting images
+from Markdown. Batch replacements and comment anchors use the same source-range
+mapping and structural-gap check. Before/after insertion still targets whole
+paragraph boundaries; native literal replace-all retains Google's matching.
 
 ### Action annotations and edit receipts
 
@@ -132,8 +137,8 @@ Targeted replacement and before/after insertion also resolve individual
 paragraphs inside table cells, in row/cell order under the surrounding body
 heading. Insertions remain inside the selected cell. Table HTML is display
 markup, not searchable cell separators; searches do not span cell paragraphs.
-Replacement cannot remove a cell's mandatory final newline or edit a cell
-paragraph whose non-text elements prevent reliable text-position mapping.
+Replacement cannot remove a cell's mandatory final newline or span a non-text
+element. Text beside an object in the same cell uses its original run positions.
 Batch replacement and comment anchoring currently search body paragraphs;
 matches spanning a skipped table or another source gap are rejected before
 writes. Native table creation/conversion remains separate work (#9).
