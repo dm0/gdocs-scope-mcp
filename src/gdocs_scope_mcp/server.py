@@ -742,7 +742,8 @@ def docs_delete_comment(doc_id: str, comment_id: str) -> DeleteCommentResponse:
     },
 )
 def docs_read_comments(
-    doc_id: str, include_resolved: bool = False
+    doc_id: str, include_resolved: bool = False,
+    page_token: NonemptyText | None = None,
 ) -> ReadCommentsResponse:
     """
     Read a page of up to 100 comments on a Google Doc.
@@ -754,13 +755,17 @@ def docs_read_comments(
     Args:
         doc_id:           Google Doc ID
         include_resolved: Include resolved/deleted comments (default False)
+        page_token: Opaque token from the previous response. Omit for page one;
+            preserve doc_id and include_resolved when requesting later pages.
 
     Returns
     -------
-        A structured object with count and comments. Each comment has id,
+        A structured object with count, comments, next_page_token and has_more.
+        Each comment has id,
         content, author, anchored, named_range_id, quoted_text, resolved,
         deleted, and created. Count includes only returned items after
-        filtering; additional pages are not fetched.
+        filtering, not a document-wide total. Follow next_page_token until
+        null, even on empty filtered pages; each call fetches only one page.
     """
     creds = docs_edit._load_creds()
     drive = build('drive', 'v3', credentials=creds)
@@ -769,8 +774,10 @@ def docs_read_comments(
         drive.comments()
         .list(
             fileId=doc_id,
-            fields='comments(id,content,anchor,resolved,deleted,author,createdTime,quotedFileContent)',
+            fields='nextPageToken,comments(id,content,anchor,resolved,deleted,'
+            'author,createdTime,quotedFileContent)',
             pageSize=100,
+            pageToken=page_token,
         )
         .execute()
     )
@@ -807,7 +814,10 @@ def docs_read_comments(
             }
         )
 
-    return ReadCommentsResponse(count=len(results), comments=results)
+    return ReadCommentsResponse(
+        count=len(results), comments=results,
+        next_page_token=resp.get('nextPageToken') or None,
+    )
 
 
 @mcp.tool(
@@ -821,19 +831,24 @@ def docs_read_comments(
 )
 def docs_list(
     query: str = '', limit: PositiveInteger = 20,
+    page_token: NonemptyText | None = None,
 ) -> ListDocumentsResponse:
     """
     List Google Docs from Drive, optionally filtered by a search query.
 
     Args:
         query: Optional search terms (searches title and content)
-        limit: Positive integer maximum (default 20, values above 100 capped).
+        limit: Positive per-page maximum (default 20, above 100 capped).
+        page_token: Opaque token from the previous response. Omit for page one;
+            preserve query, limit and shared-drive settings across pages.
 
     Returns
     -------
-        A structured object with count and documents. Each document has id,
+        A structured object with count, documents, next_page_token and
+        has_more. Each document has id,
         name, modifiedTime, and webViewLink. Count covers this response only;
-        additional pages are not fetched.
+        not a total. Follow next_page_token until null. Each call fetches one
+        page; has_more is API continuation, not an estimate of remaining items.
     """
     creds = docs_edit._load_creds()
     drive = build('drive', 'v3', credentials=creds)
@@ -866,15 +881,19 @@ def docs_list(
         .list(
             q=q,
             pageSize=min(limit, 100),
-            fields='files(id, name, modifiedTime, webViewLink)',
+            fields='nextPageToken,files(id, name, modifiedTime, webViewLink)',
             orderBy='modifiedTime desc',
+            pageToken=page_token,
             **drive_kwargs,
         )
         .execute()
     )
 
     files = results.get('files', [])
-    return ListDocumentsResponse(count=len(files), documents=files)
+    return ListDocumentsResponse(
+        count=len(files), documents=files,
+        next_page_token=results.get('nextPageToken') or None,
+    )
 
 
 @mcp.tool(

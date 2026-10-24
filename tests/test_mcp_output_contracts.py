@@ -19,6 +19,7 @@ from gdocs_scope_mcp.tool_logging import LOGGER_NAME
 EXPECTED_SHORT_PREVIEW_LIMIT = 80
 EXPECTED_TEXT_PREVIEW_LIMIT = 200
 EXPECTED_RECEIPT_ITEM_LIMIT = 100
+EXPECTED_LIST_PAGE_SIZE = 100
 
 
 @pytest.mark.usefixtures('contract_api', 'table_document')
@@ -764,7 +765,9 @@ def test_empty_lists_keep_named_typed_collections(contract_api, name):
 
     _, response = call_tool(name, arguments)
 
-    assert response.structured_content == {'count': 0, collection: []}
+    assert response.structured_content == {
+        'count': 0, collection: [], 'next_page_token': None, 'has_more': False,
+    }
 
 
 def test_document_list_allows_missing_optional_drive_fields(contract_api):
@@ -1121,13 +1124,12 @@ def test_comment_occurrence_description_is_complete_in_catalog():
     assert '2, 3' in text
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason='Listing responses omit continuation and completeness metadata.',
-)
 @pytest.mark.parametrize('name', ['docs_list', 'docs_read_comments'])
 @pytest.mark.parametrize('has_more', [False, True])
-def test_listing_reports_page_continuation(contract_api, name, has_more):
+@pytest.mark.parametrize('empty', [False, True])
+def test_listing_reports_page_continuation(
+    contract_api, name, has_more, empty,
+):
     """Distinguish a terminal page from a page with further results."""
     if name == 'docs_list':
         request = contract_api.files.return_value.list.return_value
@@ -1135,6 +1137,8 @@ def test_listing_reports_page_continuation(contract_api, name, has_more):
     else:
         request = contract_api.comments.return_value.list.return_value
         arguments = {'doc_id': 'example'}
+    if empty:
+        request.execute.return_value = {}
     if has_more:
         request.execute.return_value['nextPageToken'] = 'next-page'
 
@@ -1143,13 +1147,9 @@ def test_listing_reports_page_continuation(contract_api, name, has_more):
     data = response.structured_content
     assert data['has_more'] is has_more
     assert data['next_page_token'] == ('next-page' if has_more else None)
-    assert data['count'] == 1
+    assert data['count'] == (0 if empty else 1)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason='Listing tools do not accept a continuation token.',
-)
 @pytest.mark.parametrize('name', ['docs_list', 'docs_read_comments'])
 def test_listing_forwards_page_token_to_drive(contract_api, name):
     """Let an agent request the next page without repeating page one."""
@@ -1168,10 +1168,6 @@ def test_listing_forwards_page_token_to_drive(contract_api, name):
     assert 'nextPageToken' in resource.list.call_args.kwargs['fields']
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason='An empty filtered comment page hides continuation metadata.',
-)
 def test_filtered_comment_page_keeps_continuation(contract_api):
     """Zero visible comments on this page must not imply no later comments."""
     resource = contract_api.comments.return_value
@@ -1187,6 +1183,107 @@ def test_filtered_comment_page_keeps_continuation(contract_api):
     assert data['count'] == 0
     assert data['has_more'] is True
     assert data['next_page_token'] == 'more-comments'
+
+
+@pytest.mark.parametrize(
+    ('name', 'include_resolved', 'shared_drive'),
+    [('docs_list', False, False), ('docs_list', False, True),
+     ('docs_read_comments', False, False),
+     ('docs_read_comments', True, False)],
+)
+def test_two_page_listing_preserves_request_options(
+    contract_api, monkeypatch, *, name, include_resolved, shared_drive,
+):
+    """Reach page two with the same filters and shared-drive options."""
+    monkeypatch.setenv('GOOGLE_DOCS_USE_DRIVE', 'false')
+    monkeypatch.delenv('GOOGLE_DOCS_DRIVE_ID', raising=False)
+    if shared_drive:
+        monkeypatch.setenv('GOOGLE_DOCS_DRIVE_ID', 'shared-drive')
+    if name == 'docs_list':
+        resource = contract_api.files.return_value
+        arguments = {'query': 'Example', 'limit': 150}
+        collection, key = 'documents', 'files'
+        first = {'id': 'first', 'name': 'First'}
+        second = {'id': 'second', 'name': 'Second'}
+    else:
+        resource = contract_api.comments.return_value
+        arguments = {
+            'doc_id': 'example', 'include_resolved': include_resolved,
+        }
+        collection = key = 'comments'
+        first = {'id': 'first', 'resolved': True}
+        second = {'id': 'second', 'content': 'Visible comment'}
+
+    def page(**kwargs):
+        token = kwargs['pageToken']
+        assert token in {None, 'next-page'}
+        response = (
+            {key: [first], 'nextPageToken': 'next-page'}
+            if token is None else {key: [second]}
+        )
+        return MagicMock(execute=MagicMock(return_value=response))
+
+    resource.list.side_effect = page
+    tool, first_result = call_tool(name, arguments)
+    first_data = first_result.structured_content
+    _, second_result = call_tool(name, {
+        **arguments, 'page_token': first_data['next_page_token'],
+    })
+    second_data = second_result.structured_content
+    for result in [first_result, second_result]:
+        assert result.is_error is False
+        validate(result.structured_content, tool.outputSchema)
+    assert first_data['has_more'] is True
+    assert second_data['has_more'] is False
+    assert second_data['next_page_token'] is None
+    assert [item['id'] for item in second_data[collection]] == ['second']
+    expected_first = (
+        [] if name == 'docs_read_comments' and not include_resolved
+        else ['first']
+    )
+    assert [item['id'] for item in first_data[collection]] == expected_first
+    assert first_data['count'] == len(expected_first)
+    assert second_data['count'] == 1
+    first_request, second_request = (
+        dict(call.kwargs) for call in resource.list.call_args_list
+    )
+    assert first_request.pop('pageToken') is None
+    assert second_request.pop('pageToken') == 'next-page'
+    assert first_request == second_request
+    assert first_request['pageSize'] == EXPECTED_LIST_PAGE_SIZE
+    assert 'nextPageToken' in first_request['fields']
+    if name == 'docs_list':
+        assert 'fullText contains "Example"' in first_request['q']
+        assert first_request['orderBy'] == 'modifiedTime desc'
+        if shared_drive:
+            assert first_request['driveId'] == 'shared-drive'
+            assert first_request['corpora'] == 'drive'
+            assert first_request['supportsAllDrives'] is True
+            assert first_request['includeItemsFromAllDrives'] is True
+    else:
+        assert first_request['fileId'] == 'example'
+
+
+@pytest.mark.parametrize('name', ['docs_list', 'docs_read_comments'])
+def test_invalid_listing_token_has_restart_guidance(contract_api, name):
+    """A rejected cursor remains a structured error with recovery guidance."""
+    resource = (
+        contract_api.files if name == 'docs_list' else contract_api.comments
+    ).return_value
+    resource.list.return_value.execute.side_effect = HttpError(
+        Response({'status': '400'}), b'{"error":{"message":"private token"}}',
+    )
+    arguments = {'page_token': 'expired-token'}
+    if name == 'docs_read_comments':
+        arguments['doc_id'] = 'example'
+    tool, result = call_tool(name, arguments, raise_on_error=False)
+    data = result.structured_content
+    assert result.is_error is True
+    assert data['code'] == 'INVALID_ARGUMENT'
+    assert 'omit page_token' in data['suggested_action']
+    assert 'deduplicate' in data['suggested_action']
+    assert 'private token' not in json.dumps(data)
+    validate(data, tool.outputSchema)
 
 
 @pytest.mark.parametrize(
