@@ -132,6 +132,28 @@ def test_tree_keeps_preamble_and_sibling_boundaries(simple_document):
     assert 'elsewhere' not in tree.headings['parent'].subtree_text()
 
 
+@pytest.mark.parametrize('split_runs', [False, True])
+def test_editable_tree_preserves_api_paragraph_text(
+    boundary_document, split_runs,
+):
+    """Searchable text retains exactly the source paragraph's terminator."""
+    document = boundary_document(split_runs=split_runs)
+    source_texts = [
+        ''.join(element['textRun']['content']
+                for element in source['paragraph']['elements'])
+        for source in document['body']['content']
+    ]
+    tree = docs_edit._parse_document_tree(document)
+    section = tree.headings['boundary']
+
+    assert section.subtree_text() == 'Prefix !\nMiddle ?\nBoundarySentinel\n'
+    for paragraph, text in zip(section.paragraphs, source_texts, strict=True):
+        assert paragraph.text == text
+        assert len(paragraph.text) == (
+            paragraph.end_index - paragraph.start_index
+        )
+
+
 def test_captured_read_preserves_inline_and_paragraph_styles(
     captured_document,
     mock_docs,
