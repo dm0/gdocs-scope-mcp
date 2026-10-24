@@ -117,10 +117,6 @@ def test_markdown_html_stage(markdown, expected):
     assert markdown_to_html(markdown) == expected
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason='The Markdown HTML stage escapes markup emitted by document reads.',
-)
 @pytest.mark.parametrize(
     ('markup', 'expected_style'),
     [
@@ -140,10 +136,6 @@ def test_read_style_html_is_converted_to_text_style(markup, expected_style):
     assert styles[0]['range'] == {'startIndex': 13, 'endIndex': 17}
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason='The Markdown HTML stage escapes paragraph alignment markup.',
-)
 def test_read_alignment_html_is_converted_to_paragraph_style():
     """Keep the centered paragraph syntax emitted by document reads."""
     requests = markdown_to_requests(
@@ -158,10 +150,6 @@ def test_read_alignment_html_is_converted_to_paragraph_style():
     assert styles[0]['paragraphStyle']['alignment'] == 'CENTER'
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason='The Markdown HTML stage escapes structural heading anchors.',
-)
 def test_read_heading_anchor_is_not_inserted_as_visible_text():
     """Keep heading ID metadata out of visible inserted text."""
     requests = markdown_to_requests(
