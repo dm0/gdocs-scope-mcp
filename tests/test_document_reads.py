@@ -68,8 +68,9 @@ def test_reads_with_both_optional_collections_omitted(
     result = getattr(docs_edit, operation)('example')
     assert result.document_id == 'example'
     if operation == 'read':
-        assert 'Introduction' in ''.join(result.subset_md)
-        assert 'Target phrase elsewhere' in ''.join(result.subset_md)
+        markdown = ''.join(section.markdown for section in result.sections)
+        assert 'Introduction' in markdown
+        assert 'Target phrase elsewhere' in markdown
     else:
         assert [section.id for section in result.sections] == [
             '', 'parent', 'nested', 'other',
@@ -142,8 +143,8 @@ def test_reads_work_when_api_omits_inline_objects(simple_document, mock_docs):
         '', 'parent', 'nested', 'other',
     ]
     assert result.selected_headings == ['nested']
-    assert 'Target phrase again' in result.subset_md[0]
-    assert 'elsewhere' not in result.subset_md[0]
+    assert 'Target phrase again' in result.sections[0].markdown
+    assert 'elsewhere' not in result.sections[0].markdown
     mock_docs.batchUpdate.assert_not_called()
 
 
@@ -236,7 +237,7 @@ def test_captured_read_preserves_inline_and_paragraph_styles(
 
     result = docs_edit.read('example', ['h.gieyzo6dbxcm'])
 
-    text = result.subset_md[0]
+    text = result.sections[0].markdown
     for fragment in [
         '<b>bold</b>',
         '<i>italic</i>',
@@ -261,8 +262,8 @@ def test_partial_read_includes_descendants_and_heading_anchors(mock_docs):
 
     assert result.partial is True
     assert result.selected_headings == ['parent']
-    assert len(result.subset_md) == 1
-    text = result.subset_md[0]
+    assert len(result.sections) == 1
+    text = result.sections[0].markdown
     assert '<a id=parent></a>Parent' in text
     assert '<a id=nested></a>Nested' in text
     assert 'Target phrase again' in text
@@ -277,8 +278,8 @@ def test_full_read_includes_all_sections(mock_docs):
 
     assert result.partial is False
     assert result.selected_headings is None
-    assert len(result.subset_md) == 3
-    text = ''.join(result.subset_md)
+    assert len(result.sections) == 3
+    text = ''.join(section.markdown for section in result.sections)
     assert (
         text.index('Introduction') < text.index('Parent') < text.index('Other')
     )
@@ -290,9 +291,9 @@ def test_multiple_selected_sections_keep_document_order(mock_docs):
     """Selected independent sections are returned in document order."""
     result = docs_edit.read('example', ['other', 'nested'])
 
-    assert len(result.subset_md) == 2
-    assert 'Target phrase again' in result.subset_md[0]
-    assert 'Target phrase elsewhere' in result.subset_md[1]
+    assert len(result.sections) == 2
+    assert 'Target phrase again' in result.sections[0].markdown
+    assert 'Target phrase elsewhere' in result.sections[1].markdown
     mock_docs.batchUpdate.assert_not_called()
 
 
@@ -338,7 +339,7 @@ def test_captured_inline_images_are_included_in_reads(
     document = GoogleDocument.model_validate(deepcopy(captured_document))
     result = docs_edit.read('example')
 
-    markdown = ''.join(result.subset_md)
+    markdown = ''.join(section.markdown for section in result.sections)
     for image in expected_images:
         assert image in markdown
     for index in range(len(expected_images)):
@@ -363,7 +364,8 @@ def test_horizontal_rule_is_included_in_reads(simple_document, mock_docs):
 
     result = docs_edit.read('example')
 
-    assert '\n---\n' in ''.join(result.subset_md)
+    markdown = ''.join(section.markdown for section in result.sections)
+    assert '\n---\n' in markdown
     assert '\n---\n' in GoogleDocument.model_validate(
         deepcopy(simple_document),
     ).to_text()
@@ -416,10 +418,6 @@ def test_inline_object_title_is_optional_in_plain_text(simple_document, title):
     )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason='Unknown heading IDs currently produce a successful empty read.',
-)
 def test_partial_read_contract_rejects_all_unknown_headings(mock_docs):
     """An entirely unresolved selection must not look like an empty section."""
     result = docs_edit.read('example', ['missing-heading'])
@@ -429,10 +427,6 @@ def test_partial_read_contract_rejects_all_unknown_headings(mock_docs):
     mock_docs.batchUpdate.assert_not_called()
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason='selected_headings echoes requested IDs without resolving them.',
-)
 def test_partial_read_contract_reports_found_and_unknown_headings(mock_docs):
     """Separate unresolved IDs from the sections actually returned."""
     result = docs_edit.read('example', ['missing-heading', 'nested'])
@@ -442,23 +436,16 @@ def test_partial_read_contract_reports_found_and_unknown_headings(mock_docs):
     mock_docs.batchUpdate.assert_not_called()
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason='A selected parent and descendant currently duplicate content.',
-)
 def test_partial_read_contract_deduplicates_overlapping_subtrees(mock_docs):
     """Return nested content once when both ancestor and child are selected."""
     result = docs_edit.read('example', ['parent', 'nested'])
 
-    assert ''.join(result.subset_md).count('Target phrase again') == 1
+    markdown = ''.join(section.markdown for section in result.sections)
+    assert markdown.count('Target phrase again') == 1
     assert result.selected_headings == ['parent']
     mock_docs.batchUpdate.assert_not_called()
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason='Returned Markdown chunks do not have explicit heading identities.',
-)
 def test_partial_read_contract_identifies_each_returned_section(mock_docs):
     """Associate each Markdown chunk with its resolved heading ID."""
     result = docs_edit.read('example', ['nested', 'other'])

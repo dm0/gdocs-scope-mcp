@@ -331,23 +331,35 @@ class DocumentTree(DocumentBase):
         return ''.join([child.subtree_text() for child in self.sections])
 
 
-class DocumentSubset(DocumentBase):
-    """A subset of document contents"""
+class DocumentReadSection(BaseModel):
+    """Identify a returned subtree or the document preamble."""
 
-    subset_md: Annotated[
-        Sequence[str],
-        Field(
-            description='An array of Markdown strings containing the '
-            'requested document sections. Heading lines include '
-            "hidden HTML anchor tags (e.g., <a id='...'></a>) "
-            'matching their structural IDs.'
-        ),
-    ]
+    heading_id: str | None = Field(
+        description='Root heading ID, or null for content before any heading.',
+    )
+    markdown: str = Field(
+        description='Markdown including nested subsections and heading ID '
+        'anchors; preamble content contains no heading root.',
+    )
+
+
+class DocumentSubset(DocumentBase):
+    """Return identified document sections and selection diagnostics."""
+
+    sections: list[DocumentReadSection] = Field(
+        description='Non-overlapping section subtrees in document order. '
+        'Whole-document reads include a preamble entry with heading_id=null.',
+    )
+    unknown_heading_ids: list[str] = Field(
+        default_factory=list,
+        description='Unresolved requested IDs, deduplicated in request order.',
+    )
     selected_headings: Annotated[
         Sequence[str] | None,
         Field(
-            description='List of sections in the response or None if the '
-            'whole document is returned'
+            description='Effective root heading IDs in document order, with '
+            'duplicates and selected descendants removed; null for a '
+            'whole-document read, [] for an empty selection.'
         ),
     ]
     partial: Annotated[

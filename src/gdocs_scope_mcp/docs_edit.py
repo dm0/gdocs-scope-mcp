@@ -55,6 +55,7 @@ from .models import (
     AppendSucceedResponse,
     DocumentOutline,
     DocumentParagraph,
+    DocumentReadSection,
     DocumentSection,
     DocumentSubset,
     DocumentTree,
@@ -693,7 +694,9 @@ def _render_comment_with_anchor_text(comment: str, anchor_text: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def read(doc_id: str, heading_ids: list[str] | None = None) -> DocumentSubset:
+def read(
+    doc_id: str, heading_ids: list[str] | None = None,
+) -> DocumentSubset | EditFailedResponse:
     """
     Read Google document or its parts including all nested headings.
     """
@@ -703,18 +706,37 @@ def read(doc_id: str, heading_ids: list[str] | None = None) -> DocumentSubset:
     google_doc = _parse_document_tree(doc)
 
     if heading_ids is None:
-        items = [section.subtree_markdown() for section in google_doc.sections]
+        roots = google_doc.sections
+        selected = None
+        unknown = []
     else:
-        items = [
-            item.subtree_markdown()
-            for section in google_doc.sections
-            for item in section.subtree()
-            if item.id in heading_ids
+        requested = set(heading_ids)
+        resolved = requested.intersection(google_doc.headings)
+        unknown = list(dict.fromkeys(
+            item for item in heading_ids if item not in google_doc.headings
+        ))
+        if heading_ids and not resolved:
+            return EditFailedResponse(
+                code='HEADING_NOT_FOUND',
+                description='None of the requested heading IDs were found.',
+                suggested_action='Call docs_get_tree to refresh heading IDs, '
+                'then retry with IDs from the current outline.',
+            )
+        roots = [
+            item for item in google_doc.descendants()
+            if item.id in resolved
+            and not resolved.intersection(item.ancestor_ids)
         ]
+        selected = [item.id for item in roots]
 
     return DocumentSubset(
-        subset_md=items,
-        selected_headings=heading_ids,
+        sections=[
+            DocumentReadSection(
+                heading_id=item.id or None, markdown=item.subtree_markdown(),
+            ) for item in roots
+        ],
+        unknown_heading_ids=unknown,
+        selected_headings=selected,
         partial=heading_ids is not None,
         title=google_doc.title,
         revision_id=google_doc.revision_id,
