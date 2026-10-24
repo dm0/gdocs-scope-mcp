@@ -217,7 +217,7 @@ def docs_get_tree(doc_id: str) -> DocumentOutline:
 )
 def docs_read(
     doc_id: str, heading_ids: list[str] | None = None
-) -> DocumentSubset:
+) -> DocumentSubset | EditFailedResponse:
     """
     Read a Google document's content converted to Markdown.
 
@@ -229,11 +229,16 @@ def docs_read(
         doc_id: Google Doc ID from the URL.
         heading_ids: Optional list of heading IDs to fetch.
             Pass null or omit this field entirely to read the whole document.
+            An empty list returns no sections. Duplicate IDs and selected
+            descendants of selected ancestors are collapsed in document order.
 
     Returns
     -------
-        A structured object with document_id, title, revision_id, subset_md
-        (an array of Markdown strings), selected_headings, and partial.
+        Document metadata and sections [{heading_id, markdown}], effective
+        selected_headings, unknown_heading_ids, and partial. Whole reads
+        include the preamble with heading_id=null. Mixed selections return
+        valid content and diagnostics; all-unknown selections fail with
+        HEADING_NOT_FOUND. Refresh IDs with docs_get_tree after that error.
     """
     if isinstance(heading_ids, str):
         heading_ids = [heading_ids]

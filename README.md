@@ -461,11 +461,26 @@ docs_get_tree(doc_id="...")
 
 #### `docs_read(doc_id, heading_ids=None)`
 
-Return document content as an array of Markdown strings in `subset_md`,
-alongside `document_id`, `title`, `revision_id`, `selected_headings`, and `partial`.
+Return document content as `sections: [{heading_id, markdown}]`, alongside
+`document_id`, `title`, `revision_id`, `selected_headings`,
+`unknown_heading_ids`, and `partial`. This replaces the former `subset_md` field;
+use each section's `markdown` and explicit `heading_id` instead.
 Pass heading IDs from the outline to return only those section subtrees,
 including their nested subsections. Omit `heading_ids` to read the whole document.
 Heading lines include HTML anchors carrying their structural IDs.
+
+Omitted or null `heading_ids` returns the whole document (`partial=false`,
+`selected_headings=null`), including any preamble before the first heading as
+an entry with `heading_id=null`. A document without headings has only that
+preamble entry; an empty document may have no sections.
+
+An explicit empty list returns no sections (`partial=true`,
+`selected_headings=[]`). Other selections return effective root IDs and their
+subtrees in document order. Duplicate IDs and descendants of selected ancestors
+are collapsed, so content appears once. Unknown IDs are reported separately,
+deduplicated in request order. Mixed valid/unknown selections return valid
+content; if every requested ID is unknown, the tool returns `HEADING_NOT_FOUND`
+with MCP `isError=true`. Refresh IDs with `docs_get_tree` before retrying.
 
 ```python
 docs_read(doc_id="...", heading_ids=["heading-id-from-outline"])
