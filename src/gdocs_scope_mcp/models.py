@@ -17,6 +17,8 @@ from pydantic import (
 )
 from typing_extensions import Self
 
+from .text_indices import utf16_length
+
 HEADING_LEVELS = {
     'TITLE': 'Title',
     'SUBTITLE': 'Subtitle',
@@ -884,7 +886,8 @@ class GoogleDocumentTextRun(GoogleDocumentStructuralElement):
         return self.content.replace('\u000b', '\n')
 
     def __len__(self) -> int:
-        return len(self.content)
+        """Return this run's length in Google Docs UTF-16 index units."""
+        return utf16_length(self.content)
 
 
 class GoogleDocumentHorizontalRule(GoogleDocumentStructuralElement):
