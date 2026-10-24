@@ -75,8 +75,8 @@ are not JSON-encoded strings, and edit results have no outer `result` wrapper.
 - `docs_read_comments` returns `{count, comments}`. Each comment exposes its
   text, author, anchor metadata, and resolved/deleted state as typed fields.
 - Existing fields such as `with` in batch changes and bookmark metadata in
-  comment creation are preserved. The input `replacements_json` remains a
-  JSON string for compatibility.
+  comment creation are preserved. Batch input now uses the typed
+  `replacements` array; the old `replacements_json` parameter was removed.
 
 List counts describe returned items, not the total in Drive or the document.
 These tools still fetch only one page. Clients using the previous JSON-string
@@ -452,7 +452,7 @@ List Google Docs from Drive, optionally filtered by a search query.
 | Param | Type | Default | Description |
 |-------|------|---------|-------------|
 | `query` | string | `""` | Search terms (searches title and content) |
-| `limit` | int | `20` | Maximum results, capped at 100 |
+| `limit` | int | `20` | Positive integer maximum; values above 100 are capped |
 
 Returns `{count, documents}`. Each document has `id`, `name`, `modifiedTime`,
 and `webViewLink`; the last two can be null. Only one page is fetched, and
@@ -576,17 +576,17 @@ plain-text preview of up to 200 Unicode code points), `inserted_char_count`
 
 ---
 
-#### `docs_batch_replace(doc_id, replacements_json)`
+#### `docs_batch_replace(doc_id, replacements)`
 Apply multiple find→replace operations **atomically** in a single API call. Either all changes succeed or none do.
 
 ```
 docs_batch_replace(
   doc_id="...",
-  replacements_json='''[
+  replacements=[
     {"find": "[CLIENT]", "replace": "Acme Corp", "occurrence": 0},
     {"find": "[DATE]", "replace": "10 March 2026", "occurrence": 0},
     {"find": "DRAFT", "replace": "FINAL"}
-  ]'''
+  ]
 )
 ```
 
@@ -594,16 +594,32 @@ Each item in the array:
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `find` | string | required | Text to find |
-| `replace` | string | required | Replacement text |
-| `occurrence` | int | `1` | `1` = first, `0` = all |
+| `find` | string | required | Nonempty text or regex pattern to find |
+| `replace` | string | required | Replacement text; empty string deletes matches |
+| `occurrence` | int | `1` | Nonnegative; `1` = first, `0` = all |
 | `regex` | bool | `false` | Regex mode |
 
 Returns document/scope metadata, `ok`, `applied`, up to 100 `changes`, and
 `changes_truncated`. Each change has bounded `replaced` and `with` previews,
 their full lengths and truncation flags, and diagnostic `at_index`;
 changes are returned in document order.
-`replacements_json` is a JSON string, not a native array argument.
+Pass a native, nonempty array of objects. `replacements_json` was removed;
+migrate by passing its decoded array as `replacements`. Every item is validated
+before credentials are loaded or a document is read. Unknown item fields,
+missing required fields, invalid regex syntax, and incorrect types are rejected.
+Numbers and booleans are not accepted as strings; integer fields reject strings,
+floats and booleans, and `regex` requires a boolean. Batch `occurrence=0` supports
+both literal and regex replace-all. All matches are planned from the original
+document and submitted together in one `batchUpdate`.
+
+Search phrases (`find`), insertion/deletion anchors, and comment `anchor_text`
+must be nonempty strings. Whitespace is preserved and counts as nonempty, so it
+can intentionally match document whitespace. Targeted replacement occurrences
+are nonnegative integers; comment occurrences start at 1. Listing limits are
+positive integers, with values above 100 still capped at 100. Invalid inputs
+return `INVALID_ARGUMENT`, recovery guidance, and MCP `isError=true` before
+Google API access. Empty replacement text remains valid. The single-replacement
+tool retains its restriction: `occurrence=0` requires literal, unscoped matching.
 
 ---
 
