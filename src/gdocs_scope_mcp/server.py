@@ -110,6 +110,12 @@ EDIT RECEIPTS:
     scope, including occurrence=1. Native replace-all reports only changes.
 
 EDITING TOOLS:
+    Rich insertion accepts reader HTML for bold, italic, underline and aligned
+    paragraphs. Heading-ID anchors are metadata, not visible inserted text or
+    IDs to reuse. Other wrappers retain child text without unsupported styles;
+    this does not provide complete formatting round trips. rich=False keeps
+    the original markup literal.
+
     docs_get_tree          Read hierarchical document tree (headings)
     docs_read              Read document contents (paragraphs + plain)
     docs_search_replace    Find and replace text (occurrence-targeted or all)

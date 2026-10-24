@@ -632,6 +632,20 @@ a paragraph break before the content. With `rich=True`, separate paragraphs
 with blank lines; headings and emphasis use the shared converter. Native lists
 and tables are not implemented. Set `rich=False` to preserve text literally.
 
+All three rich insertion tools (`docs_append`, `docs_insert_before`, and
+`docs_insert_after`) also accept the reader's HTML for bold (`b`), italic (`i`),
+underline (`u`), and paragraph alignment (`p` with `text-align: center`, `right`,
+or `justify`). Nested inline styles combine within their text ranges. Heading
+ID anchors (`<a id=...></a>`) are omitted from inserted text; new headings use
+the Markdown heading level and receive their own Google Docs IDs.
+
+This is a bounded read-to-write subset, not complete HTML or formatting
+round-trip support. Other wrappers retain their child text without preserving
+unsupported formatting or attributes; non-text tags may contribute no content.
+For example, a styled `span` retains its text but loses its styling. Native
+links, lists, tables, images, and code formatting still have separate insertion
+limitations. Use `rich=False` to preserve HTML tags and Markdown literally.
+
 ```
 docs_append(doc_id="...", text="Document last updated: March 2026.")
 ```

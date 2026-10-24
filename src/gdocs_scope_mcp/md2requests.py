@@ -24,6 +24,7 @@ from .models import (
 @lru_cache
 def _md_instance() -> mistune.Markdown:
     md = mistune.create_markdown(
+        escape=False,
         plugins=['strikethrough', 'table', 'url', 'superscript', 'subscript']
     )
 
