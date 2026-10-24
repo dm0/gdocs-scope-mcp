@@ -138,3 +138,62 @@ def apply_insertions():
         return text, styled
 
     return apply
+
+
+@pytest.fixture
+def table_document(simple_document):
+    """Provide table cells, paragraph scopes, and structural source gaps."""
+    index = 1
+
+    def paragraph(text, heading=None):
+        nonlocal index
+        start = index
+        index += len(text.encode('utf-16-le')) // 2
+        style = {'namedStyleType': 'NORMAL_TEXT'}
+        if heading:
+            style = {'namedStyleType': 'HEADING_1', 'headingId': heading}
+        return {
+            'startIndex': start, 'endIndex': index,
+            'paragraph': {
+                'paragraphStyle': style,
+                'elements': [{
+                    'startIndex': start, 'endIndex': index,
+                    'textRun': {'content': text, 'textStyle': {}},
+                }],
+            },
+        }
+
+    content = [paragraph('Owner\n', 'owner'), paragraph('Before table\n')]
+    table_start = index
+    index += 1
+    rows = []
+    for row_texts in [
+        [['First😀\n', 'Cell tail !\n'], ['Second\n']],
+        [['Third\n'], ['Fourth\n']],
+    ]:
+        row_start = index
+        index += 1
+        cells = []
+        for texts in row_texts:
+            cell_start = index
+            index += 1
+            cell_content = [paragraph(text) for text in texts]
+            cells.append({
+                'startIndex': cell_start, 'endIndex': index,
+                'content': cell_content,
+                'tableCellStyle': {'rowSpan': 1, 'columnSpan': 1},
+            })
+        rows.append({
+            'startIndex': row_start, 'endIndex': index, 'tableCells': cells,
+        })
+    index += 1
+    content.append({
+        'startIndex': table_start, 'endIndex': index,
+        'table': {'rows': 2, 'columns': 2, 'tableRows': rows},
+    })
+    content.extend([
+        paragraph('After table\n'), paragraph('Other\n', 'other'),
+        paragraph('Second elsewhere\n'),
+    ])
+    simple_document['body']['content'] = content
+    return simple_document

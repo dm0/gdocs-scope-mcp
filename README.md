@@ -117,6 +117,16 @@ API positions and ranges, including `at_index`, use UTF-16 code units:
 Text search and slicing retain Python code-point offsets; targeted edits,
 batch replacements, comment anchors, and rich-text formatting convert these
 offsets to UTF-16 when constructing Google Docs requests.
+
+Targeted replacement and before/after insertion also resolve individual
+paragraphs inside table cells, in row/cell order under the surrounding body
+heading. Insertions remain inside the selected cell. Table HTML is display
+markup, not searchable cell separators; searches do not span cell paragraphs.
+Replacement cannot remove a cell's mandatory final newline or edit a cell
+paragraph whose non-text elements prevent reliable text-position mapping.
+Batch replacement and comment anchoring currently search body paragraphs;
+matches spanning a skipped table or another source gap are rejected before
+writes. Native table creation/conversion remains separate work (#9).
 Before/after insertion adds `inserted_char_count`, `preview_truncated`,
 `anchor_char_count`, and `anchor_preview_truncated`. The insertion preview
 remains at most 200 code points and the anchor preview at most 80. Append

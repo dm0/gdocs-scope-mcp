@@ -126,6 +126,7 @@ class DocumentParagraph(BaseModel):
     end_index: int
     text: str
     markdown: str
+    table_cell_end_index: int | None = None
 
 
 class SearchResult(BaseModel):
