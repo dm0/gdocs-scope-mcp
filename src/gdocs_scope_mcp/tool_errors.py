@@ -95,6 +95,14 @@ def failure_from_exception(
                 'expired, omit page_token to restart pagination with the '
                 'same query and filters; deduplicate items already seen.'
             )
+        if status == HTTPStatus.BAD_REQUEST and tool_name in {
+            'docs_append', 'docs_insert_before', 'docs_insert_after',
+        }:
+            action = (
+                'Check input and document state. For images, use a publicly '
+                'accessible PNG, JPEG or GIF smaller than 50 MB and no more '
+                'than 25 megapixels; Google must be able to fetch the URL.'
+            )
         return EditFailedResponse(
             code=code,
             description=f'Google API request failed with HTTP {status}.',

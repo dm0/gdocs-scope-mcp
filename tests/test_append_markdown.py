@@ -48,6 +48,7 @@ def test_append_converts_headings_and_emphasis(simple_document, mock_docs):
         'at_index': simple_document['body']['content'][-1]['endIndex'] - 1,
         'appended': inserted,
         'inserted_char_count': len(inserted),
+        'inserted_image_count': 0,
         'preview_truncated': False,
     }
 
@@ -190,6 +191,7 @@ def test_mcp_append_exposes_structured_receipt(mock_docs, rich):
         'at_index',
         'appended',
         'inserted_char_count',
+        'inserted_image_count',
         'preview_truncated',
     }
     success_schema = next(

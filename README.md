@@ -107,8 +107,9 @@ rule separators. Unknown paragraph elements retain the existing empty fallback.
 Targeted text replacements use original text-run positions, including UTF-16
 offsets, to preserve adjacent non-text elements. A match spanning an omitted
 object or horizontal rule is rejected with `INVALID_ARGUMENT` before writing.
-This does not implement editing the objects themselves or inserting images
-from Markdown. Batch replacements and comment anchors use the same source-range
+This does not implement editing the objects themselves. Rich insertion supports
+Markdown and HTML images as described below. Batch replacements and comment
+anchors use the same source-range
 mapping and structural-gap check. Before/after insertion still targets whole
 paragraph boundaries; native literal replace-all retains Google's matching.
 
@@ -651,7 +652,7 @@ This is a bounded read-to-write subset, not complete HTML or formatting
 round-trip support. Other wrappers retain their child text without preserving
 unsupported formatting or attributes; non-text tags may contribute no content.
 For example, a styled `span` retains its text but loses its styling. Native
-tables, images, and code formatting still have separate insertion
+tables and code formatting still have separate insertion
 limitations. Use `rich=False` to preserve HTML tags and Markdown literally.
 
 Markdown unordered lists (`-`, `*`, `+`) and ordered lists starting at 1 create
@@ -668,13 +669,46 @@ nesting, custom starting numbers, empty items, and multi-paragraph items return
 `INVALID_ARGUMENT` before writing. Use separate homogeneous lists, simplify
 items, or choose `rich=False` to insert the original syntax literally.
 
+Markdown images (`![label](https://example.com/image.png "title")`) and HTML
+`<img src="https://example.com/image.png" alt="label" title="title">` create
+native inline images in all three insertion tools, including image-only inputs,
+multiple images, and images among formatted text or in supported list items.
+Their positions occupy one UTF-16 index each; subsequent text and style ranges
+account for those indices.
+
+Use absolute public HTTP(S) URLs of at most 2048 UTF-8 bytes. Google fetches and
+stores the image at insertion time; no local upload or authenticated fetch is
+performed. Google requires PNG, JPEG or GIF, less than 50 MB and at most 25
+megapixels. Sources without filename extensions can work if Google accepts the
+response. Relative paths, file/data URLs, missing sources, credential-bearing
+URLs and responsive `picture`/`srcset`/`sizes` fail with `INVALID_ARGUMENT`
+before writing. Google can reject inaccessible URLs or invalid image contents;
+all insertions and formatting are sent in one atomic batch, with no success
+receipt on rejection.
+
+By default Google chooses the image size from its resolution. HTML `width` and
+`height` accept positive pixel numbers, optionally suffixed `px` (96 px = 72 pt).
+One dimension preserves the aspect ratio; two specify a bounding box that
+Google fits while preserving that ratio. CSS image styling and non-pixel sizes
+are rejected; use the attributes instead. `alt` and `title` are accepted but
+are not written as native object metadata or visible text: `insertInlineImage`
+has no fields for them. Image hyperlinks and other image attributes are not
+preserved. This is not a lossless HTML/image-metadata round trip.
+
+Image receipts add `inserted_image_count` (zero in literal mode). Previews use
+one U+FFFC object-replacement character per inserted native image, and
+`inserted_char_count` includes those placeholders and paragraph breaks. The
+placeholder is a receipt representation; it is never submitted as text.
+`rich=False` keeps image markup literal and inserts no native objects.
+
 ```
 docs_append(doc_id="...", text="Document last updated: March 2026.")
 ```
 
 Returns `ok`, `document_id`, `rich`, diagnostic `at_index`, `appended` (a
 plain-text preview of up to 200 Unicode code points), `inserted_char_count`
-(including added paragraph breaks), and `preview_truncated`.
+(including added paragraph breaks and image placeholders),
+`inserted_image_count`, and `preview_truncated`.
 
 ---
 

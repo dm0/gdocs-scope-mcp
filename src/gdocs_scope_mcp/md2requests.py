@@ -3,10 +3,13 @@
 import re
 from collections.abc import Iterable
 from functools import lru_cache
+from typing import Literal
+from urllib.parse import urlsplit
 
 import mistune
 from bs4 import BeautifulSoup, Tag
 from bs4.element import NavigableString, PageElement
+from pydantic import BaseModel
 from rich.syntax import Syntax
 
 # isort: split
@@ -21,12 +24,83 @@ from .models import (
     GoogleDocumentTextRun,
     GoogleDocumentTextStyle,
 )
+from .text_indices import utf16_length
 from .tool_errors import ToolFailureError
+
+IMAGE_URI_MAX_BYTES = 2048
+
+
+class InsertionImage(BaseModel):
+    """Describe an image to insert, without inventing a native object ID."""
+
+    type: Literal['image'] = 'image'
+    start_index: int
+    end_index: int
+    uri: str
+    object_size: dict
+
+    def __len__(self) -> int:
+        """Reserve one UTF-16 index for the native inline object."""
+        return 1
+
+    def to_markdown(self, _doc) -> str:
+        """Keep the paragraph rendering interface for converter diagnostics."""
+        return f'![](<{self.uri}>)'
+
+    def to_text(self, _doc) -> str:
+        """Represent the object slot without inventing visible image text."""
+        return '\ufffc'
+
+
+def _image_failure(description: str) -> None:
+    """Refuse unsupported images before submitting any document changes."""
+    raise ToolFailureError(EditFailedResponse(
+        code='INVALID_ARGUMENT', description=description,
+        suggested_action='Use an absolute public HTTP(S) PNG, JPEG or GIF URL '
+        '(at most 2 kB). HTML dimensions must be positive pixel numbers in '
+        'width/height attributes; omit CSS/srcset, or use rich=False.',
+    ))
+
+
+def _convert_image(element: Tag, start: int) -> InsertionImage:
+    """Validate an image and convert pixel dimensions to points."""
+    uri = str(element.get('src', ''))
+    try:
+        parsed = urlsplit(uri)
+        valid = (
+            parsed.scheme.lower() in {'http', 'https'} and parsed.hostname
+            and not parsed.username and not parsed.password
+            and len(uri.encode('utf-8')) <= IMAGE_URI_MAX_BYTES
+            and not re.search(r'[\s\x00-\x1f\x7f]', uri)
+        )
+    except ValueError:
+        valid = False
+    if not valid:
+        _image_failure('Image src must be an absolute HTTP(S) URL of at '
+                       'most 2 kB, without whitespace or credentials.')
+    if any(element.get(key) for key in ('style', 'srcset', 'sizes')):
+        _image_failure('CSS image styling and responsive image sources are '
+                       'unsupported.')
+    size = {}
+    for dimension in ('width', 'height'):
+        if dimension not in element.attrs:
+            continue
+        value = str(element[dimension]).strip()
+        if not re.fullmatch(r'\d+(?:\.\d+)?(?:px)?', value):
+            _image_failure('Image dimensions must be positive pixel numbers.')
+        pixels = float(value.removesuffix('px'))
+        if not 0 < pixels < float('inf'):
+            _image_failure('Image dimensions must be finite and positive.')
+        size[dimension] = {'magnitude': pixels * 0.75, 'unit': 'PT'}
+    return InsertionImage(
+        start_index=start, end_index=start + 1, uri=uri, object_size=size,
+    )
 
 
 class InsertionParagraph(GoogleDocumentParagraph):
     """Keep insertion-only list metadata separate from API list identities."""
 
+    elements: list[GoogleDocumentTextRun | InsertionImage]
     bullet_preset: str | None = None
     nesting_level: int = 0
     list_key: int | None = None
@@ -189,6 +263,14 @@ def _convert_page_elements(
             last.end_index = end_index
             continue
         if isinstance(element, Tag):
+            if element.name == 'img':
+                start = last.start_index + len(last)
+                last.elements.append(_convert_image(element, start))
+                last.end_index = start + 1
+                continue
+            if element.name == 'picture':
+                _image_failure('HTML picture/source selection is unsupported; '
+                               'use a single img with src.')
             if element.name in {'ul', 'ol'}:
                 added.extend(_convert_list(
                     element, last.start_index + len(last),
@@ -273,6 +355,7 @@ def gpars_to_requests(
         if not len(p):
             continue
         text_style_requests = []
+        images = []
         insert_index = p.start_index + offset
         text = '\n' if newline_before else ''
         if newline_before:
@@ -282,6 +365,11 @@ def gpars_to_requests(
         text += '\t' * indent
         offset += indent
         for element in p.elements:
+            if isinstance(element, InsertionImage):
+                images.append((utf16_length(text), element))
+                # A planning placeholder only; never send it as insertText.
+                text += '\ufffc'
+                continue
             if isinstance(element, GoogleDocumentTextRun):
                 text += element.content
                 style = element.text_style.model_dump(
@@ -306,9 +394,30 @@ def gpars_to_requests(
                 )
         if not newline_before:
             text += '\n'
-        requests.append(
-            {'insertText': {'location': {'index': insert_index}, 'text': text}}
-        )
+        # Insert text and objects in source order. All ranges below include
+        # the one index occupied by each image, so styles never drift.
+        buffer = text.encode('utf-16-le')
+        cursor = 0
+        for position, image in images:
+            chunk = buffer[cursor * 2:position * 2].decode('utf-16-le')
+            if chunk:
+                requests.append({'insertText': {
+                    'location': {'index': insert_index + cursor},
+                    'text': chunk,
+                }})
+            image_request = {
+                'location': {'index': insert_index + position},
+                'uri': image.uri,
+            }
+            if image.object_size:
+                image_request['objectSize'] = image.object_size
+            requests.append({'insertInlineImage': image_request})
+            cursor = position + 1
+        chunk = buffer[cursor * 2:].decode('utf-16-le')
+        if chunk:
+            requests.append({'insertText': {
+                'location': {'index': insert_index + cursor}, 'text': chunk,
+            }})
         style = p.paragraph_style.model_dump(
             mode='json',
             by_alias=True,
@@ -353,8 +462,13 @@ def gpars_to_requests(
 
 
 def inserted_text_from_requests(requests: list[dict]) -> str:
-    """Return inserted text after list operations remove nesting tabs."""
-    insertions = [r['insertText'] for r in requests if 'insertText' in r]
+    """Render final insertion text, using U+FFFC for each native image."""
+    insertions = [
+        r['insertText'] if 'insertText' in r else {
+            'location': r['insertInlineImage']['location'], 'text': '\ufffc',
+        }
+        for r in requests if 'insertText' in r or 'insertInlineImage' in r
+    ]
     if not insertions:
         return ''
     start = insertions[0]['location']['index']

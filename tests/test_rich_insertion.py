@@ -283,10 +283,6 @@ def test_markdown_code_keeps_literal_text_and_font(block, newline_before):
     )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason='Markdown image nodes disappear without native image requests.',
-)
 @pytest.mark.parametrize('newline_before', [False, True])
 @pytest.mark.parametrize('surrounded', [False, True], ids=['alone', 'in-text'])
 def test_markdown_images_are_not_silently_omitted(newline_before, surrounded):

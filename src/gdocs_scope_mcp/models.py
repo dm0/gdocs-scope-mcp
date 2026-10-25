@@ -452,13 +452,18 @@ class InsertSucceedResponse(DocumentEditReceipt):
         ),
     ]
     rich: bool
+    inserted_image_count: Annotated[
+        int, Field(ge=0, description='Number of native inline images inserted')
+    ] = 0
     inserted_text: Annotated[
         TruncatedStr200,
-        Field(description='Inserted text; the first 200 characters max'),
+        Field(description='Inserted text preview; U+FFFC represents each '
+              'native image; the first 200 characters max'),
     ]
     inserted_char_count: Annotated[
         int, Field(ge=0, description='Full inserted Unicode code-point count, '
-                   'including automatically added paragraph breaks')
+                   'including paragraph breaks and one U+FFFC placeholder '
+                   'per native image')
     ]
     preview_truncated: bool
     anchor_char_count: Annotated[
@@ -475,6 +480,9 @@ class AppendSucceedResponse(DocumentEditReceipt):
     """Describe appended content without exposing Google API requests."""
 
     ok: Literal[True] = True
+    inserted_image_count: Annotated[
+        int, Field(ge=0, description='Number of native inline images inserted')
+    ] = 0
     scope: Literal['document_end'] = 'document_end'
     rich: Annotated[
         bool, Field(description='Whether the input was parsed as Markdown')
@@ -491,7 +499,7 @@ class AppendSucceedResponse(DocumentEditReceipt):
         Field(
             max_length=APPEND_PREVIEW_LIMIT,
             description='Inserted plain-text preview, including paragraph '
-            'breaks; at most 200 Unicode code points',
+            'breaks and U+FFFC for each native image; at most 200 code points',
         ),
     ]
     inserted_char_count: Annotated[
@@ -499,7 +507,7 @@ class AppendSucceedResponse(DocumentEditReceipt):
         Field(
             ge=0,
             description='Full inserted length in Unicode code points, '
-            'including automatically added paragraph breaks',
+            'including paragraph breaks and one U+FFFC per native image',
         ),
     ]
     preview_truncated: Annotated[

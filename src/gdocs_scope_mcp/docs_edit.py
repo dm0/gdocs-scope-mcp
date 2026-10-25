@@ -1025,6 +1025,7 @@ def insert_after(
 
     return InsertSucceedResponse(
         document_id=doc_id, heading_id=heading_id,
+        inserted_image_count=sum('insertInlineImage' in r for r in requests),
         scope='heading_subtree' if heading_id is not None else 'document',
         inserted_char_count=len(inserted_text),
         preview_truncated=len(inserted_text) > TEXT_PREVIEW_LIMIT,
@@ -1108,6 +1109,7 @@ def insert_before(
 
     return InsertSucceedResponse(
         document_id=doc_id, heading_id=heading_id,
+        inserted_image_count=sum('insertInlineImage' in r for r in requests),
         scope='heading_subtree' if heading_id is not None else 'document',
         inserted_char_count=len(inserted_text),
         preview_truncated=len(inserted_text) > TEXT_PREVIEW_LIMIT,
@@ -1235,6 +1237,7 @@ def append(doc_id: str, text: str, rich: bool = True) -> AppendSucceedResponse:
 
     return AppendSucceedResponse(
         document_id=doc_id,
+        inserted_image_count=sum('insertInlineImage' in r for r in requests),
         rich=rich,
         at_index=insert_index,
         appended=inserted_text[:APPEND_PREVIEW_LIMIT],
