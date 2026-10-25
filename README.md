@@ -107,8 +107,9 @@ rule separators. Unknown paragraph elements retain the existing empty fallback.
 Targeted text replacements use original text-run positions, including UTF-16
 offsets, to preserve adjacent non-text elements. A match spanning an omitted
 object or horizontal rule is rejected with `INVALID_ARGUMENT` before writing.
-This does not implement editing the objects themselves or inserting images
-from Markdown. Batch replacements and comment anchors use the same source-range
+This does not implement editing the objects themselves. Rich insertion supports
+Markdown and HTML images as described below. Batch replacements and comment
+anchors use the same source-range
 mapping and structural-gap check. Before/after insertion still targets whole
 paragraph boundaries; native literal replace-all retains Google's matching.
 
@@ -570,7 +571,7 @@ are null. Replace-all requires `regex=False` and `heading_id=None`.
 
 ---
 
-#### `docs_insert_after(doc_id, anchor, text, heading_id=None, rich=True)`
+#### `docs_insert_after(doc_id, anchor, text, heading_id=None, rich=True, upload_local_images=False)`
 Insert Markdown or literal text after the paragraph containing `anchor`.
 Pass `heading_id` to search only that section subtree; `rich=False` inserts literal text.
 Rich heading mapping: `# -> TITLE`, `## -> SUBTITLE`, `### -> HEADING_1`,
@@ -591,7 +592,7 @@ Returns document/scope metadata, `ok`, `anchor` (up to 80 code points),
 
 ---
 
-#### `docs_insert_before(doc_id, anchor, text, heading_id=None, rich=True)`
+#### `docs_insert_before(doc_id, anchor, text, heading_id=None, rich=True, upload_local_images=False)`
 Insert Markdown or literal text before the paragraph containing `anchor`.
 Pass `heading_id` to search only that section subtree; `rich=False` inserts literal text.
 Rich heading mapping: `# -> TITLE`, `## -> SUBTITLE`, `### -> HEADING_1`,
@@ -626,7 +627,7 @@ final paragraph is skipped.
 
 ---
 
-#### `docs_append(doc_id, text, rich=True)`
+#### `docs_append(doc_id, text, rich=True, upload_local_images=False)`
 Append Markdown paragraphs or literal text at the end of the document, adding
 a paragraph break before the content. With `rich=True`, separate paragraphs
 with blank lines; headings, emphasis and native lists use the shared converter.
@@ -651,7 +652,7 @@ This is a bounded read-to-write subset, not complete HTML or formatting
 round-trip support. Other wrappers retain their child text without preserving
 unsupported formatting or attributes; non-text tags may contribute no content.
 For example, a styled `span` retains its text but loses its styling. Native
-tables, images, and code formatting still have separate insertion
+tables and code formatting still have separate insertion
 limitations. Use `rich=False` to preserve HTML tags and Markdown literally.
 
 Markdown unordered lists (`-`, `*`, `+`) and ordered lists starting at 1 create
@@ -668,13 +669,126 @@ nesting, custom starting numbers, empty items, and multi-paragraph items return
 `INVALID_ARGUMENT` before writing. Use separate homogeneous lists, simplify
 items, or choose `rich=False` to insert the original syntax literally.
 
+Markdown images (`![label](https://example.com/image.png "title")`) and HTML
+`<img src="https://example.com/image.png" alt="label" title="title">` create
+native inline images in all three insertion tools, including image-only inputs,
+multiple images, and images among formatted text or in supported list items.
+Their positions occupy one UTF-16 index each; subsequent text and style ranges
+account for those indices.
+
+By default, use absolute public HTTP(S) URLs of at most 2048 UTF-8 bytes. Google
+fetches and stores the image at insertion time. Google requires PNG, JPEG or GIF,
+less than 50 MB and at most 25
+megapixels. Sources without filename extensions can work if Google accepts the
+response. Relative paths, data URLs, missing sources, credential-bearing
+URLs and responsive `picture`/`srcset`/`sizes` fail with `INVALID_ARGUMENT`
+before writing. Local paths and file URLs require the explicit opt-in below.
+Google can reject inaccessible URLs or invalid image contents;
+all insertions and formatting are sent in one atomic batch, with no success
+receipt on rejection.
+
+By default Google chooses the image size from its resolution. HTML `width` and
+`height` accept positive pixel numbers, optionally suffixed `px` (96 px = 72 pt).
+One dimension preserves the aspect ratio; two specify a bounding box that
+Google fits while preserving that ratio. CSS image styling and non-pixel sizes
+are rejected; use the attributes instead. `alt` and `title` are accepted but
+are not written as native object metadata or visible text: `insertInlineImage`
+has no fields for them. Image hyperlinks and other image attributes are not
+preserved. This is not a lossless HTML/image-metadata round trip.
+
+Image receipts add `inserted_image_count` (zero in literal mode). Previews use
+one U+FFFC object-replacement character per inserted native image, and
+`inserted_char_count` includes those placeholders and paragraph breaks. The
+placeholder is a receipt representation; it is never submitted as text.
+`rich=False` keeps image markup literal and inserts no native objects.
+
+##### Local images through temporary Google Drive files
+
+Set `upload_local_images=True` explicitly on any of the three insertion tools
+to accept absolute local paths or `file:///` URLs in Markdown and HTML:
+
+```python
+docs_append(
+    doc_id="...",
+    text="Before ![Chart](file:///home/me/chart.png) after",
+    upload_local_images=True,
+)
+docs_insert_before(
+    doc_id="...", anchor="Results",
+    text='<img src="/home/me/chart.png" width="320">',
+    upload_local_images=True,
+)
+```
+
+Paths refer to the machine running the MCP server, not necessarily the machine
+running its client. Paths with spaces can use a file URL (URL-escaped) or a
+Markdown angle-bracket destination: `![Chart](</home/me/my chart.png>)`.
+URL escapes are decoded once; use `%25` for a literal percent sign in a source
+path. Relative paths, remote file hosts, file URL queries/fragments and base64
+data URLs remain unsupported. With `rich=False`, the upload flag is ignored:
+markup remains literal and no files are uploaded.
+
+**Enabling this flag authorizes temporary upload and anyone-with-link access.**
+The server performs these steps:
+
+1. Read the local images and validate the whole insertion before creating Drive
+   files. Supported local data is PNG, JPEG or GIF, nonempty and smaller than
+   50,000,000 bytes. Google performs the final image-content/dimension checks.
+2. Upload each distinct local file to **My Drive root**, named
+   `gdocs-scope-mcp-tmp-<random UUID>.png` (or `.jpg`/`.gif`). The original local
+   filename is not used. Repeated references in one call share one upload.
+3. Grant only that new file `type=anyone`, `role=reader`,
+   `allowFileDiscovery=false`. It is readable without signing in by anyone
+   possessing its link while this permission exists. This is not private
+   storage or a hidden file. Existing Drive files and their sharing settings
+   are not modified.
+4. Use Drive's `webContentLink` in the existing Docs `insertInlineImage`
+   requests. Text, images and styles are applied in **one atomic Docs batch**.
+   Google stores its own embedded copy; the temporary Drive file is not a
+   lasting dependency of the document. Its source URL remains in image metadata.
+5. Attempt to **permanently delete** the temporary files immediately after the
+   Docs request, on success or failure. The local originals are preserved.
+
+This requires Google Drive API write access (`drive.file` or `drive`); a
+Docs-only or Drive-read-only token is insufficient. No Apps Script setup is
+needed. Workspace policies that prohibit anyone-with-link sharing make this
+route fail; the tool does not bypass those restrictions or switch hosts.
+
+Drive uploads/deletions and the Docs batch are separate operations. If source
+deletion fails, the server attempts to revoke the public link permission. A
+successful insertion still returns `ok=true`, with residual file IDs in
+`temporary_image_cleanup_pending`; **do not repeat the insertion**. Remove
+those Drive files manually. This list is normally empty. If the insertion
+itself fails, cleanup errors and residual IDs are recorded in server stderr.
+
+Cleanup is best effort: a killed server, network outage, or uncertain upload
+response can leave an orphan. These files/permissions have **no automatic TTL**.
+Find residual files by the `gdocs-scope-mcp-tmp-` name prefix and delete them
+(or revoke sharing). A folder could organize these files, but would not hide
+them. Drive's hidden `appDataFolder` cannot share its files, so it cannot serve
+as the staging location. See [application data restrictions](https://developers.google.com/workspace/drive/api/guides/appdata).
+
+The Drive-to-Docs mechanism and retained embedded copy after source deletion
+were verified on the designated development document. Optional live regressions
+upload only a generated fixture image, temporarily share it, edit that document
+and remove the source files:
+
+```bash
+GDOCS_SCOPE_MCP_LIVE_DRIVE_IMAGES=1 uv run --locked pytest -q tests/test_live_drive_images.py
+```
+
+They are skipped by default. Use the live-test document and authorization rules
+in the workspace instructions before opting in; ordinary unit tests are offline.
+
 ```
 docs_append(doc_id="...", text="Document last updated: March 2026.")
 ```
 
 Returns `ok`, `document_id`, `rich`, diagnostic `at_index`, `appended` (a
 plain-text preview of up to 200 Unicode code points), `inserted_char_count`
-(including added paragraph breaks), and `preview_truncated`.
+(including added paragraph breaks and image placeholders),
+`inserted_image_count`, `temporary_image_cleanup_pending`, and
+`preview_truncated`.
 
 ---
 

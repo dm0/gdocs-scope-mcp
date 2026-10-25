@@ -1,6 +1,8 @@
 """Provide captured API data and an isolated Docs service for offline tests."""
 
 import json
+import struct
+import zlib
 from copy import deepcopy
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -8,6 +10,19 @@ from unittest.mock import MagicMock
 import pytest
 
 from gdocs_scope_mcp import docs_edit
+
+
+@pytest.fixture
+def image_png():
+    """Generate a small valid RGB PNG containing no user data."""
+    def chunk(kind, data):
+        return (struct.pack('>I', len(data)) + kind + data
+                + struct.pack('>I', zlib.crc32(kind + data)))
+
+    header = struct.pack('>IIBBBBB', 16, 16, 8, 2, 0, 0, 0)
+    pixels = b''.join(b'\x00' + bytes([32, 128, 224]) * 16 for _ in range(16))
+    return (b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', header)
+            + chunk(b'IDAT', zlib.compress(pixels)) + chunk(b'IEND', b''))
 
 
 @pytest.fixture

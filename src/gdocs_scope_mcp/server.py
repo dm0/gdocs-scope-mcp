@@ -123,6 +123,15 @@ EDITING TOOLS:
     nesting. Items must be nonempty single paragraphs; custom start numbers,
     mixed ordered/unordered nesting and multi-paragraph items fail before
     writes. List receipts exclude the temporary nesting tabs.
+    Markdown images and HTML img[src] insert native inline images using public
+    HTTP(S) URLs (PNG/JPEG/GIF; Google's size limits apply). HTML width/height
+    accept positive pixel numbers; CSS sizes and responsive sources fail before
+    writes. Alt/title are not native metadata. Receipts expose
+    inserted_image_count and U+FFFC image placeholders in text/counts.
+    Local images require upload_local_images=True. This explicitly permits
+    temporary My Drive root files and anyone-with-link reader access; sources
+    are deleted after insertion. Check temporary_image_cleanup_pending for
+    failed deletions. Do not repeat a successful insertion to clean them up.
 
     docs_get_tree          Read hierarchical document tree (headings)
     docs_read              Read document contents (paragraphs + plain)
@@ -332,6 +341,7 @@ def docs_insert_after(
     text: str,
     heading_id: str | None = None,
     rich: bool = True,
+    *, upload_local_images: bool = False,
 ) -> InsertSucceedResponse | EditFailedResponse:
     """
     Insert a new paragraph immediately after the paragraph containing `anchor`.
@@ -345,7 +355,10 @@ def docs_insert_after(
     Converts Markdown paragraphs and # / ## / ### / ... headings, with
     **bold**, *italic*, and ***bold italic*** inline styles. Heading mapping:
     # is TITLE, ## is SUBTITLE, ### is HEADING_1, and so on. Native homogeneous
-    lists are supported; native tables are not yet implemented.
+    lists, Markdown images and HTML img[src] are supported; native tables are
+    not yet implemented. Images require public HTTP(S) PNG/JPEG/GIF URLs;
+    alt/title metadata is not preserved. HTML width/height accept pixel
+    numbers.
 
     Args:
         doc_id: Google Doc ID
@@ -354,18 +367,24 @@ def docs_insert_after(
         text:   Text to insert as the new paragraph
         heading_id: Narrow down search to this heading and subheadings
         rich:   If True (default), convert Markdown using the shared converter
+        upload_local_images: Allow absolute local image paths/file URLs.
+            Uploads to My Drive root, temporarily grants anyone-with-link
+            read access, inserts, then deletes sources. Defaults to False.
+            Ignored with rich=False. See temporary_image_cleanup_pending.
 
     Returns
     -------
         A receipt with document_id, scope, heading_id, ok, anchor,
         insert_position, diagnostic at_index, rich, and inserted_text.
         inserted_text is a preview of up to 200 Unicode code points;
-        inserted_char_count includes added paragraph breaks and
+        inserted_image_count counts native images; previews use U+FFFC per
+        image. inserted_char_count includes placeholders and paragraph breaks;
         preview_truncated signals omitted text. The anchor preview is at most
         80 code points, with anchor_char_count and anchor_preview_truncated.
     """
     return docs_edit.insert_after(
-        doc_id, anchor, text, heading_id=heading_id, rich=rich
+        doc_id, anchor, text, heading_id=heading_id, rich=rich,
+        upload_local_images=upload_local_images,
     )
 
 
@@ -384,6 +403,7 @@ def docs_insert_before(
     text: str,
     heading_id: str | None = None,
     rich: bool = True,
+    *, upload_local_images: bool = False,
 ) -> InsertSucceedResponse | EditFailedResponse:
     """
     Insert a new paragraph immediately before the paragraph containing
@@ -399,7 +419,10 @@ def docs_insert_before(
     Converts Markdown paragraphs and # / ## / ### / ... headings, with
     **bold**, *italic*, and ***bold italic*** inline styles. Heading mapping:
     # is TITLE, ## is SUBTITLE, ### is HEADING_1, and so on. Native homogeneous
-    lists are supported; native tables are not yet implemented.
+    lists, Markdown images and HTML img[src] are supported; native tables are
+    not yet implemented. Images require public HTTP(S) PNG/JPEG/GIF URLs;
+    alt/title metadata is not preserved. HTML width/height accept pixel
+    numbers.
 
     Args:
         doc_id: Google Doc ID
@@ -407,13 +430,18 @@ def docs_insert_before(
         text:   Text to insert as the new paragraph
         heading_id: Narrow down search to this heading and subheadings
         rich:   If True (default), convert Markdown using the shared converter
+        upload_local_images: Allow absolute local image paths/file URLs.
+            Uploads to My Drive root, temporarily grants anyone-with-link
+            read access, inserts, then deletes sources. Defaults to False.
+            Ignored with rich=False. See temporary_image_cleanup_pending.
 
     Returns
     -------
         A receipt with document_id, scope, heading_id, ok, anchor,
         insert_position, diagnostic at_index, rich, and inserted_text.
         inserted_text is a preview of up to 200 Unicode code points;
-        inserted_char_count includes added paragraph breaks and
+        inserted_image_count counts native images; previews use U+FFFC per
+        image. inserted_char_count includes placeholders and paragraph breaks;
         preview_truncated signals omitted text. The anchor preview is at most
         80 code points, with anchor_char_count and anchor_preview_truncated.
     """
@@ -423,6 +451,7 @@ def docs_insert_before(
         text,
         heading_id=heading_id,
         rich=rich,
+        upload_local_images=upload_local_images,
     )
 
 
@@ -476,7 +505,8 @@ def docs_delete_paragraph(
     },
 )
 def docs_append(
-    doc_id: str, text: str, rich: bool = True
+    doc_id: str, text: str, rich: bool = True, *,
+    upload_local_images: bool = False,
 ) -> AppendSucceedResponse:
     """
     Append Markdown paragraphs or literal text at the end of a Google Doc.
@@ -485,6 +515,9 @@ def docs_append(
     With rich=True, separate Markdown paragraphs with blank lines. Headings
     map as follows: # is TITLE, ## is SUBTITLE, ### is HEADING_1, and so on.
     Bold, italic, combined emphasis and native homogeneous lists are supported.
+    Markdown images and HTML img[src] create native images from public HTTP(S)
+    PNG/JPEG/GIF URLs. HTML width/height accept pixel numbers; alt/title
+    metadata is not preserved. CSS/responsive images are unsupported.
     Native tables are not yet implemented.
 
     With rich=False, preserve Markdown delimiters and line breaks literally.
@@ -493,16 +526,22 @@ def docs_append(
         doc_id: Google Doc ID
         text: Markdown or literal content to append, according to rich.
         rich: Parse Markdown if True (default); insert literal text if False.
+        upload_local_images: Allow absolute local image paths/file URLs.
+            Uploads to My Drive root, temporarily grants anyone-with-link
+            read access, inserts, then deletes sources. Defaults to False.
+            Ignored with rich=False. See temporary_image_cleanup_pending.
 
     Returns
     -------
         A structured receipt with document_id, rich, diagnostic at_index,
         appended (plain-text preview up to 200 Unicode code points),
-        inserted_char_count (including paragraph breaks), preview_truncated,
+        inserted_image_count, inserted_char_count (including paragraph breaks
+        and U+FFFC per native image), preview_truncated,
         and ok=True. Read the document to verify formatting.
         scope is document_end and heading_id is null.
     """
-    return docs_edit.append(doc_id, text, rich=rich)
+    return docs_edit.append(doc_id, text, rich=rich,
+                            upload_local_images=upload_local_images)
 
 
 @mcp.tool(
