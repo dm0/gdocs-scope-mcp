@@ -11,6 +11,7 @@ from rich.syntax import Syntax
 
 # isort: split
 from .models import (
+    EditFailedResponse,
     GoogleDocumentAlignment,
     GoogleDocumentBaselineOffset,
     GoogleDocumentLink,
@@ -20,12 +21,97 @@ from .models import (
     GoogleDocumentTextRun,
     GoogleDocumentTextStyle,
 )
+from .tool_errors import ToolFailureError
+
+
+class InsertionParagraph(GoogleDocumentParagraph):
+    """Keep insertion-only list metadata separate from API list identities."""
+
+    bullet_preset: str | None = None
+    nesting_level: int = 0
+    list_key: int | None = None
+
+
+class DocsHTMLRenderer(mistune.HTMLRenderer):
+    """Keep Markdown soft wraps from becoming Google Docs paragraph breaks."""
+
+    def softbreak(self) -> str:
+        """Render a soft-wrapped source line as a space, as HTML would."""
+        return ' '
+
+
+def _unsupported_list(description: str) -> None:
+    """Reject list forms that cannot yet preserve their structure."""
+    raise ToolFailureError(EditFailedResponse(
+        code='INVALID_ARGUMENT', description=description,
+        suggested_action='Use nonempty, single-paragraph list items with '
+        'the same list kind at every nesting level, or use rich=False.',
+    ))
+
+
+def _convert_list(
+    element: Tag, start: int, *, level: int = 0, list_key: int | None = None,
+) -> list[InsertionParagraph]:
+    """Flatten a homogeneous list tree into item paragraphs in source order."""
+    if list_key is None:
+        list_key = start
+    if element.name == 'ol' and str(element.get('start', '1')) != '1':
+        _unsupported_list('Custom ordered-list starting numbers are '
+                          'unsupported.')
+    result = []
+    for item in element.find_all('li', recursive=False):
+        paragraph = InsertionParagraph(
+            start_index=start, elements=[], list_key=list_key,
+            nesting_level=level,
+            bullet_preset=(
+                'NUMBERED_DECIMAL_ALPHA_ROMAN' if element.name == 'ol'
+                else 'BULLET_DISC_CIRCLE_SQUARE'
+            ),
+            paragraph_style=GoogleDocumentParagraphStyle(
+                named_style_type=GoogleDocumentNamedStyleType.NORMAL_TEXT,
+            ),
+        )
+        blocks = []
+        nested = []
+        for child in item.children:
+            if isinstance(child, Tag) and child.name in {'ul', 'ol'}:
+                if child.name != element.name:
+                    _unsupported_list('Mixed ordered/unordered nesting is '
+                                      'not supported in a single list.')
+                nested.append(child)
+            else:
+                if nested and str(child).strip():
+                    _unsupported_list('Text after a nested list is '
+                                      'unsupported.')
+                blocks.append(child)
+        extra = _convert_page_elements(blocks, paragraph)
+        nonempty = [p for p in [paragraph, *extra] if len(p)]
+        if len(nonempty) != 1:
+            _unsupported_list('Each list item must contain one nonempty '
+                              'paragraph.')
+        paragraph = nonempty[0]
+        paragraph.list_key = list_key
+        paragraph.nesting_level = level
+        paragraph.bullet_preset = (
+            'NUMBERED_DECIMAL_ALPHA_ROMAN' if element.name == 'ol'
+            else 'BULLET_DISC_CIRCLE_SQUARE'
+        )
+        result.append(paragraph)
+        start = paragraph.start_index + len(paragraph)
+        for child in nested:
+            children = _convert_list(
+                child, start, level=level + 1, list_key=list_key,
+            )
+            result.extend(children)
+            if children:
+                start = children[-1].start_index + len(children[-1])
+    return result
 
 
 @lru_cache
 def _md_instance() -> mistune.Markdown:
     md = mistune.create_markdown(
-        escape=False,
+        renderer=DocsHTMLRenderer(escape=False),
         plugins=['strikethrough', 'table', 'url', 'superscript', 'subscript']
     )
 
@@ -82,8 +168,8 @@ def _collect_styles(
 
 
 def _convert_page_elements(
-    elements: Iterable[PageElement], paragraph: GoogleDocumentParagraph
-) -> list[GoogleDocumentParagraph]:
+    elements: Iterable[PageElement], paragraph: InsertionParagraph
+) -> list[InsertionParagraph]:
     added = []
     last = paragraph
     for element in elements:
@@ -103,6 +189,12 @@ def _convert_page_elements(
             last.end_index = end_index
             continue
         if isinstance(element, Tag):
+            if element.name in {'ul', 'ol'}:
+                added.extend(_convert_list(
+                    element, last.start_index + len(last),
+                ))
+                last = added[-1] if added else paragraph
+                continue
             if element.name == 'p':
                 align = GoogleDocumentAlignment.ALIGNMENT_UNSPECIFIED
 
@@ -118,7 +210,7 @@ def _convert_page_elements(
                         align = GoogleDocumentAlignment.JUSTIFIED
 
                 added.append(
-                    GoogleDocumentParagraph(
+                    InsertionParagraph(
                         start_index=last.start_index + len(last),
                         elements=[],
                         paragraph_style=GoogleDocumentParagraphStyle(
@@ -130,7 +222,7 @@ def _convert_page_elements(
             elif match := re.match(r'h(?P<level>\d+)', element.name):
                 # FIXME: Implement
                 added.append(
-                    GoogleDocumentParagraph(
+                    InsertionParagraph(
                         start_index=last.start_index + len(last),
                         elements=[],
                         paragraph_style=GoogleDocumentParagraphStyle(
@@ -151,12 +243,12 @@ def _convert_page_elements(
     return added
 
 
-def html_to_gpars(html: str, start: int = 0) -> list[GoogleDocumentParagraph]:
+def html_to_gpars(html: str, start: int = 0) -> list[InsertionParagraph]:
     """Convert HTML nodes into indexed Google Docs paragraphs."""
     bs = BeautifulSoup(html, 'html.parser')
     current_index = start
-    paragraphs: list[GoogleDocumentParagraph] = [
-        GoogleDocumentParagraph(
+    paragraphs: list[InsertionParagraph] = [
+        InsertionParagraph(
             start_index=current_index,
             elements=[],
             paragraph_style=GoogleDocumentParagraphStyle(
@@ -170,10 +262,12 @@ def html_to_gpars(html: str, start: int = 0) -> list[GoogleDocumentParagraph]:
 
 
 def gpars_to_requests(
-    paragraphs: list[GoogleDocumentParagraph], *, newline_before: bool = True
+    paragraphs: list[InsertionParagraph], *, newline_before: bool = True
 ):
     """Build requests with breaks before or after inserted paragraphs."""
     requests = []
+    list_ranges = []
+    paragraph_ranges = []
     offset = 0
     for p in paragraphs:
         if not len(p):
@@ -183,6 +277,10 @@ def gpars_to_requests(
         text = '\n' if newline_before else ''
         if newline_before:
             offset += 1
+        content_start = p.start_index + offset
+        indent = p.nesting_level if p.bullet_preset else 0
+        text += '\t' * indent
+        offset += indent
         for element in p.elements:
             if isinstance(element, GoogleDocumentTextRun):
                 text += element.content
@@ -230,9 +328,47 @@ def gpars_to_requests(
             }
         )
         requests.extend(text_style_requests)
+        content_end = p.end_index + offset
+        paragraph_ranges.append((content_start, content_end))
+        if p.bullet_preset:
+            if list_ranges and list_ranges[-1]['key'] == p.list_key:
+                list_ranges[-1]['end'] = content_end
+            else:
+                list_ranges.append({
+                    'key': p.list_key, 'start': content_start,
+                    'end': content_end, 'preset': p.bullet_preset,
+                })
         if not newline_before:
             offset += 1
+    if list_ranges:
+        requests.append({'deleteParagraphBullets': {'range': {
+            'startIndex': paragraph_ranges[0][0],
+            'endIndex': paragraph_ranges[-1][1],
+        }}})
+        requests.extend({'createParagraphBullets': {
+            'range': {'startIndex': item['start'], 'endIndex': item['end']},
+            'bulletPreset': item['preset'],
+        }} for item in reversed(list_ranges))
     return requests
+
+
+def inserted_text_from_requests(requests: list[dict]) -> str:
+    """Return inserted text after list operations remove nesting tabs."""
+    insertions = [r['insertText'] for r in requests if 'insertText' in r]
+    if not insertions:
+        return ''
+    start = insertions[0]['location']['index']
+    buffer = ''.join(item['text'] for item in insertions).encode('utf-16-le')
+    for request in requests:
+        if 'createParagraphBullets' not in request:
+            continue
+        span = request['createParagraphBullets']['range']
+        left = (span['startIndex'] - start) * 2
+        right = (span['endIndex'] - start) * 2
+        text = buffer[left:right].decode('utf-16-le')
+        text = re.sub(r'(?m)^\t+', '', text)
+        buffer = buffer[:left] + text.encode('utf-16-le') + buffer[right:]
+    return buffer.decode('utf-16-le')
 
 
 def markdown_to_requests(

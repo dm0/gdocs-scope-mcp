@@ -629,8 +629,8 @@ final paragraph is skipped.
 #### `docs_append(doc_id, text, rich=True)`
 Append Markdown paragraphs or literal text at the end of the document, adding
 a paragraph break before the content. With `rich=True`, separate paragraphs
-with blank lines; headings and emphasis use the shared converter. Native lists
-and tables are not implemented. Set `rich=False` to preserve text literally.
+with blank lines; headings, emphasis and native lists use the shared converter.
+Native tables are not implemented. Set `rich=False` to preserve text literally.
 
 All three rich insertion tools (`docs_append`, `docs_insert_before`, and
 `docs_insert_after`) also accept the reader's HTML for bold (`b`), italic (`i`),
@@ -651,8 +651,22 @@ This is a bounded read-to-write subset, not complete HTML or formatting
 round-trip support. Other wrappers retain their child text without preserving
 unsupported formatting or attributes; non-text tags may contribute no content.
 For example, a styled `span` retains its text but loses its styling. Native
-lists, tables, images, and code formatting still have separate insertion
+tables, images, and code formatting still have separate insertion
 limitations. Use `rich=False` to preserve HTML tags and Markdown literally.
+
+Markdown unordered lists (`-`, `*`, `+`) and ordered lists starting at 1 create
+native Google Docs lists with separate item paragraphs. Nested lists of the
+same kind retain their nesting; supported inline styles and links are preserved.
+Soft-wrapped Markdown lines stay within the same item paragraph.
+Unordered lists use disc/circle/square glyphs; ordered lists use decimal/alpha/
+roman numbering according to nesting level. Neighbouring prose stays outside
+the list. Previews and character counts describe the final text without the
+temporary tabs used to set nesting.
+
+Each item currently requires one nonempty paragraph. Mixed ordered/unordered
+nesting, custom starting numbers, empty items, and multi-paragraph items return
+`INVALID_ARGUMENT` before writing. Use separate homogeneous lists, simplify
+items, or choose `rich=False` to insert the original syntax literally.
 
 ```
 docs_append(doc_id="...", text="Document last updated: March 2026.")

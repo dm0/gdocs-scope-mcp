@@ -119,6 +119,10 @@ EDITING TOOLS:
     become native link styles. Markdown strikethrough and HTML del/s become
     native strikethrough. Both combine with supported inline emphasis and
     apply only to their text ranges.
+    Native ordered/unordered lists preserve item paragraphs and homogeneous
+    nesting. Items must be nonempty single paragraphs; custom start numbers,
+    mixed ordered/unordered nesting and multi-paragraph items fail before
+    writes. List receipts exclude the temporary nesting tabs.
 
     docs_get_tree          Read hierarchical document tree (headings)
     docs_read              Read document contents (paragraphs + plain)
@@ -340,8 +344,8 @@ def docs_insert_after(
 
     Converts Markdown paragraphs and # / ## / ### / ... headings, with
     **bold**, *italic*, and ***bold italic*** inline styles. Heading mapping:
-    # is TITLE, ## is SUBTITLE, ### is HEADING_1, and so on. Native lists
-    and tables are not yet implemented by this converter.
+    # is TITLE, ## is SUBTITLE, ### is HEADING_1, and so on. Native homogeneous
+    lists are supported; native tables are not yet implemented.
 
     Args:
         doc_id: Google Doc ID
@@ -394,8 +398,8 @@ def docs_insert_before(
 
     Converts Markdown paragraphs and # / ## / ### / ... headings, with
     **bold**, *italic*, and ***bold italic*** inline styles. Heading mapping:
-    # is TITLE, ## is SUBTITLE, ### is HEADING_1, and so on. Native lists
-    and tables are not yet implemented by this converter.
+    # is TITLE, ## is SUBTITLE, ### is HEADING_1, and so on. Native homogeneous
+    lists are supported; native tables are not yet implemented.
 
     Args:
         doc_id: Google Doc ID
@@ -480,8 +484,8 @@ def docs_append(
     A paragraph break is added before the appended content automatically.
     With rich=True, separate Markdown paragraphs with blank lines. Headings
     map as follows: # is TITLE, ## is SUBTITLE, ### is HEADING_1, and so on.
-    Bold, italic, and combined emphasis are supported. Native lists and
-    tables are not implemented by the converter.
+    Bold, italic, combined emphasis and native homogeneous lists are supported.
+    Native tables are not yet implemented.
 
     With rich=False, preserve Markdown delimiters and line breaks literally.
 
