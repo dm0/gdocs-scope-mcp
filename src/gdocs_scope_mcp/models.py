@@ -864,6 +864,13 @@ class GoogleDocumentLink(BaseModel, populate_by_name=True):
     url: str | None = None  # The only supported link type - external
 
 
+class GoogleDocumentWeightedFontFamily(BaseModel, populate_by_name=True):
+    """Store the native font family and optional font weight."""
+
+    font_family: Annotated[str, Field(alias='fontFamily')]
+    weight: int | None = None
+
+
 class GoogleDocumentTextStyle(BaseModel, populate_by_name=True):
     """Store inline formatting and build HTML style wrappers."""
 
@@ -876,6 +883,10 @@ class GoogleDocumentTextStyle(BaseModel, populate_by_name=True):
         GoogleDocumentBaselineOffset, Field(alias='baselineOffset')
     ] = GoogleDocumentBaselineOffset.BASELINE_OFFSET_UNSPECIFIED
     link: GoogleDocumentLink | None = None
+    weighted_font_family: Annotated[
+        GoogleDocumentWeightedFontFamily | None,
+        Field(alias='weightedFontFamily'),
+    ] = None
 
     @property
     def format_string(self) -> str:

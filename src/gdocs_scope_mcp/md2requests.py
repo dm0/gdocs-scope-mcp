@@ -10,7 +10,7 @@ from urllib.parse import urlsplit
 import mistune
 from bs4 import BeautifulSoup, Tag
 from bs4.element import NavigableString, PageElement
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from rich.syntax import Syntax
 
 # isort: split
@@ -24,11 +24,23 @@ from .models import (
     GoogleDocumentParagraphStyle,
     GoogleDocumentTextRun,
     GoogleDocumentTextStyle,
+    GoogleDocumentWeightedFontFamily,
 )
 from .text_indices import utf16_length
 from .tool_errors import ToolFailureError
 
 IMAGE_URI_MAX_BYTES = 2048
+CODE_FONT_FAMILY = 'Roboto Mono'
+
+
+class InsertionCodeRun(GoogleDocumentTextRun):
+    """Preserve literal block whitespace, including trailing blank lines."""
+
+    @field_validator('content', mode='before')
+    @classmethod
+    def remove_trailing_newline(cls, value: str) -> str:
+        """Keep code newlines; the converter removes one block terminator."""
+        return value
 
 
 class InsertionImage(BaseModel):
@@ -147,6 +159,8 @@ def _convert_list(
                           'unsupported.')
     result = []
     for item in element.find_all('li', recursive=False):
+        if item.find('pre') is not None:
+            _unsupported_list('Code blocks inside list items are unsupported.')
         paragraph = InsertionParagraph(
             start_index=start, elements=[], list_key=list_key,
             nesting_level=level,
@@ -244,6 +258,10 @@ def _collect_styles(
             style.underline = True
         if parent.name in ['s', 'del']:
             style.strikethrough = True
+        if parent.name == 'code':
+            style.weighted_font_family = GoogleDocumentWeightedFontFamily(
+                font_family=CODE_FONT_FAMILY,
+            )
         if parent.name == 'a' and parent.get('href'):
             style.link = GoogleDocumentLink(url=parent['href'])
         if parent.name == 'sup':
@@ -276,6 +294,29 @@ def _convert_page_elements(
             last.end_index = end_index
             continue
         if isinstance(element, Tag):
+            if element.name == 'pre':
+                # Mistune adds one terminal newline to a fenced block. The
+                # surrounding paragraph break represents that terminator;
+                # all other whitespace must survive unchanged.
+                content = element.get_text().removesuffix('\n')
+                start = last.start_index + len(last)
+                run = InsertionCodeRun(
+                    start_index=start, end_index=start + utf16_length(content),
+                    content=content,
+                    text_style=GoogleDocumentTextStyle(
+                        weighted_font_family=GoogleDocumentWeightedFontFamily(
+                            font_family=CODE_FONT_FAMILY,
+                        ),
+                    ),
+                )
+                last = InsertionParagraph(
+                    start_index=start, end_index=run.end_index, elements=[run],
+                    paragraph_style=GoogleDocumentParagraphStyle(
+                        named_style_type=GoogleDocumentNamedStyleType.NORMAL_TEXT,
+                    ),
+                )
+                added.append(last)
+                continue
             if element.name == 'img':
                 start = last.start_index + len(last)
                 last.elements.append(_convert_image(element, start))
@@ -363,6 +404,7 @@ def gpars_to_requests(
     requests = []
     list_ranges = []
     paragraph_ranges = []
+    font_style_requests = []
     offset = 0
     for p in paragraphs:
         if not len(p):
@@ -393,7 +435,9 @@ def gpars_to_requests(
                 )
                 if not len(style):
                     continue
-                text_style_requests.append(
+                target = (font_style_requests if 'weightedFontFamily' in style
+                          else text_style_requests)
+                target.append(
                     {
                         'updateTextStyle': {
                             'range': {
@@ -462,6 +506,9 @@ def gpars_to_requests(
                 })
         if not newline_before:
             offset += 1
+    # Apply code fonts after all insertions, so subsequently inserted prose
+    # cannot inherit a font from a code paragraph we just formatted.
+    requests.extend(font_style_requests)
     if list_ranges:
         requests.append({'deleteParagraphBullets': {'range': {
             'startIndex': paragraph_ranges[0][0],

@@ -132,6 +132,10 @@ EDITING TOOLS:
     temporary My Drive root files and anyone-with-link reader access; sources
     are deleted after insertion. Check temporary_image_cleanup_pending for
     failed deletions. Do not repeat a successful insertion to clean them up.
+    Inline code and fenced/indented code blocks, including HTML code/pre, use
+    Roboto Mono. Blocks preserve line breaks, blank lines and indentation;
+    fence language labels are discarded without syntax highlighting. Inline
+    code works in list items; code blocks inside list items fail before writes.
 
     docs_get_tree          Read hierarchical document tree (headings)
     docs_read              Read document contents (paragraphs + plain)
@@ -359,6 +363,9 @@ def docs_insert_after(
     not yet implemented. Images require public HTTP(S) PNG/JPEG/GIF URLs;
     alt/title metadata is not preserved. HTML width/height accept pixel
     numbers.
+    Inline code and fenced/indented code blocks use Roboto Mono. They preserve
+    literal block whitespace; language labels and highlighting are ignored.
+    HTML code/pre are supported; blocks inside list items are unsupported.
 
     Args:
         doc_id: Google Doc ID
@@ -423,6 +430,9 @@ def docs_insert_before(
     not yet implemented. Images require public HTTP(S) PNG/JPEG/GIF URLs;
     alt/title metadata is not preserved. HTML width/height accept pixel
     numbers.
+    Inline code and fenced/indented code blocks use Roboto Mono. They preserve
+    literal block whitespace; language labels and highlighting are ignored.
+    HTML code/pre are supported; blocks inside list items are unsupported.
 
     Args:
         doc_id: Google Doc ID
@@ -519,6 +529,10 @@ def docs_append(
     PNG/JPEG/GIF URLs. HTML width/height accept pixel numbers; alt/title
     metadata is not preserved. CSS/responsive images are unsupported.
     Native tables are not yet implemented.
+
+    Inline code and fenced/indented code blocks use Roboto Mono. They preserve
+    literal block whitespace; language labels and highlighting are ignored.
+    HTML code/pre are supported; blocks inside list items are unsupported.
 
     With rich=False, preserve Markdown delimiters and line breaks literally.
 

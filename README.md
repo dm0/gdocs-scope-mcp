@@ -652,8 +652,32 @@ This is a bounded read-to-write subset, not complete HTML or formatting
 round-trip support. Other wrappers retain their child text without preserving
 unsupported formatting or attributes; non-text tags may contribute no content.
 For example, a styled `span` retains its text but loses its styling. Native
-tables and code formatting still have separate insertion
-limitations. Use `rich=False` to preserve HTML tags and Markdown literally.
+tables still have separate insertion limitations. Use `rich=False` to preserve
+HTML tags and Markdown literally.
+
+Inline code (backticks or HTML `code`) and code blocks (backtick/tilde fences,
+indented Markdown code, or HTML `pre`) use the native **Roboto Mono** font in
+all three insertion tools. Inline code is formatted only on its code span and
+can combine with outer emphasis or a hyperlink. Markdown code-span whitespace
+follows CommonMark normalization, including turning a source newline into a
+space.
+
+Code blocks become ordinary Google Docs paragraphs with a monospace text range,
+not an editor-specific code-block object. Block line breaks, blank lines, tabs,
+indentation and trailing spaces are preserved after Markdown removes the fence
+or indentation syntax. One terminal newline is represented by the surrounding
+paragraph boundary. Neighbouring prose stays separate and does not inherit the
+code font. Code contents are literal: Markdown-looking text and escaped HTML
+inside a fence are not interpreted again. Fence language labels are accepted
+but discarded; this initial policy does not add syntax highlighting, background
+shading, a custom font size or language metadata.
+
+Inline code works in supported single-paragraph list items. Code blocks inside
+list items return `INVALID_ARGUMENT` before writing; list-item block semantics
+remain outside the supported subset. `rich=False` preserves code markup
+literally. Receipts count the final literal text and paragraph breaks, not fence
+delimiters or language labels. Reads do not reconstruct code fences/backticks
+from font metadata, so this does not promise a lossless code round trip.
 
 Markdown unordered lists (`-`, `*`, `+`) and ordered lists starting at 1 create
 native Google Docs lists with separate item paragraphs. Nested lists of the

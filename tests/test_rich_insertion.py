@@ -246,10 +246,6 @@ def test_inline_markdown_links_and_strikethrough_keep_style(
     assert set(styles[0]['fields'].split(',')) == set(style)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason='Code elements are flattened without code font formatting.',
-)
 @pytest.mark.parametrize('newline_before', [False, True])
 @pytest.mark.parametrize('block', [False, True], ids=['inline', 'block'])
 def test_markdown_code_keeps_literal_text_and_font(block, newline_before):
