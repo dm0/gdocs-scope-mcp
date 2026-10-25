@@ -29,11 +29,11 @@ from .models import (
     GoogleDocumentTextStyle,
     GoogleDocumentWeightedFontFamily,
 )
+from .settings import get_settings
 from .text_indices import utf16_length
 from .tool_errors import ToolFailureError
 
 IMAGE_URI_MAX_BYTES = 2048
-CODE_FONT_FAMILY = 'Roboto Mono'
 
 
 class InsertionCodeRun(GoogleDocumentTextRun):
@@ -262,13 +262,16 @@ def _collect_styles(
         if parent.name in ['s', 'del']:
             style.strikethrough = True
         if parent.name == 'code':
+            settings = get_settings()
             style.weighted_font_family = GoogleDocumentWeightedFontFamily(
-                font_family=CODE_FONT_FAMILY,
+                font_family=settings.code_font_family,
             )
-            # Match Google Docs' native backtick conversion: #188038.
+            color = settings.inline_code_color.removeprefix('#')
             style.foreground_color = GoogleDocumentOptionalColor(
                 color=GoogleDocumentColor(rgb_color=GoogleDocumentRgbColor(
-                    red=24 / 255, green=128 / 255, blue=56 / 255,
+                    red=int(color[:2], 16) / 255,
+                    green=int(color[2:4], 16) / 255,
+                    blue=int(color[4:], 16) / 255,
                 )),
             )
         if parent.name == 'a' and parent.get('href'):
@@ -314,7 +317,7 @@ def _convert_page_elements(
                     content=content,
                     text_style=GoogleDocumentTextStyle(
                         weighted_font_family=GoogleDocumentWeightedFontFamily(
-                            font_family=CODE_FONT_FAMILY,
+                            font_family=get_settings().code_font_family,
                         ),
                     ),
                 )

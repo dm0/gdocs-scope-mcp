@@ -657,8 +657,8 @@ HTML tags and Markdown literally.
 
 Inline code (backticks or HTML `code`) and code blocks (backtick/tilde fences,
 indented Markdown code, or HTML `pre`) use the native **Roboto Mono** font in
-all three insertion tools. Inline code is formatted only on its code span and
-uses green **#188038**, matching Google Docs' built-in backtick recognition,
+all three insertion tools by default. Inline code is formatted only on its code
+span and defaults to green **#188038**, matching Google Docs' backtick recognition,
 and can combine with outer emphasis or a hyperlink. Markdown code-span whitespace
 follows CommonMark normalization, including turning a source newline into a
 space.
@@ -679,6 +679,57 @@ remain outside the supported subset. `rich=False` preserves code markup
 literally. Receipts count the final literal text and paragraph breaks, not fence
 delimiters or language labels. Reads do not reconstruct code fences/backticks
 from font metadata, so this does not promise a lossless code round trip.
+
+### Code formatting configuration
+
+An optional JSON config sets the code font and inline color. By default, the
+server reads `~/.config/gdocs-scope-mcp/config.json`, or
+`$XDG_CONFIG_HOME/gdocs-scope-mcp/config.json` when `XDG_CONFIG_HOME` is set.
+Select another file with `GOOGLE_DOCS_MCP_CONFIG=/absolute/path/config.json`.
+An absent default file is allowed; an explicitly selected file must exist.
+
+```json
+{
+  "code_font_family": "Roboto Mono",
+  "inline_code_color": "#188038"
+}
+```
+
+Both fields are optional; the example shows the built-in defaults. The font
+applies to inline code and blocks; the color applies only to inline code.
+Font names must be nonempty, and colors must use six-digit RGB hex syntax
+(`#RRGGBB`). Choose a font supported by Google Docs; the server validates the
+name's syntax but does not query font availability. Unknown JSON fields and
+invalid values fail validation, rather than silently falling back to defaults.
+
+Environment variables override individual file settings:
+
+| Environment variable | JSON field | Default |
+|---|---|---|
+| `GOOGLE_DOCS_MCP_CODE_FONT_FAMILY` | `code_font_family` | `Roboto Mono` |
+| `GOOGLE_DOCS_MCP_INLINE_CODE_COLOR` | `inline_code_color` | `#188038` |
+
+Precedence is environment, JSON file, then built-in defaults. Settings are
+loaded and validated at server startup and cached for that process. Restart
+the MCP server after changing the file or environment. These are server-level
+settings, not arguments exposed to agents on individual tool calls. This config
+currently covers code formatting; existing authentication, Drive and logging
+environment variables retain their separate handling. Our config does not
+automatically load `.env` files.
+
+Set environment overrides in the MCP client's server `env` configuration.
+For isolated FastMCP CLI tests, pass them explicitly to the child command:
+
+```bash
+uv run --locked fastmcp call \
+  --command 'env GOOGLE_DOCS_MCP_CONFIG=/absolute/path/config.json gdocs-scope-mcp' \
+  --target server_info --json
+```
+
+Setting a variable only on the parent CLI process does not guarantee it reaches
+the STDIO server; FastMCP's subprocess environment is filtered.
+
+### Native lists
 
 Markdown unordered lists (`-`, `*`, `+`) and ordered lists starting at 1 create
 native Google Docs lists with separate item paragraphs. Nested lists of the

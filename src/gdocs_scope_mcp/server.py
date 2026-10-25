@@ -64,6 +64,7 @@ from .models import (
     ReplyCommentResponse,
     ResolveCommentResponse,
 )
+from .settings import get_settings
 from .tool_inputs import (
     NonemptyText,
     PositiveInteger,
@@ -133,7 +134,8 @@ EDITING TOOLS:
     are deleted after insertion. Check temporary_image_cleanup_pending for
     failed deletions. Do not repeat a successful insertion to clean them up.
     Inline code and fenced/indented code blocks, including HTML code/pre, use
-    Roboto Mono; inline code also uses green #188038. Blocks preserve line
+    Roboto Mono by default; inline code defaults to green #188038. The server
+    config can override the code font and inline color. Blocks preserve line
     breaks, blank lines and indentation;
     fence language labels are discarded without syntax highlighting. Inline
     code works in list items; code blocks inside list items fail before writes.
@@ -364,9 +366,9 @@ def docs_insert_after(
     not yet implemented. Images require public HTTP(S) PNG/JPEG/GIF URLs;
     alt/title metadata is not preserved. HTML width/height accept pixel
     numbers.
-    Inline code and fenced/indented code blocks use Roboto Mono; inline code
-    also uses green #188038. They preserve
-    literal block whitespace; language labels and highlighting are ignored.
+    Inline code and blocks default to Roboto Mono, with inline color #188038;
+    font/color are configurable on the server. Blocks preserve literal
+    whitespace; language labels and highlighting are ignored.
     HTML code/pre are supported; blocks inside list items are unsupported.
 
     Args:
@@ -432,9 +434,9 @@ def docs_insert_before(
     not yet implemented. Images require public HTTP(S) PNG/JPEG/GIF URLs;
     alt/title metadata is not preserved. HTML width/height accept pixel
     numbers.
-    Inline code and fenced/indented code blocks use Roboto Mono; inline code
-    also uses green #188038. They preserve
-    literal block whitespace; language labels and highlighting are ignored.
+    Inline code and blocks default to Roboto Mono, with inline color #188038;
+    font/color are configurable on the server. Blocks preserve literal
+    whitespace; language labels and highlighting are ignored.
     HTML code/pre are supported; blocks inside list items are unsupported.
 
     Args:
@@ -533,9 +535,9 @@ def docs_append(
     metadata is not preserved. CSS/responsive images are unsupported.
     Native tables are not yet implemented.
 
-    Inline code and fenced/indented code blocks use Roboto Mono; inline code
-    also uses green #188038. They preserve
-    literal block whitespace; language labels and highlighting are ignored.
+    Inline code and blocks default to Roboto Mono, with inline color #188038;
+    font/color are configurable on the server. Blocks preserve literal
+    whitespace; language labels and highlighting are ignored.
     HTML code/pre are supported; blocks inside list items are unsupported.
 
     With rich=False, preserve Markdown delimiters and line breaks literally.
@@ -1018,6 +1020,7 @@ def docs_create(title: str, initial_text: str = '') -> CreateDocumentResponse:
 def main():
     """Run the command-line entry point for this module."""
     configure_logging()
+    get_settings()
     # Our logger has its own handler; this default is for third-party loggers.
     logging.basicConfig(level=logging.WARNING, stream=sys.stderr)
     mcp.run(transport='stdio')
