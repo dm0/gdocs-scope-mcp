@@ -164,10 +164,6 @@ def test_read_heading_anchor_is_not_inserted_as_visible_text():
     assert styles[0]['paragraphStyle']['namedStyleType'] == 'HEADING_1'
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason='List elements are flattened without paragraph breaks or bullets.',
-)
 @pytest.mark.parametrize(
     'markdown', ['- first\n- second', '1. first\n2. second'],
     ids=['unordered', 'ordered'],

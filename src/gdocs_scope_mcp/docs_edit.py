@@ -8,7 +8,7 @@ Rich mode uses the shared Markdown converter for paragraphs and inline styles:
     # / ## / ### headings
     **bold**, *italic*, ***bold italic***
 
-Native lists and tables are not yet implemented by the converter.
+Native lists are supported; native table insertion is not yet implemented.
 
 Auth (in priority order):
     1. GOOGLE_DOCS_MCP_TOKEN env var  → path to standalone token JSON
@@ -46,7 +46,7 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
 # isort: split
-from .md2requests import markdown_to_requests
+from .md2requests import inserted_text_from_requests, markdown_to_requests
 from .models import (
     APPEND_PREVIEW_LIMIT,
     RECEIPT_ITEM_LIMIT,
@@ -1007,11 +1007,7 @@ def insert_after(
 
     if rich:
         requests = markdown_to_requests(text, start=insert_index)
-        inserted_text = ''.join(
-            request['insertText']['text']
-            for request in requests
-            if 'insertText' in request
-        )
+        inserted_text = inserted_text_from_requests(requests)
     else:
         inserted_text = '\n' + text
         requests = [
@@ -1094,11 +1090,7 @@ def insert_before(
             start=insert_index,
             newline_before=False,
         )
-        inserted_text = ''.join(
-            request['insertText']['text']
-            for request in requests
-            if 'insertText' in request
-        )
+        inserted_text = inserted_text_from_requests(requests)
     else:
         inserted_text = text + '\n'
         requests = [
@@ -1225,11 +1217,7 @@ def append(doc_id: str, text: str, rich: bool = True) -> AppendSucceedResponse:
 
     if rich:
         requests = markdown_to_requests(text, start=insert_index)
-        inserted_text = ''.join(
-            request['insertText']['text']
-            for request in requests
-            if 'insertText' in request
-        )
+        inserted_text = inserted_text_from_requests(requests)
     else:
         inserted_text = '\n' + text
         requests = [
