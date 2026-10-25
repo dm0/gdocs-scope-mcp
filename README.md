@@ -658,7 +658,8 @@ HTML tags and Markdown literally.
 Inline code (backticks or HTML `code`) and code blocks (backtick/tilde fences,
 indented Markdown code, or HTML `pre`) use the native **Roboto Mono** font in
 all three insertion tools. Inline code is formatted only on its code span and
-can combine with outer emphasis or a hyperlink. Markdown code-span whitespace
+uses green **#188038**, matching Google Docs' built-in backtick recognition,
+and can combine with outer emphasis or a hyperlink. Markdown code-span whitespace
 follows CommonMark normalization, including turning a source newline into a
 space.
 

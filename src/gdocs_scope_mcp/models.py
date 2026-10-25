@@ -871,6 +871,26 @@ class GoogleDocumentWeightedFontFamily(BaseModel, populate_by_name=True):
     weight: int | None = None
 
 
+class GoogleDocumentRgbColor(BaseModel):
+    """Store RGB channels in the native zero-to-one range."""
+
+    red: float = 0
+    green: float = 0
+    blue: float = 0
+
+
+class GoogleDocumentColor(BaseModel, populate_by_name=True):
+    """Wrap the native RGB color representation."""
+
+    rgb_color: Annotated[GoogleDocumentRgbColor, Field(alias='rgbColor')]
+
+
+class GoogleDocumentOptionalColor(BaseModel):
+    """Represent a native color or an unset/transparent color."""
+
+    color: GoogleDocumentColor | None = None
+
+
 class GoogleDocumentTextStyle(BaseModel, populate_by_name=True):
     """Store inline formatting and build HTML style wrappers."""
 
@@ -886,6 +906,9 @@ class GoogleDocumentTextStyle(BaseModel, populate_by_name=True):
     weighted_font_family: Annotated[
         GoogleDocumentWeightedFontFamily | None,
         Field(alias='weightedFontFamily'),
+    ] = None
+    foreground_color: Annotated[
+        GoogleDocumentOptionalColor | None, Field(alias='foregroundColor'),
     ] = None
 
     @property

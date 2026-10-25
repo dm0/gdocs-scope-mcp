@@ -18,10 +18,13 @@ from .models import (
     EditFailedResponse,
     GoogleDocumentAlignment,
     GoogleDocumentBaselineOffset,
+    GoogleDocumentColor,
     GoogleDocumentLink,
     GoogleDocumentNamedStyleType,
+    GoogleDocumentOptionalColor,
     GoogleDocumentParagraph,
     GoogleDocumentParagraphStyle,
+    GoogleDocumentRgbColor,
     GoogleDocumentTextRun,
     GoogleDocumentTextStyle,
     GoogleDocumentWeightedFontFamily,
@@ -261,6 +264,12 @@ def _collect_styles(
         if parent.name == 'code':
             style.weighted_font_family = GoogleDocumentWeightedFontFamily(
                 font_family=CODE_FONT_FAMILY,
+            )
+            # Match Google Docs' native backtick conversion: #188038.
+            style.foreground_color = GoogleDocumentOptionalColor(
+                color=GoogleDocumentColor(rgb_color=GoogleDocumentRgbColor(
+                    red=24 / 255, green=128 / 255, blue=56 / 255,
+                )),
             )
         if parent.name == 'a' and parent.get('href'):
             style.link = GoogleDocumentLink(url=parent['href'])

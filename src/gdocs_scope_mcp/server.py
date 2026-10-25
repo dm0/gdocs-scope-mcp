@@ -133,7 +133,8 @@ EDITING TOOLS:
     are deleted after insertion. Check temporary_image_cleanup_pending for
     failed deletions. Do not repeat a successful insertion to clean them up.
     Inline code and fenced/indented code blocks, including HTML code/pre, use
-    Roboto Mono. Blocks preserve line breaks, blank lines and indentation;
+    Roboto Mono; inline code also uses green #188038. Blocks preserve line
+    breaks, blank lines and indentation;
     fence language labels are discarded without syntax highlighting. Inline
     code works in list items; code blocks inside list items fail before writes.
 
@@ -363,7 +364,8 @@ def docs_insert_after(
     not yet implemented. Images require public HTTP(S) PNG/JPEG/GIF URLs;
     alt/title metadata is not preserved. HTML width/height accept pixel
     numbers.
-    Inline code and fenced/indented code blocks use Roboto Mono. They preserve
+    Inline code and fenced/indented code blocks use Roboto Mono; inline code
+    also uses green #188038. They preserve
     literal block whitespace; language labels and highlighting are ignored.
     HTML code/pre are supported; blocks inside list items are unsupported.
 
@@ -430,7 +432,8 @@ def docs_insert_before(
     not yet implemented. Images require public HTTP(S) PNG/JPEG/GIF URLs;
     alt/title metadata is not preserved. HTML width/height accept pixel
     numbers.
-    Inline code and fenced/indented code blocks use Roboto Mono. They preserve
+    Inline code and fenced/indented code blocks use Roboto Mono; inline code
+    also uses green #188038. They preserve
     literal block whitespace; language labels and highlighting are ignored.
     HTML code/pre are supported; blocks inside list items are unsupported.
 
@@ -530,7 +533,8 @@ def docs_append(
     metadata is not preserved. CSS/responsive images are unsupported.
     Native tables are not yet implemented.
 
-    Inline code and fenced/indented code blocks use Roboto Mono. They preserve
+    Inline code and fenced/indented code blocks use Roboto Mono; inline code
+    also uses green #188038. They preserve
     literal block whitespace; language labels and highlighting are ignored.
     HTML code/pre are supported; blocks inside list items are unsupported.
 

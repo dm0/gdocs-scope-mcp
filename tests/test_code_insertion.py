@@ -13,12 +13,16 @@ from gdocs_scope_mcp.md2requests import (
 from gdocs_scope_mcp.models import GoogleDocumentTextStyle
 
 CODE_FONT = 'Roboto Mono'
+INLINE_COLOR = {'color': {'rgbColor': {
+    'red': 24 / 255, 'green': 128 / 255, 'blue': 56 / 255,
+}}}
 
 
 def replay(requests, original, start):
     """Track UTF-16 cells, font inheritance and list tab removal."""
     raw = original.encode('utf-16-le')
-    cells = [[raw[i:i + 2], 'BodyFont'] for i in range(0, len(raw), 2)]
+    cells = [[raw[i:i + 2], 'BodyFont', None]
+             for i in range(0, len(raw), 2)]
     for request in requests:
         if 'insertText' in request or 'insertInlineImage' in request:
             image = 'insertInlineImage' in request
@@ -26,8 +30,8 @@ def replay(requests, original, start):
             index = item['location']['index']
             assert 1 <= index < len(cells)
             data = ('\ufffc' if image else item['text']).encode('utf-16-le')
-            inherited = cells[index - 1][1]
-            cells[index:index] = [[data[i:i + 2], inherited]
+            inherited = cells[index - 1][1:]
+            cells[index:index] = [[data[i:i + 2], *inherited]
                                   for i in range(0, len(data), 2)]
             continue
         item = next(iter(request.values()))
@@ -35,6 +39,11 @@ def replay(requests, original, start):
         assert 1 <= left < right < len(cells)
         if 'updateTextStyle' in request:
             font = item['textStyle'].get('weightedFontFamily')
+            color = item['textStyle'].get('foregroundColor')
+            if color:
+                assert color == INLINE_COLOR
+                for cell in cells[left:right]:
+                    cell[2] = color
             if font:
                 for cell in cells[left:right]:
                     cell[1] = font['fontFamily']
@@ -50,7 +59,8 @@ def replay(requests, original, start):
     text = b''.join(c[0] for c in cells).decode('utf-16-le')
     assert text.startswith(raw[:start * 2].decode('utf-16-le'))
     code = b''.join(c[0] for c in cells if c[1] == CODE_FONT)
-    return text, code.decode('utf-16-le')
+    colored = b''.join(c[0] for c in cells if c[2] == INLINE_COLOR)
+    return text, code.decode('utf-16-le'), colored.decode('utf-16-le')
 
 
 @pytest.mark.parametrize('newline_before', [False, True])
@@ -86,7 +96,7 @@ def test_code_preserves_literal_text_and_only_formats_code(
     requests = markdown_to_requests(
         markup, start=start, newline_before=newline_before,
     )
-    text, styled_code = replay(requests, prefix + 'Suffix🦷\n', start)
+    text, styled_code, _ = replay(requests, prefix + 'Suffix🦷\n', start)
     expected = '\n' + plain if newline_before else plain + '\n'
     assert text == prefix + expected + 'Suffix🦷\n'
     assert styled_code == code
@@ -109,14 +119,37 @@ def test_code_style_combines_with_outer_emphasis_and_link():
     assert updates[0]['textStyle'] == {
         'bold': True, 'link': {'url': 'https://example.com'},
         'weightedFontFamily': {'fontFamily': CODE_FONT},
+        'foregroundColor': INLINE_COLOR,
     }
 
 
 def test_native_font_style_round_trips_through_typed_model():
     """Retain font metadata received from Google without losing its weight."""
-    value = {'weightedFontFamily': {'fontFamily': CODE_FONT, 'weight': 400}}
+    value = {
+        'weightedFontFamily': {'fontFamily': CODE_FONT, 'weight': 400},
+        'foregroundColor': INLINE_COLOR,
+    }
     style = GoogleDocumentTextStyle.model_validate(value)
     assert style.model_dump(by_alias=True, exclude_unset=True) == value
+
+
+@pytest.mark.parametrize('newline_before', [False, True])
+@pytest.mark.parametrize(('markup', 'green'), [
+    ('Before `one🦷` plain `two` after', 'one🦷two'),
+    ('Before <code>html🦷</code> after', 'html🦷'),
+    ('- `Parent`\n  - `Child🦷`\n- End', 'ParentChild🦷'),
+    ('`Inline`\n\n```\nBlock\n```\n\nAfter `last`', 'Inlinelast'),
+    ('Before\n\n<pre><code>Block</code></pre>\n\nAfter', ''),
+])
+def test_only_inline_code_uses_native_google_docs_green(
+    markup, green, newline_before,
+):
+    """Match native #188038 without coloring blocks or neighbouring text."""
+    requests = markdown_to_requests(
+        markup, start=2, newline_before=newline_before,
+    )
+    _, _, colored = replay(requests, '\nXFollowing\n', 2)
+    assert colored == green
 
 
 @pytest.mark.parametrize(
