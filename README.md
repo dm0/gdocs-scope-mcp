@@ -639,11 +639,19 @@ or `justify`). Nested inline styles combine within their text ranges. Heading
 ID anchors (`<a id=...></a>`) are omitted from inserted text; new headings use
 the Markdown heading level and receive their own Google Docs IDs.
 
+Markdown links (`[label](https://example.com)`) become native Google Docs links
+with their destination URLs. Bare HTTP(S) URLs recognized by the Markdown URL
+plugin and angle-bracket autolinks also receive native link styles. Strikethrough
+(`~~text~~`, HTML `del` or `s`) becomes native strikethrough formatting. Links
+and strikethrough combine with supported inline emphasis; surrounding plain
+text remains outside their formatting ranges. Reader HTML links (`a href`)
+are supported, while empty heading-ID anchors remain metadata.
+
 This is a bounded read-to-write subset, not complete HTML or formatting
 round-trip support. Other wrappers retain their child text without preserving
 unsupported formatting or attributes; non-text tags may contribute no content.
 For example, a styled `span` retains its text but loses its styling. Native
-links, lists, tables, images, and code formatting still have separate insertion
+lists, tables, images, and code formatting still have separate insertion
 limitations. Use `rich=False` to preserve HTML tags and Markdown literally.
 
 ```

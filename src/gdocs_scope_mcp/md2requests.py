@@ -13,6 +13,7 @@ from rich.syntax import Syntax
 from .models import (
     GoogleDocumentAlignment,
     GoogleDocumentBaselineOffset,
+    GoogleDocumentLink,
     GoogleDocumentNamedStyleType,
     GoogleDocumentParagraph,
     GoogleDocumentParagraphStyle,
@@ -68,8 +69,10 @@ def _collect_styles(
             style.italic = True
         if parent.name == 'u':
             style.underline = True
-        if parent.name == 's':
+        if parent.name in ['s', 'del']:
             style.strikethrough = True
+        if parent.name == 'a' and parent.get('href'):
+            style.link = GoogleDocumentLink(url=parent['href'])
         if parent.name == 'sup':
             style.baseline_offset = GoogleDocumentBaselineOffset.SUPERSCRIPT
         if parent.name == 'sub':

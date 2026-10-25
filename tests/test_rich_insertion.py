@@ -221,10 +221,6 @@ def test_markdown_table_creates_native_structure_and_cell_text(newline_before):
     assert sorted(values) == ['A', 'B', 'C', 'D']
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason='Link and del elements do not contribute text formatting requests.',
-)
 @pytest.mark.parametrize(
     ('markdown', 'style'),
     [
