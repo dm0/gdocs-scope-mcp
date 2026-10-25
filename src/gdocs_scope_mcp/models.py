@@ -452,6 +452,11 @@ class InsertSucceedResponse(DocumentEditReceipt):
         ),
     ]
     rich: bool
+    temporary_image_cleanup_pending: Annotated[
+        list[str], Field(description='Temporary Drive file IDs that could not '
+                         'be deleted; insertion succeeded, do not repeat it. '
+                         'Remove these files manually.')
+    ] = Field(default_factory=list)
     inserted_image_count: Annotated[
         int, Field(ge=0, description='Number of native inline images inserted')
     ] = 0
@@ -480,6 +485,11 @@ class AppendSucceedResponse(DocumentEditReceipt):
     """Describe appended content without exposing Google API requests."""
 
     ok: Literal[True] = True
+    temporary_image_cleanup_pending: Annotated[
+        list[str], Field(description='Temporary Drive file IDs that could not '
+                         'be deleted; insertion succeeded, do not repeat it. '
+                         'Remove these files manually.')
+    ] = Field(default_factory=list)
     inserted_image_count: Annotated[
         int, Field(ge=0, description='Number of native inline images inserted')
     ] = 0

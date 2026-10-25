@@ -49,6 +49,7 @@ def test_append_converts_headings_and_emphasis(simple_document, mock_docs):
         'appended': inserted,
         'inserted_char_count': len(inserted),
         'inserted_image_count': 0,
+        'temporary_image_cleanup_pending': [],
         'preview_truncated': False,
     }
 
@@ -118,7 +119,8 @@ def test_literal_append_preserves_input_without_conversion(
         raise AssertionError('Literal append must not parse Markdown')
 
     monkeypatch.setattr(
-        docs_edit, 'markdown_to_requests', unexpected_conversion
+        'gdocs_scope_mcp.image_uploads.markdown_to_requests',
+        unexpected_conversion,
     )
     result = docs_edit.append('example', text, rich=False)
 
@@ -192,6 +194,7 @@ def test_mcp_append_exposes_structured_receipt(mock_docs, rich):
         'appended',
         'inserted_char_count',
         'inserted_image_count',
+        'temporary_image_cleanup_pending',
         'preview_truncated',
     }
     success_schema = next(

@@ -37,7 +37,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
-from contextlib import suppress
+from contextlib import nullcontext, suppress
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -46,7 +46,8 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
 # isort: split
-from .md2requests import inserted_text_from_requests, markdown_to_requests
+from .image_uploads import PreparedInsertion, rich_insertion_requests
+from .md2requests import inserted_text_from_requests
 from .models import (
     APPEND_PREVIEW_LIMIT,
     RECEIPT_ITEM_LIMIT,
@@ -960,12 +961,38 @@ def search_replace(  # noqa: PLR0911, PLR0917
     )
 
 
+def _insert_content(
+    service, doc_id: str, text: str, index: int, *, rich: bool,
+    newline_before: bool = True, upload_local_images: bool = False,
+) -> tuple[str, int, list[str]]:
+    """Apply one atomic document batch within the temporary-image lifecycle."""
+    if rich:
+        context = rich_insertion_requests(
+            text, index, newline_before=newline_before,
+            upload_local_images=upload_local_images,
+            drive_factory=lambda: _get_service('drive', 'v3'),
+        )
+    else:
+        literal = '\n' + text if newline_before else text + '\n'
+        context = nullcontext(PreparedInsertion([{'insertText': {
+            'location': {'index': index}, 'text': literal,
+        }}]))
+    with context as prepared:
+        inserted = inserted_text_from_requests(prepared.requests)
+        service.documents().batchUpdate(
+            documentId=doc_id, body={'requests': prepared.requests},
+        ).execute()
+    return (inserted, sum('insertInlineImage' in r for r in prepared.requests),
+            prepared.cleanup_pending)
+
+
 def insert_after(
     doc_id: str,
     anchor: str,
     text: str,
     heading_id: str | None = None,
     rich: bool = True,
+    *, upload_local_images: bool = False,
 ) -> InsertSucceedResponse | EditFailedResponse:
     """
     Insert Markdown paragraphs after the paragraph containing `anchor`.
@@ -1005,27 +1032,15 @@ def insert_after(
     # This also stays inside the valid insertion range at the document end.
     insert_index = found.paragraph.end_index - 1
 
-    if rich:
-        requests = markdown_to_requests(text, start=insert_index)
-        inserted_text = inserted_text_from_requests(requests)
-    else:
-        inserted_text = '\n' + text
-        requests = [
-            {
-                'insertText': {
-                    'location': {'index': insert_index},
-                    'text': inserted_text,
-                }
-            }
-        ]
-    service.documents().batchUpdate(
-        documentId=doc_id,
-        body={'requests': requests},
-    ).execute()
+    inserted_text, image_count, cleanup_pending = _insert_content(
+        service, doc_id, text, insert_index, rich=rich,
+        upload_local_images=upload_local_images,
+    )
 
     return InsertSucceedResponse(
         document_id=doc_id, heading_id=heading_id,
-        inserted_image_count=sum('insertInlineImage' in r for r in requests),
+        inserted_image_count=image_count,
+        temporary_image_cleanup_pending=cleanup_pending,
         scope='heading_subtree' if heading_id is not None else 'document',
         inserted_char_count=len(inserted_text),
         preview_truncated=len(inserted_text) > TEXT_PREVIEW_LIMIT,
@@ -1047,6 +1062,7 @@ def insert_before(
     text: str,
     heading_id: str | None = None,
     rich: bool = True,
+    *, upload_local_images: bool = False,
 ) -> InsertSucceedResponse | EditFailedResponse:
     """
     Insert Markdown paragraphs before the paragraph containing `anchor`.
@@ -1085,31 +1101,15 @@ def insert_before(
     # Insert at the start of the paragraph
     insert_index = found.paragraph.start_index
 
-    if rich:
-        requests = markdown_to_requests(
-            text,
-            start=insert_index,
-            newline_before=False,
-        )
-        inserted_text = inserted_text_from_requests(requests)
-    else:
-        inserted_text = text + '\n'
-        requests = [
-            {
-                'insertText': {
-                    'location': {'index': insert_index},
-                    'text': inserted_text,
-                }
-            }
-        ]
-    service.documents().batchUpdate(
-        documentId=doc_id,
-        body={'requests': requests},
-    ).execute()
+    inserted_text, image_count, cleanup_pending = _insert_content(
+        service, doc_id, text, insert_index, rich=rich, newline_before=False,
+        upload_local_images=upload_local_images,
+    )
 
     return InsertSucceedResponse(
         document_id=doc_id, heading_id=heading_id,
-        inserted_image_count=sum('insertInlineImage' in r for r in requests),
+        inserted_image_count=image_count,
+        temporary_image_cleanup_pending=cleanup_pending,
         scope='heading_subtree' if heading_id is not None else 'document',
         inserted_char_count=len(inserted_text),
         preview_truncated=len(inserted_text) > TEXT_PREVIEW_LIMIT,
@@ -1194,7 +1194,10 @@ def delete_paragraph(doc_id: str, anchor: str) -> dict:
     }
 
 
-def append(doc_id: str, text: str, rich: bool = True) -> AppendSucceedResponse:
+def append(
+    doc_id: str, text: str, rich: bool = True, *,
+    upload_local_images: bool = False,
+) -> AppendSucceedResponse:
     """
     Append Markdown or literal text and return a compact typed receipt.
     """
@@ -1217,27 +1220,15 @@ def append(doc_id: str, text: str, rich: bool = True) -> AppendSucceedResponse:
     last_elem = body_content[-1]
     insert_index = last_elem['endIndex'] - 1
 
-    if rich:
-        requests = markdown_to_requests(text, start=insert_index)
-        inserted_text = inserted_text_from_requests(requests)
-    else:
-        inserted_text = '\n' + text
-        requests = [
-            {
-                'insertText': {
-                    'location': {'index': insert_index},
-                    'text': inserted_text,
-                }
-            }
-        ]
-    service.documents().batchUpdate(
-        documentId=doc_id,
-        body={'requests': requests},
-    ).execute()
+    inserted_text, image_count, cleanup_pending = _insert_content(
+        service, doc_id, text, insert_index, rich=rich,
+        upload_local_images=upload_local_images,
+    )
 
     return AppendSucceedResponse(
         document_id=doc_id,
-        inserted_image_count=sum('insertInlineImage' in r for r in requests),
+        inserted_image_count=image_count,
+        temporary_image_cleanup_pending=cleanup_pending,
         rich=rich,
         at_index=insert_index,
         appended=inserted_text[:APPEND_PREVIEW_LIMIT],

@@ -128,6 +128,10 @@ EDITING TOOLS:
     accept positive pixel numbers; CSS sizes and responsive sources fail before
     writes. Alt/title are not native metadata. Receipts expose
     inserted_image_count and U+FFFC image placeholders in text/counts.
+    Local images require upload_local_images=True. This explicitly permits
+    temporary My Drive root files and anyone-with-link reader access; sources
+    are deleted after insertion. Check temporary_image_cleanup_pending for
+    failed deletions. Do not repeat a successful insertion to clean them up.
 
     docs_get_tree          Read hierarchical document tree (headings)
     docs_read              Read document contents (paragraphs + plain)
@@ -337,6 +341,7 @@ def docs_insert_after(
     text: str,
     heading_id: str | None = None,
     rich: bool = True,
+    *, upload_local_images: bool = False,
 ) -> InsertSucceedResponse | EditFailedResponse:
     """
     Insert a new paragraph immediately after the paragraph containing `anchor`.
@@ -362,6 +367,10 @@ def docs_insert_after(
         text:   Text to insert as the new paragraph
         heading_id: Narrow down search to this heading and subheadings
         rich:   If True (default), convert Markdown using the shared converter
+        upload_local_images: Allow absolute local image paths/file URLs.
+            Uploads to My Drive root, temporarily grants anyone-with-link
+            read access, inserts, then deletes sources. Defaults to False.
+            Ignored with rich=False. See temporary_image_cleanup_pending.
 
     Returns
     -------
@@ -374,7 +383,8 @@ def docs_insert_after(
         80 code points, with anchor_char_count and anchor_preview_truncated.
     """
     return docs_edit.insert_after(
-        doc_id, anchor, text, heading_id=heading_id, rich=rich
+        doc_id, anchor, text, heading_id=heading_id, rich=rich,
+        upload_local_images=upload_local_images,
     )
 
 
@@ -393,6 +403,7 @@ def docs_insert_before(
     text: str,
     heading_id: str | None = None,
     rich: bool = True,
+    *, upload_local_images: bool = False,
 ) -> InsertSucceedResponse | EditFailedResponse:
     """
     Insert a new paragraph immediately before the paragraph containing
@@ -419,6 +430,10 @@ def docs_insert_before(
         text:   Text to insert as the new paragraph
         heading_id: Narrow down search to this heading and subheadings
         rich:   If True (default), convert Markdown using the shared converter
+        upload_local_images: Allow absolute local image paths/file URLs.
+            Uploads to My Drive root, temporarily grants anyone-with-link
+            read access, inserts, then deletes sources. Defaults to False.
+            Ignored with rich=False. See temporary_image_cleanup_pending.
 
     Returns
     -------
@@ -436,6 +451,7 @@ def docs_insert_before(
         text,
         heading_id=heading_id,
         rich=rich,
+        upload_local_images=upload_local_images,
     )
 
 
@@ -489,7 +505,8 @@ def docs_delete_paragraph(
     },
 )
 def docs_append(
-    doc_id: str, text: str, rich: bool = True
+    doc_id: str, text: str, rich: bool = True, *,
+    upload_local_images: bool = False,
 ) -> AppendSucceedResponse:
     """
     Append Markdown paragraphs or literal text at the end of a Google Doc.
@@ -509,6 +526,10 @@ def docs_append(
         doc_id: Google Doc ID
         text: Markdown or literal content to append, according to rich.
         rich: Parse Markdown if True (default); insert literal text if False.
+        upload_local_images: Allow absolute local image paths/file URLs.
+            Uploads to My Drive root, temporarily grants anyone-with-link
+            read access, inserts, then deletes sources. Defaults to False.
+            Ignored with rich=False. See temporary_image_cleanup_pending.
 
     Returns
     -------
@@ -519,7 +540,8 @@ def docs_append(
         and ok=True. Read the document to verify formatting.
         scope is document_end and heading_id is null.
     """
-    return docs_edit.append(doc_id, text, rich=rich)
+    return docs_edit.append(doc_id, text, rich=rich,
+                            upload_local_images=upload_local_images)
 
 
 @mcp.tool(

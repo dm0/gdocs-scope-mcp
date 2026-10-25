@@ -3,6 +3,7 @@
 import re
 from collections.abc import Iterable
 from functools import lru_cache
+from html import escape
 from typing import Literal
 from urllib.parse import urlsplit
 
@@ -112,6 +113,18 @@ class DocsHTMLRenderer(mistune.HTMLRenderer):
     def softbreak(self) -> str:
         """Render a soft-wrapped source line as a space, as HTML would."""
         return ' '
+
+    def image(self, text: str, url: str, title: str | None = None) -> str:
+        """Preserve file sources for the opt-in upload stage to validate."""
+        if url.lower().startswith('file:'):
+            # Retain Mistune's alt/title escaping while allowing only this
+            # image source through. Links and other protocols stay unchanged.
+            placeholder = 'https://gdocs-scope-mcp.invalid/local'
+            rendered = super().image(text, placeholder, title)
+            return rendered.replace(
+                f'src="{placeholder}"', f'src="{escape(url, quote=True)}"', 1,
+            )
+        return super().image(text, url, title)
 
 
 def _unsupported_list(description: str) -> None:

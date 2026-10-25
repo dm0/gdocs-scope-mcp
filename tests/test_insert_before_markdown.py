@@ -74,7 +74,9 @@ def test_literal_before_anchor_bypasses_markdown(
     def unexpected_call(*_args, **_kwargs):
         raise AssertionError('Literal insertion must not parse Markdown')
 
-    monkeypatch.setattr(docs_edit, 'markdown_to_requests', unexpected_call)
+    monkeypatch.setattr(
+        'gdocs_scope_mcp.image_uploads.markdown_to_requests', unexpected_call,
+    )
     result = docs_edit.insert_before(
         'example',
         'Introduction',
