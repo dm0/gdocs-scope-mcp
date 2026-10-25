@@ -115,6 +115,10 @@ EDITING TOOLS:
     IDs to reuse. Other wrappers retain child text without unsupported styles;
     this does not provide complete formatting round trips. rich=False keeps
     the original markup literal.
+    Markdown links, recognized bare HTTP(S) URLs, autolinks and HTML a[href]
+    become native link styles. Markdown strikethrough and HTML del/s become
+    native strikethrough. Both combine with supported inline emphasis and
+    apply only to their text ranges.
 
     docs_get_tree          Read hierarchical document tree (headings)
     docs_read              Read document contents (paragraphs + plain)
