@@ -1,7 +1,5 @@
 """Record issue #24 contracts without treating unsupported lists as success."""
 
-# When #24 ships, retire the multi-paragraph rejection case in
-# test_list_insertion.py while retaining other unsupported-form protections.
 # Fixture offsets and item counts are independent expectations.
 # ruff: noqa: PLR2004
 
@@ -15,7 +13,6 @@ from fastmcp import Client
 
 from gdocs_scope_mcp import docs_edit, server
 from gdocs_scope_mcp.md2requests import markdown_to_html, markdown_to_requests
-from gdocs_scope_mcp.tool_errors import ToolFailureError
 
 
 @dataclass
@@ -128,7 +125,8 @@ class ListReplay:
             unit = self.units[a]
             text = b''.join(u.value for u in self.units[a:b])
             row = {
-                'text': text.decode('utf-16-le').rstrip('\n'),
+                'text': (text.decode('utf-16-le').removeprefix('\0')
+                         .rstrip('\n')),
                 'bullet': unit.bullet,
                 'style': unit.paragraph_style,
                 'continued_level': unit.continued_level,
@@ -227,10 +225,6 @@ def assert_item_contract(replay, lines, ordered, nested):
     assert replay.styled_text('italic') == ('Child🦷' if nested else '')
 
 
-@pytest.mark.xfail(
-    strict=True, raises=(ToolFailureError, AssertionError),
-    reason='#24: multiple paragraphs and parent continuations unsupported.',
-)
 @pytest.mark.parametrize('nested', [False, True])
 @pytest.mark.parametrize('newline_before', [False, True])
 def test_advanced_list_paragraphs_and_numbering(
@@ -258,10 +252,6 @@ def test_advanced_list_paragraphs_and_numbering(
     assert_item_contract(replay, lines, ordered, nested)
 
 
-@pytest.mark.xfail(
-    strict=True, raises=AssertionError,
-    reason='#24: MCP rejects multi-paragraph and post-child continuations.',
-)
 @pytest.mark.parametrize('nested', [False, True])
 @pytest.mark.parametrize(
     'operation', ['append', 'insert_before', 'insert_after'],
@@ -336,10 +326,6 @@ def test_advanced_list_literal_mode_is_already_supported(
     }}]
 
 
-@pytest.mark.xfail(
-    strict=True, raises=AssertionError,
-    reason='#24: tight and loose lists currently have identical spacing.',
-)
 @pytest.mark.parametrize('ordered', [False, True])
 @pytest.mark.parametrize('newline_before', [False, True])
 def test_loose_list_spacing_is_distinct_without_extra_items(
@@ -385,3 +371,34 @@ def test_replay_controls_bullet_removal_and_numbering(ordered):
     continuation = next(r for r in rows if r['text'] == 'Continued')
     assert continuation['bullet'] is None
     assert continuation['continued_level'] == 0
+
+
+@pytest.mark.parametrize('newline_before', [False, True])
+def test_deep_continuations_and_separate_lists(newline_before):
+    """Rebase continuation ranges after all nesting tabs in each list."""
+    markdown = (
+        '1. Parent\n\n'
+        '   1. Child\n\n'
+        '      Child continued😀\n\n'
+        '      1. Grandchild\n\n'
+        '         Grandchild continued\n\n'
+        '      Child after grandchild\n\n'
+        '   Parent after child\n\n'
+        '2. Last\n\nBetween\n\n'
+        '- Other\n\n  Other continued\n\n- Last other'
+    )
+    replay = ListReplay('\nSuffix\n')
+    requests = markdown_to_requests(markdown, newline_before=newline_before)
+    replay.apply(requests)
+    rows = {row['text']: row for row in replay.rows()}
+    for label, level in [('Child continued😀', 1),
+                         ('Grandchild continued', 2),
+                         ('Child after grandchild', 1),
+                         ('Parent after child', 0), ('Other continued', 0)]:
+        row = rows[label]
+        assert row['bullet'] is None
+        assert row['style']['indentStart']['magnitude'] == 36 * (level + 1)
+    assert rows['Parent']['bullet']['id'] == rows['Last']['bullet']['id']
+    assert rows['Other']['bullet']['id'] == rows['Last other']['bullet']['id']
+    assert rows['Last']['number'] == rows['Last other']['number'] == 2
+    assert rows['Between']['bullet'] is None

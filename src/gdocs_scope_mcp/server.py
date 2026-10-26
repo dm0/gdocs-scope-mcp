@@ -124,9 +124,13 @@ EDITING TOOLS:
     native strikethrough. Both combine with supported inline emphasis and
     apply only to their text ranges.
     Native ordered/unordered lists preserve item paragraphs and homogeneous
-    nesting. Items must be nonempty single paragraphs; custom start numbers,
-    mixed ordered/unordered nesting and multi-paragraph items fail before
-    writes. List receipts exclude the temporary nesting tabs.
+    nesting and multiple ordinary paragraphs per item, including continuations
+    after nested lists. Continuations have no marker and do not increment
+    numbering. Loose lists use 6 pt above paragraphs; tight lists use zero.
+    Empty items, custom start numbers, mixed ordered/unordered nesting and
+    arbitrary blocks inside items fail before writes. List receipts exclude
+    temporary nesting tabs. Reads cannot reconstruct logical item membership
+    from indentation alone.
     Markdown images and HTML img[src] insert native inline images using public
     HTTP(S) URLs (PNG/JPEG/GIF; Google's size limits apply). HTML width/height
     accept positive pixel numbers; CSS sizes and responsive sources fail before
