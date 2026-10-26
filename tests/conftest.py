@@ -1,6 +1,8 @@
 """Provide captured API data and an isolated Docs service for offline tests."""
 
 import json
+import os
+import re
 import struct
 import zlib
 from copy import deepcopy
@@ -10,6 +12,21 @@ from unittest.mock import MagicMock
 import pytest
 
 from gdocs_scope_mcp import docs_edit
+
+
+@pytest.fixture
+def live_test_doc():
+    """Require an explicit target document before running a live test."""
+    doc_id = os.environ.get('GDOCS_SCOPE_MCP_LIVE_TEST_DOC')
+    if doc_id is None:
+        pytest.skip('Set GDOCS_SCOPE_MCP_LIVE_TEST_DOC to a test document ID.')
+    if not re.fullmatch(r'[A-Za-z0-9_-]+', doc_id):
+        pytest.fail(
+            'GDOCS_SCOPE_MCP_LIVE_TEST_DOC must contain a Google Doc ID, '
+            'not an empty value, URL or whitespace.',
+            pytrace=False,
+        )
+    return doc_id
 
 
 @pytest.fixture

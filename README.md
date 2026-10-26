@@ -899,15 +899,23 @@ as the staging location. See [application data restrictions](https://developers.
 
 The Drive-to-Docs mechanism and retained embedded copy after source deletion
 were verified on the designated development document. Optional live regressions
-upload only a generated fixture image, temporarily share it, edit that document
-and remove the source files:
+upload only a generated fixture image, temporarily share it, edit the explicitly
+selected test document and remove the source files:
 
 ```bash
-GDOCS_SCOPE_MCP_LIVE_DRIVE_IMAGES=1 uv run --locked pytest -q tests/test_live_drive_images.py
+GDOCS_SCOPE_MCP_LIVE_TEST_DOC='your-test-document-id' \
+  uv run --locked pytest -q tests/test_live_drive_images.py
 ```
 
-They are skipped by default. Use the live-test document and authorization rules
-in the workspace instructions before opting in; ordinary unit tests are offline.
+`GDOCS_SCOPE_MCP_LIVE_TEST_DOC` both enables live tests and selects their target.
+Pass the raw Google Doc ID, not a URL. There is no hard-coded target or fallback.
+When the variable is unset, live tests are skipped; an empty value, URL or
+whitespace fails before accessing Google. The former
+`GDOCS_SCOPE_MCP_LIVE_DRIVE_IMAGES` flag is no longer used.
+
+Choose a disposable document that you are authorized to modify. Test insertions
+remain in the document; temporary source images are deleted. Follow any workspace
+authorization rules before opting in. Ordinary unit tests remain offline.
 
 ```
 docs_append(doc_id="...", text="Document last updated: March 2026.")

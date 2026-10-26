@@ -20,13 +20,7 @@ from googleapiclient.http import MediaIoBaseUpload
 from gdocs_scope_mcp import docs_edit
 from gdocs_scope_mcp.diagnostics import capture_server_info
 
-TEST_DOCUMENT = '1jG0MECReTHJMH5HdsiZnsGjjRDLcoHvDyomuYdsiJZk'
 EXPECTED_HTML_POINTS = 24
-pytestmark = pytest.mark.skipif(
-    os.environ.get('GDOCS_SCOPE_MCP_LIVE_DRIVE_IMAGES') != '1',
-    reason='Requires opt-in: uploads/shares/deletes a temporary image '
-    'and edits the designated live test document.',
-)
 
 
 @pytest.fixture
@@ -53,7 +47,9 @@ def isolated_mcp():
     return connect
 
 
-def test_temporary_drive_url_survives_source_deletion(image_png, isolated_mcp):
+def test_temporary_drive_url_survives_source_deletion(
+    live_test_doc, image_png, isolated_mcp,
+):
     """Upload/share a source, insert through MCP, then delete and read back."""
     evidence = Path('/tmp/gdocs-scope-mcp-drive-probe.json')
     log = Path('/tmp/gdocs-scope-mcp-drive-probe.log')
@@ -92,7 +88,7 @@ def test_temporary_drive_url_survives_source_deletion(image_png, isolated_mcp):
             candidates = list(dict.fromkeys(uri for uri in candidates if uri))
             for uri in candidates:
                 result = await client.call_tool('docs_append', {
-                    'doc_id': TEST_DOCUMENT,
+                    'doc_id': live_test_doc,
                     'text': f'{marker} before ![probe]({uri}) after',
                 }, raise_on_error=False)
                 report['attempts'].append({
@@ -110,7 +106,7 @@ def test_temporary_drive_url_survives_source_deletion(image_png, isolated_mcp):
                 drive.files().get(fileId=file_id, fields='id').execute()
             assert missing.value.resp.status == HTTPStatus.NOT_FOUND
             file_id = None
-            native = docs.documents().get(documentId=TEST_DOCUMENT).execute()
+            native = docs.documents().get(documentId=live_test_doc).execute()
             paragraph = next(
                 p['paragraph'] for p in native['body']['content']
                 if any(marker in e.get('textRun', {}).get('content', '')
@@ -128,7 +124,7 @@ def test_temporary_drive_url_survives_source_deletion(image_png, isolated_mcp):
                 assert response.read()
             report['copy_accessible_after_source_deletion'] = True
             readback = await client.call_tool('docs_read', {
-                'doc_id': TEST_DOCUMENT,
+                'doc_id': live_test_doc,
             })
             assert not readback.is_error
             assert marker in json.dumps(readback.structured_content)
@@ -152,7 +148,7 @@ def test_temporary_drive_url_survives_source_deletion(image_png, isolated_mcp):
 
 
 def test_local_image_uploads_through_all_tools(
-    image_png, isolated_mcp, tmp_path,
+    live_test_doc, image_png, isolated_mcp, tmp_path,
 ):
     """Exercise opt-in uploads, native readback and automatic deletion."""
     path = tmp_path / 'local image 🦷.png'
@@ -173,7 +169,7 @@ def test_local_image_uploads_through_all_tools(
                           f'![MD]({path.as_uri()}) *After🦷* '
                           f'<img src="{path}" width="32"> tail')
                 arguments = {
-                    'doc_id': TEST_DOCUMENT, 'upload_local_images': True,
+                    'doc_id': live_test_doc, 'upload_local_images': True,
                     'text': markup,
                 }
                 if operation != 'append':
@@ -187,7 +183,7 @@ def test_local_image_uploads_through_all_tools(
                     'operation': operation, 'marker': marker,
                     'receipt': receipt,
                 })
-            native = docs.documents().get(documentId=TEST_DOCUMENT).execute()
+            native = docs.documents().get(documentId=live_test_doc).execute()
             temporary_ids = set()
             for item in report['operations']:
                 paragraph = next(
@@ -241,7 +237,7 @@ def test_local_image_uploads_through_all_tools(
             report['deleted_temporary_files'] = sorted(temporary_ids)
             report['native_readback_ok'] = True
             result = await client.call_tool('docs_read', {
-                'doc_id': TEST_DOCUMENT,
+                'doc_id': live_test_doc,
             })
             assert not result.is_error
             assert prefix in json.dumps(result.structured_content)
