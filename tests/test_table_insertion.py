@@ -29,6 +29,7 @@ class NativeBuffer:
         self.tables = []
         self.batches = []
         self.styles = []
+        self.table_styles = []
         self.revision = 0
         self.service = MagicMock()
         documents = self.service.documents.return_value
@@ -91,6 +92,12 @@ class NativeBuffer:
                 structure += closing
                 self.tables.append(table)
                 self.insert(operation['location']['index'], structure)
+            elif 'updateTableCellStyle' in request:
+                operation = request['updateTableCellStyle']
+                assert any(self.index(table['open'])
+                           == operation['tableStartLocation']['index']
+                           for table in self.tables)
+                self.table_styles.append(deepcopy(operation))
             elif 'insertText' in request or 'insertInlineImage' in request:
                 operation = next(iter(request.values()))
                 self.insert(operation['location']['index'],
@@ -319,3 +326,22 @@ def test_cell_soft_breaks_preserve_whitespace_styles_and_indices(tag, html):
     preview = inserted_text_from_requests(plan)
     assert '\n😀bold\n\nnext\n\n' in preview
     assert '\u000b' not in preview
+
+
+@pytest.mark.parametrize('borders', [False, True])
+@pytest.mark.parametrize('empty', [False, True])
+def test_borders_apply_to_all_new_tables_only(borders, empty):
+    """Set outer/internal borders even when tables contain no text requests."""
+    markup = ('<table><tr><td></td></tr></table>' if empty else MARKDOWN)
+    native = NativeBuffer()
+    plan = markdown_to_requests(markup + '\n\n' + markup, native.start)
+    plan.execute(native.service, 'test', table_borders=borders)
+    assert len(native.table_styles) == len(native.tables)
+    sides = {'borderTop', 'borderBottom', 'borderLeft', 'borderRight'}
+    for operation in native.table_styles:
+        assert set(operation['fields'].split(',')) == sides
+        assert set(operation['tableCellStyle']) == sides
+        for border in operation['tableCellStyle'].values():
+            assert border['width'] == {
+                'magnitude': 1 if borders else 0, 'unit': 'PT',
+            }

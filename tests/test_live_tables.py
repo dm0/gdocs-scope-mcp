@@ -13,10 +13,14 @@ from gdocs_scope_mcp import docs_edit
 @pytest.mark.parametrize('tool', [
     'docs_append', 'docs_insert_before', 'docs_insert_after',
 ])
-def test_native_table_insertion(live_test_doc, isolated_mcp, tool):
+@pytest.mark.parametrize('table_borders', [None, True, False])
+def test_native_table_insertion(
+    live_test_doc, isolated_mcp, tool, table_borders,
+):
     """Check native cells, formatting and surrounding paragraphs via MCP."""
     marker = 'TABLE_' + uuid.uuid4().hex
-    log = Path(f'/tmp/gdocs-scope-mcp-{tool}-tables.log')
+    mode = 'default' if table_borders is None else str(table_borders).lower()
+    log = Path(f'/tmp/gdocs-scope-mcp-{tool}-tables-{mode}.log')
     evidence = log.with_suffix('.json')
     report = {}
     docs = docs_edit._get_service('docs', 'v1').documents()
@@ -37,6 +41,8 @@ def test_native_table_insertion(live_test_doc, isolated_mcp, tool):
                     '| plain | `code` | <br>~~gone~~<br/><br /> |\n\n'
                     f'{marker} after')
             arguments = {'doc_id': live_test_doc, 'text': text}
+            if table_borders is not None:
+                arguments['table_borders'] = table_borders
             if tool != 'docs_append':
                 arguments['anchor'] = marker + ' anchor'
             original = docs.get(documentId=live_test_doc).execute()
@@ -71,6 +77,17 @@ def test_native_table_insertion(live_test_doc, isolated_mcp, tool):
                 for cell, alignment in zip(row, ['START', 'CENTER', 'END'],
                                            strict=True):
                     assert len(cell['content']) == 1
+                    for side in ('Top', 'Bottom', 'Left', 'Right'):
+                        border = cell['tableCellStyle'].get('border' + side)
+                        # Docs omits inherited standard borders (black 1 pt).
+                        # Hidden borders must have an explicit zero width.
+                        if border is None:
+                            assert table_borders is not False
+                            continue
+                        width = border['width']
+                        assert width.get('magnitude', 0) == (
+                            0 if table_borders is False else 1
+                        )
                     assert cell['content'][0]['paragraph'][
                         'paragraphStyle']['alignment'] == alignment
             assert first_style(rows[0][0])['bold'] is True

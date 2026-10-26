@@ -72,6 +72,7 @@ from .tool_inputs import (
     PositiveInteger,
     ReplacementOccurrence,
     Replacements,
+    TableBorders,
 )
 from .tool_logging import ToolCallLoggingMiddleware, configure_logging
 
@@ -356,7 +357,7 @@ def docs_insert_after(
     text: str,
     heading_id: str | None = None,
     rich: bool = True,
-    *, upload_local_images: bool = False,
+    *, upload_local_images: bool = False, table_borders: TableBorders = True,
     code_block_style: CodeBlockStyle | None = None,
     code_block_theme_background: CodeBlockThemeBackground | None = None,
 ) -> InsertSucceedResponse | EditFailedResponse:
@@ -397,6 +398,8 @@ def docs_insert_after(
             Uploads to My Drive root, temporarily grants anyone-with-link
             read access, inserts, then deletes sources. Defaults to False.
             Ignored with rich=False. See temporary_image_cleanup_pending.
+        table_borders: Show borders on new tables (default True).
+            False hides outer and internal borders. Ignored with rich=False.
         code_block_style: Pygments theme, e.g. default or monokai.
             Omitted/null inherits config/environment. Ignored with rich=False.
         code_block_theme_background: Apply paragraph theme background.
@@ -418,6 +421,7 @@ def docs_insert_after(
         return docs_edit.insert_after(
             doc_id, anchor, text, heading_id=heading_id, rich=rich,
             upload_local_images=upload_local_images,
+            table_borders=table_borders,
         )
 
 
@@ -436,7 +440,7 @@ def docs_insert_before(
     text: str,
     heading_id: str | None = None,
     rich: bool = True,
-    *, upload_local_images: bool = False,
+    *, upload_local_images: bool = False, table_borders: TableBorders = True,
     code_block_style: CodeBlockStyle | None = None,
     code_block_theme_background: CodeBlockThemeBackground | None = None,
 ) -> InsertSucceedResponse | EditFailedResponse:
@@ -478,6 +482,8 @@ def docs_insert_before(
             Uploads to My Drive root, temporarily grants anyone-with-link
             read access, inserts, then deletes sources. Defaults to False.
             Ignored with rich=False. See temporary_image_cleanup_pending.
+        table_borders: Show borders on new tables (default True).
+            False hides outer and internal borders. Ignored with rich=False.
         code_block_style: Pygments theme, e.g. default or monokai.
             Omitted/null inherits config/environment. Ignored with rich=False.
         code_block_theme_background: Apply paragraph theme background.
@@ -499,6 +505,7 @@ def docs_insert_before(
         return docs_edit.insert_before(
             doc_id, anchor, text, heading_id=heading_id, rich=rich,
             upload_local_images=upload_local_images,
+            table_borders=table_borders,
         )
 
 
@@ -554,6 +561,7 @@ def docs_delete_paragraph(
 def docs_append(
     doc_id: str, text: str, rich: bool = True, *,
     upload_local_images: bool = False,
+    table_borders: TableBorders = True,
     code_block_style: CodeBlockStyle | None = None,
     code_block_theme_background: CodeBlockThemeBackground | None = None,
 ) -> AppendSucceedResponse:
@@ -588,6 +596,8 @@ def docs_append(
             Uploads to My Drive root, temporarily grants anyone-with-link
             read access, inserts, then deletes sources. Defaults to False.
             Ignored with rich=False. See temporary_image_cleanup_pending.
+        table_borders: Show borders on new tables (default True).
+            False hides outer and internal borders. Ignored with rich=False.
         code_block_style: Pygments theme, e.g. default or monokai.
             Omitted/null inherits config/environment. Ignored with rich=False.
         code_block_theme_background: Apply paragraph theme background.
@@ -605,8 +615,10 @@ def docs_append(
     """
     with code_formatting(style=code_block_style,
                          theme_background=code_block_theme_background):
-        return docs_edit.append(doc_id, text, rich=rich,
-                                upload_local_images=upload_local_images)
+        return docs_edit.append(
+            doc_id, text, rich=rich, upload_local_images=upload_local_images,
+            table_borders=table_borders,
+        )
 
 
 @mcp.tool(

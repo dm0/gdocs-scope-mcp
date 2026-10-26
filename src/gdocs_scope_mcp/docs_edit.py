@@ -966,6 +966,7 @@ def _insert_content(
     service, doc_id: str, text: str, index: int, *, rich: bool,
     newline_before: bool = True, upload_local_images: bool = False,
     required_revision: str | None = None,
+    table_borders: bool = True,
 ) -> tuple[str, int, list[str]]:
     """Apply a validated insertion within the temporary-image lifecycle."""
     if rich:
@@ -982,7 +983,10 @@ def _insert_content(
     with context as prepared:
         inserted = inserted_text_from_requests(prepared.requests)
         if isinstance(prepared.requests, TableInsertionPlan):
-            prepared.requests.execute(service, doc_id, required_revision)
+            prepared.requests.execute(
+                service, doc_id, required_revision,
+                table_borders=table_borders,
+            )
             requests = list(prepared.requests.iter_requests())
         else:
             requests = prepared.requests
@@ -999,7 +1003,7 @@ def insert_after(
     text: str,
     heading_id: str | None = None,
     rich: bool = True,
-    *, upload_local_images: bool = False,
+    *, upload_local_images: bool = False, table_borders: bool = True,
 ) -> InsertSucceedResponse | EditFailedResponse:
     """
     Insert Markdown paragraphs after the paragraph containing `anchor`.
@@ -1043,6 +1047,7 @@ def insert_after(
         service, doc_id, text, insert_index, rich=rich,
         upload_local_images=upload_local_images,
         required_revision=doc.get('revisionId'),
+        table_borders=table_borders,
     )
 
     return InsertSucceedResponse(
@@ -1070,7 +1075,7 @@ def insert_before(
     text: str,
     heading_id: str | None = None,
     rich: bool = True,
-    *, upload_local_images: bool = False,
+    *, upload_local_images: bool = False, table_borders: bool = True,
 ) -> InsertSucceedResponse | EditFailedResponse:
     """
     Insert Markdown paragraphs before the paragraph containing `anchor`.
@@ -1113,6 +1118,7 @@ def insert_before(
         service, doc_id, text, insert_index, rich=rich, newline_before=False,
         upload_local_images=upload_local_images,
         required_revision=doc.get('revisionId'),
+        table_borders=table_borders,
     )
 
     return InsertSucceedResponse(
@@ -1206,6 +1212,7 @@ def delete_paragraph(doc_id: str, anchor: str) -> dict:
 def append(
     doc_id: str, text: str, rich: bool = True, *,
     upload_local_images: bool = False,
+    table_borders: bool = True,
 ) -> AppendSucceedResponse:
     """
     Append Markdown or literal text and return a compact typed receipt.
@@ -1233,6 +1240,7 @@ def append(
         service, doc_id, text, insert_index, rich=rich,
         upload_local_images=upload_local_images,
         required_revision=doc.get('revisionId'),
+        table_borders=table_borders,
     )
 
     return AppendSucceedResponse(

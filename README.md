@@ -634,7 +634,19 @@ with blank lines; headings, emphasis and native lists use the shared converter.
 Rectangular native tables are also supported. Set `rich=False` to preserve text
 literally.
 
-Markdown tables create native rows and cells in all three insertion tools:
+Markdown tables create native rows and cells in all three insertion tools.
+
+The optional MCP parameter `table_borders` defaults to `true`: every new table
+has solid black 1 pt borders. Set `table_borders=false` to hide all outer and
+internal borders (0 pt). It applies to every Markdown/HTML table in that call;
+existing tables and literal `rich=False` insertions are unaffected. Ordinary
+Markdown table syntax has no border visibility setting; pipe and separator
+characters describe structure, not border appearance.
+
+```python
+docs_append(doc_id="...", text="| A | B |\n| --- | --- |\n| C | D |",
+            table_borders=False)
+```
 
 ```markdown
 | Name | Quantity | Notes |

@@ -26,6 +26,7 @@ CodeBlockStyle = Annotated[
     AfterValidator(Settings.validate_style),
 ]
 CodeBlockThemeBackground = Annotated[bool, Field(strict=True)]
+TableBorders = Annotated[bool, Field(strict=True)]
 
 
 class Replacement(BaseModel):

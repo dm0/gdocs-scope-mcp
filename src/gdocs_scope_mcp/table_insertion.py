@@ -229,10 +229,11 @@ class TableInsertionPlan:
         return text
 
     def execute(self, service, doc_id: str,
-                required_revision: str | None = None) -> None:
+                required_revision: str | None = None, *,
+                table_borders: bool = True) -> None:
         """Insert each table, read real cell locations, then populate it."""
         try:
-            self._execute(service, doc_id, required_revision)
+            self._execute(service, doc_id, required_revision, table_borders)
         except Exception as error:
             raise ToolFailureError(EditFailedResponse(
                 code='GOOGLE_API_ERROR',
@@ -243,7 +244,7 @@ class TableInsertionPlan:
             )) from error
 
     def _execute(self, service, doc_id: str,
-                 required_revision: str | None) -> None:
+                 required_revision: str | None, table_borders: bool) -> None:
         """Guard each stage with the revision returned by the prior write."""
         from .md2requests import inserted_text_from_requests
 
@@ -295,8 +296,22 @@ class TableInsertionPlan:
             for source, cell in reversed(list(pairs)):
                 position = source['content'][0]['startIndex']
                 requests.extend(shifted_requests(cell.requests, position))
-            if requests:
-                submit(requests)
+            border = {
+                'width': {
+                    'magnitude': 1 if table_borders else 0, 'unit': 'PT',
+                },
+                'color': {'color': {'rgbColor': {
+                    'red': 0, 'green': 0, 'blue': 0,
+                }}},
+                'dashStyle': 'SOLID',
+            }
+            sides = ('borderTop', 'borderBottom', 'borderLeft', 'borderRight')
+            requests.append({'updateTableCellStyle': {
+                'tableStartLocation': {'index': table['startIndex']},
+                'tableCellStyle': {side: deepcopy(border) for side in sides},
+                'fields': ','.join(sides),
+            }})
+            submit(requests)
             cursor = table['endIndex'] + sum(
                 utf16_length(c.text) for c in planned
             )
