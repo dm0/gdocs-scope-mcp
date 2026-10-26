@@ -1020,11 +1020,20 @@ class GoogleDocumentInlineObjectElement(GoogleDocumentStructuralElement):
         return doc.inline_objects[self.inline_object_id].to_text(doc)
 
 
+class GoogleDocumentShading(BaseModel, populate_by_name=True):
+    """Represent a paragraph's full-width background fill."""
+
+    background_color: Annotated[
+        GoogleDocumentOptionalColor | None, Field(alias='backgroundColor'),
+    ] = None
+
+
 class GoogleDocumentParagraphStyle(BaseModel, populate_by_name=True):
     """Store a paragraph heading ID, named style, and alignment."""
 
     heading_id: Annotated[str | None, Field(alias='headingId')] = None
     line_spacing: Annotated[float | None, Field(alias='lineSpacing')] = None
+    shading: GoogleDocumentShading | None = None
     named_style_type: Annotated[
         GoogleDocumentNamedStyleType, Field(alias='namedStyleType')
     ] = GoogleDocumentNamedStyleType.NAMED_STYLE_TYPE_UNSPECIFIED

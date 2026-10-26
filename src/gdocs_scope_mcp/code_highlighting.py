@@ -1,5 +1,7 @@
 """Map Pygments tokens to native text styles without rewriting source text."""
 
+from collections.abc import Iterable
+
 from pygments.lexers import get_lexer_by_name
 from pygments.styles import get_style_by_name
 from pygments.token import Token
@@ -9,6 +11,7 @@ from .models import (
     GoogleDocumentColor,
     GoogleDocumentOptionalColor,
     GoogleDocumentRgbColor,
+    GoogleDocumentShading,
     GoogleDocumentTextStyle,
     GoogleDocumentWeightedFontFamily,
 )
@@ -57,8 +60,9 @@ def code_spans(
                 attributes['color'] or default_color,
             ),
             'background_color': native_color(
-                attributes['bgcolor'] or theme.background_color,
-            ) if settings.code_block_theme_background else None,
+                attributes['bgcolor'],
+            ) if settings.code_block_theme_background
+            and attributes['bgcolor'] else None,
             'bold': attributes['bold'], 'italic': attributes['italic'],
             'underline': attributes['underline'],
         })
@@ -71,3 +75,18 @@ def code_spans(
     if ''.join(value for value, _ in spans) != content:
         return [(content, base)] if content else []
     return spans
+
+
+def code_shading(
+    styles: Iterable[GoogleDocumentTextStyle],
+) -> GoogleDocumentShading | None:
+    """Fill all code paragraphs only when theme highlighting is active."""
+    settings = get_settings()
+    if not settings.code_block_theme_background:
+        return None
+    if not any(style.foreground_color is not None for style in styles):
+        return None
+    theme = get_style_by_name(settings.code_block_style)
+    return GoogleDocumentShading(
+        background_color=native_color(theme.background_color),
+    )

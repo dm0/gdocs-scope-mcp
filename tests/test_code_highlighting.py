@@ -1,13 +1,15 @@
 """Verify syntax colors, lossless code text and native UTF-16 style ranges."""
 
 from types import SimpleNamespace
+from typing import ClassVar
 
 import pytest
 from pydantic import ValidationError
+from pygments.style import Style
 from pygments.token import Token
 
 from gdocs_scope_mcp import code_highlighting
-from gdocs_scope_mcp.code_highlighting import code_spans
+from gdocs_scope_mcp.code_highlighting import code_shading, code_spans
 from gdocs_scope_mcp.md2requests import (
     inserted_text_from_requests,
     markdown_to_requests,
@@ -70,7 +72,8 @@ def test_dark_theme_has_readable_foreground_and_background(monkeypatch):
     [(text, style)] = code_spans('()', 'python')
     assert text == '()'
     fg = style.foreground_color.color.rgb_color
-    bg = style.background_color.color.rgb_color
+    assert style.background_color is None
+    bg = code_shading([style]).background_color.color.rgb_color
     assert (fg.red, fg.green, fg.blue) == (248 / 255, 248 / 255, 242 / 255)
     assert (bg.red, bg.green, bg.blue) == (39 / 255, 40 / 255, 34 / 255)
 
@@ -143,10 +146,97 @@ def test_background_switch_reaches_native_styles(background, monkeypatch):
     styles = [r['updateTextStyle']['textStyle'] for r in requests
               if 'updateTextStyle' in r]
     assert styles
-    assert all(('backgroundColor' in s) == background for s in styles)
+    assert all('backgroundColor' not in s for s in styles)
+    paragraphs = [r['updateParagraphStyle'] for r in requests
+                  if 'updateParagraphStyle' in r]
+    assert len(paragraphs) == 1
+    assert ('shading' in paragraphs[0]['paragraphStyle']) == background
     assert all('foregroundColor' in s for s in styles)
     assert any(s['bold'] for s in styles)
     assert any(not s['bold'] for s in styles)
+
+
+@pytest.mark.parametrize('newline_before', [False, True])
+@pytest.mark.parametrize('html', [False, True])
+def test_paragraph_shading_includes_empty_lines_and_stays_within_code(
+    monkeypatch, newline_before, html,
+):
+    """Fill the whole block range, including leading/trailing blank lines."""
+    monkeypatch.setenv('GOOGLE_DOCS_MCP_CODE_BLOCK_THEME_BACKGROUND', 'true')
+    monkeypatch.setenv('GOOGLE_DOCS_MCP_CODE_BLOCK_STYLE', 'monokai')
+    code = '\nfirst🦷\n\nlast\n\n'
+    block = (f'<pre><code class="language-python">{code}\n</code></pre>'
+             if html else f'```python\n{code}\n```')
+    requests = markdown_to_requests(
+        f'Before\n\n{block}\n\nAfter', start=10,
+        newline_before=newline_before,
+    )
+    shaded = [(i, r['updateParagraphStyle'])
+              for i, r in enumerate(requests)
+              if 'shading' in r.get('updateParagraphStyle', {}).get(
+                  'paragraphStyle', {})]
+    assert len(shaded) == 1
+    index, update = shaded[0]
+    inserted = inserted_text_from_requests(requests)
+    start = len(inserted[:inserted.index(code)].encode('utf-16-le')) // 2
+    end = len(inserted[:inserted.index('After')].encode('utf-16-le')) // 2
+    assert update['range'] == {'startIndex': 10 + start, 'endIndex': 10 + end}
+    assert 'shading' in update['fields'].split(',')
+    assert update['paragraphStyle']['shading'] == {'backgroundColor': {
+        'color': {'rgbColor': {
+            'red': 39 / 255, 'green': 40 / 255, 'blue': 34 / 255,
+        }},
+    }}
+    assert all('insertText' not in r and 'insertInlineImage' not in r
+               for r in requests[index:])
+
+
+@pytest.mark.parametrize(('markup', 'highlighting'), [
+    ('```unknown_language\nplain\n```', True),
+    ('```\nplain\n```', True),
+    ('`inline`', True),
+    ('```python\nreturn\n```', False),
+])
+def test_no_shading_without_highlighted_block(
+    monkeypatch, markup, highlighting,
+):
+    """Keep unsupported/unlabelled blocks and inline code unshaded."""
+    monkeypatch.setenv('GOOGLE_DOCS_MCP_CODE_BLOCK_THEME_BACKGROUND', 'true')
+    monkeypatch.setenv('GOOGLE_DOCS_MCP_CODE_BLOCK_HIGHLIGHTING',
+                       str(highlighting).lower())
+    requests = markdown_to_requests(markup, start=1)
+    assert all('shading' not in r.get('updateParagraphStyle', {}).get(
+        'paragraphStyle', {}) for r in requests)
+
+
+@pytest.mark.parametrize('background', [False, True])
+def test_token_background_is_separate_from_paragraph_fill(
+    monkeypatch, background,
+):
+    """Preserve a token-specific overlay while using the theme's base fill."""
+    class ProbeStyle(Style):
+        background_color = '#272822'
+        styles: ClassVar[dict] = {Token: '#abcdef bg:#123456'}
+
+    monkeypatch.setenv('GOOGLE_DOCS_MCP_CODE_BLOCK_THEME_BACKGROUND',
+                       str(background).lower())
+    monkeypatch.setattr(code_highlighting, 'get_style_by_name',
+                        lambda _: ProbeStyle)
+    [(text, style)] = code_spans('value', 'python')
+    assert text == 'value'
+    shading = code_shading([style])
+    if background:
+        color = style.background_color.color.rgb_color
+        assert (color.red, color.green, color.blue) == (
+            18 / 255, 52 / 255, 86 / 255,
+        )
+        color = shading.background_color.color.rgb_color
+        assert (color.red, color.green, color.blue) == (
+            39 / 255, 40 / 255, 34 / 255,
+        )
+    else:
+        assert style.background_color is None
+        assert shading is None
 
 
 @pytest.mark.parametrize('newline_before', [False, True])

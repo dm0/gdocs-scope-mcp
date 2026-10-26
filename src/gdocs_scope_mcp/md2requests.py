@@ -14,7 +14,7 @@ from pydantic import BaseModel, field_validator
 from rich.syntax import Syntax
 
 # isort: split
-from .code_highlighting import code_spans
+from .code_highlighting import code_shading, code_spans
 from .models import (
     EditFailedResponse,
     GoogleDocumentAlignment,
@@ -334,6 +334,7 @@ def _convert_page_elements(
                         line_spacing=(
                             get_settings().code_block_line_spacing * 100
                         ),
+                        shading=code_shading(run.text_style for run in runs),
                     ),
                 )
                 added.append(last)

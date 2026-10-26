@@ -677,9 +677,11 @@ plain monospace; no language guessing is performed. A lexer that transforms the
 source text also falls back to plain monospace to preserve exact content.
 
 The selected Pygments theme supplies foreground colors, bold, italic and
-underline. Theme backgrounds are disabled by default. When enabled, they apply
-to the code's characters, not a full-width paragraph box. Enable backgrounds
-when choosing a dark theme with light text. Adjacent prose is unaffected.
+underline. Theme backgrounds are disabled by default. When enabled, the base
+background fills the full width of every code paragraph, including blank lines,
+using native paragraph shading. Token-specific backgrounds remain text styles.
+Enable backgrounds when choosing a dark theme with light text. Adjacent prose is
+unaffected; paragraph fills are applied after insertion to prevent inheritance.
 No custom font size or native language metadata is written.
 
 Inline code works in supported single-paragraph list items. Code blocks inside
