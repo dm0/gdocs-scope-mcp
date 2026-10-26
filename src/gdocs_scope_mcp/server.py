@@ -373,7 +373,8 @@ def docs_insert_after(
     **bold**, *italic*, and ***bold italic*** inline styles. Heading mapping:
     # is TITLE, ## is SUBTITLE, ### is HEADING_1, and so on. Native homogeneous
     lists, rectangular Markdown/HTML tables, Markdown images and HTML img[src]
-    are supported. Tables preserve inline cell formatting and column alignment;
+    are supported. Tables preserve inline formatting, br line breaks and
+    column alignment;
     merged/nested tables and block content in cells are unsupported. Tables
     use multiple revision-guarded batches; failures may leave partial content.
     Read before retrying. Images require public HTTP(S) PNG/JPEG/GIF URLs;
@@ -454,7 +455,8 @@ def docs_insert_before(
     **bold**, *italic*, and ***bold italic*** inline styles. Heading mapping:
     # is TITLE, ## is SUBTITLE, ### is HEADING_1, and so on. Native homogeneous
     lists, rectangular Markdown/HTML tables, Markdown images and HTML img[src]
-    are supported. Tables preserve inline cell formatting and column alignment;
+    are supported. Tables preserve inline formatting, br line breaks and
+    column alignment;
     merged/nested tables and block content in cells are unsupported. Tables
     use multiple revision-guarded batches; failures may leave partial content.
     Read before retrying. Images require public HTTP(S) PNG/JPEG/GIF URLs;
@@ -565,9 +567,9 @@ def docs_append(
     Markdown images and HTML img[src] create native images from public HTTP(S)
     PNG/JPEG/GIF URLs. HTML width/height accept pixel numbers; alt/title
     metadata is not preserved. CSS/responsive images are unsupported.
-    Rectangular Markdown/HTML tables preserve inline formatting, empty cells
-    and column alignment. Merged/nested tables and block content in cells are
-    unsupported. Tables use multiple revision-guarded batches; failures may
+    Rectangular Markdown/HTML tables preserve inline formatting, br breaks,
+    empty cells and column alignment. Merged/nested tables and block content
+    are unsupported. Tables use multiple revision-guarded batches; failures may
     leave partial content. Read the document before retrying.
 
     Inline code and blocks default to Roboto Mono, with inline color #188038;

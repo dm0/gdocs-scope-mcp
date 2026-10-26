@@ -293,3 +293,29 @@ def test_html_table_preserves_inline_styles_and_alignment():
     assert any(text == 'link' and request.get('updateParagraphStyle', {}).get(
         'paragraphStyle', {}).get('alignment') == 'CENTER'
         for request, text in native.styles)
+
+
+@pytest.mark.parametrize('tag', ['<br>', '<br/>', '<br />', '<BR>'])
+@pytest.mark.parametrize('html', [False, True])
+def test_cell_soft_breaks_preserve_whitespace_styles_and_indices(tag, html):
+    """Keep edge/repeated breaks and styled emoji within the intended cell."""
+    content = f'{tag}<b>😀bold</b>{tag}{tag}<i>next</i>{tag}'
+    markup = (
+        f'<table><tr><td>{content}</td><td>adjacent</td></tr></table>'
+        if html else f'| A | B |\n| --- | --- |\n| {content} | adjacent |'
+    )
+    native = NativeBuffer(gap=3)
+    plan = markdown_to_requests(markup, native.start)
+    plan.execute(native.service, 'test')
+    table = native.document()['body']['content'][0]['table']
+    row = table['tableRows'][-1]['tableCells']
+    values = [cell['content'][0]['paragraph']['elements'][0]['textRun'][
+        'content'] for cell in row]
+    assert values == ['\u000b😀bold\u000b\u000bnext\u000b\n', 'adjacent\n']
+    assert any(text == '😀bold' and request.get('updateTextStyle', {}).get(
+        'textStyle', {}).get('bold') for request, text in native.styles)
+    assert any(text == 'next' and request.get('updateTextStyle', {}).get(
+        'textStyle', {}).get('italic') for request, text in native.styles)
+    preview = inserted_text_from_requests(plan)
+    assert '\n😀bold\n\nnext\n\n' in preview
+    assert '\u000b' not in preview

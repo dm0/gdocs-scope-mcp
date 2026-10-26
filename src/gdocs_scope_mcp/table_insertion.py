@@ -94,7 +94,7 @@ def convert_table(element: Tag, start: int) -> InsertionTable:
                 unsupported_table('Merged table cells are unsupported.')
             if cell.find(['p', 'div', 'ul', 'ol', 'pre', 'blockquote', 'hr',
                           'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'h7', 'h8',
-                          'h9', 'h10', 'br']):
+                          'h9', 'h10']):
                 unsupported_table('Table cells support inline content only.')
             alignment = cell.get('align')
             style = str(cell.get('style', '')).strip()
@@ -108,6 +108,11 @@ def convert_table(element: Tag, start: int) -> InsertionTable:
                 alignment = match[1]
             if alignment not in {None, 'left', 'center', 'right'}:
                 unsupported_table('Unsupported table cell alignment.')
+            # Google Docs represents a soft line break as U+000B. Unlike \n,
+            # it stays within the cell's single paragraph and survives the
+            # text-run validator's removal of paragraph terminators.
+            for line_break in cell.find_all('br'):
+                line_break.replace_with(NavigableString('\u000b'))
             paragraphs = html_to_gpars(cell.decode_contents(), 0)
             requests = gpars_to_requests(paragraphs, newline_before=False)
             # The native cell already contains its mandatory final newline.
@@ -215,7 +220,7 @@ class TableInsertionPlan:
         text = ''
         for group in self.request_groups():
             if isinstance(group, InsertionTable):
-                text += '\n' + ''.join(cell.text + '\n'
+                text += '\n' + ''.join(cell.text.replace('\u000b', '\n') + '\n'
                                       for row in group.cells for cell in row)
             else:
                 text += inserted_text_from_requests(

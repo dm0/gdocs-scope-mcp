@@ -32,8 +32,9 @@ def test_native_table_insertion(live_test_doc, isolated_mcp, tool):
             text = (f'{marker} before\n\n'
                     '| Left | Center | Right |\n'
                     '| :--- | :---: | ---: |\n'
-                    '| **bold😀** | [link](https://example.com) | |\n'
-                    '| plain | `code` | ~~gone~~ |\n\n'
+                    '| **bold😀**<br>*next* | '
+                    '[link](https://example.com) | |\n'
+                    '| plain | `code` | <br>~~gone~~<br/><br /> |\n\n'
                     f'{marker} after')
             arguments = {'doc_id': live_test_doc, 'text': text}
             if tool != 'docs_append':
@@ -63,12 +64,13 @@ def test_native_table_insertion(live_test_doc, isolated_mcp, tool):
             values = [[cell_text(cell) for cell in row] for row in rows]
             assert values == [
                 ['Left\n', 'Center\n', 'Right\n'],
-                ['bold😀\n', 'link\n', '\n'],
-                ['plain\n', 'code\n', 'gone\n'],
+                ['bold😀\u000bnext\n', 'link\n', '\n'],
+                ['plain\n', 'code\n', '\u000bgone\u000b\u000b\n'],
             ]
             for row in rows:
                 for cell, alignment in zip(row, ['START', 'CENTER', 'END'],
                                            strict=True):
+                    assert len(cell['content']) == 1
                     assert cell['content'][0]['paragraph'][
                         'paragraphStyle']['alignment'] == alignment
             assert first_style(rows[0][0])['bold'] is True
@@ -76,7 +78,10 @@ def test_native_table_insertion(live_test_doc, isolated_mcp, tool):
             assert first_style(rows[1][1])['link']['url'] == 'https://example.com'
             assert first_style(rows[2][1])['weightedFontFamily'][
                 'fontFamily'] == 'Roboto Mono'
-            assert first_style(rows[2][2])['strikethrough'] is True
+            runs = rows[2][2]['content'][0]['paragraph']['elements']
+            assert any(run.get('textRun', {}).get('textStyle', {}).get(
+                'strikethrough') for run in runs
+                if 'gone' in run.get('textRun', {}).get('content', ''))
             for label in ('left', 'anchor', 'right', 'before', 'after'):
                 assert any(paragraph_text(item) == f'{marker} {label}\n'
                            for item in content)

@@ -653,8 +653,15 @@ Simple rectangular HTML tables (`table`, `thead`/`tbody`, `tr`, `th`/`td`) use
 the same conversion. Cells can declare `align="left|center|right"` or a single
 `style="text-align: ..."`. Merged cells, nested tables, tables inside lists,
 captions/column/footer groups, and block content inside cells (including lists,
-code blocks, multiple paragraphs and explicit line breaks) are rejected before
+code blocks and multiple paragraphs) are rejected before
 writes. Arbitrary table styling and widths are not preserved.
+
+Use `<br>`, `<br/>` or `<br />` inside a Markdown or HTML table cell to insert
+a line break, for example `| First line<br>Second line | Value |`. Leading,
+trailing and consecutive breaks are preserved as native soft line breaks in
+the same cell paragraph. Formatting and links on either side keep their own
+ranges. Receipts show these breaks as ordinary newlines. Raw source newlines
+inside HTML cell text remain unsupported; use explicit `br` tags.
 
 Table insertion requires several API batches: create the native structure,
 read cell positions, then populate cells. Each write requires the previous
