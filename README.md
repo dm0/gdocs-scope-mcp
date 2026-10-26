@@ -2,6 +2,8 @@
 
 > Hierarchical Google Docs editing for AI agents working with large documents.
 
+See [CHANGELOG.md](CHANGELOG.md) for version history and compatibility changes.
+
 `gdocs-scope-mcp` is an independent project based on
 [dbuxton/google-docs-mcp](https://github.com/dbuxton/google-docs-mcp).
 It builds on the original project's text-anchor editing approach and focuses
@@ -47,7 +49,7 @@ The former `python -m gdocs_scope_mcp.docs_edit` editing CLI has been removed.
 
 The package version is derived from Git tags by
 [setuptools-scm](https://setuptools-scm.readthedocs.io/). A clean checkout at
-`v0.3.0` builds as `0.3.0`; commits after that tag and tracked local changes
+`v0.4.0` builds as `0.4.0`; commits after that tag and tracked local changes
 produce development versions. Build from a Git checkout with its version tags
 available, or from a generated source distribution, which preserves the version.
 The server reports the version recorded when the package was built or installed;
