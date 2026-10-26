@@ -72,6 +72,7 @@ from .tool_inputs import (
     PositiveInteger,
     ReplacementOccurrence,
     Replacements,
+    TableBorders,
 )
 from .tool_logging import ToolCallLoggingMiddleware, configure_logging
 
@@ -356,7 +357,7 @@ def docs_insert_after(
     text: str,
     heading_id: str | None = None,
     rich: bool = True,
-    *, upload_local_images: bool = False,
+    *, upload_local_images: bool = False, table_borders: TableBorders = True,
     code_block_style: CodeBlockStyle | None = None,
     code_block_theme_background: CodeBlockThemeBackground | None = None,
 ) -> InsertSucceedResponse | EditFailedResponse:
@@ -372,8 +373,12 @@ def docs_insert_after(
     Converts Markdown paragraphs and # / ## / ### / ... headings, with
     **bold**, *italic*, and ***bold italic*** inline styles. Heading mapping:
     # is TITLE, ## is SUBTITLE, ### is HEADING_1, and so on. Native homogeneous
-    lists, Markdown images and HTML img[src] are supported; native tables are
-    not yet implemented. Images require public HTTP(S) PNG/JPEG/GIF URLs;
+    lists, rectangular Markdown/HTML tables, Markdown images and HTML img[src]
+    are supported. Tables preserve inline formatting, br line breaks and
+    column alignment;
+    merged/nested tables and block content in cells are unsupported. Tables
+    use multiple revision-guarded batches; failures may leave partial content.
+    Read before retrying. Images require public HTTP(S) PNG/JPEG/GIF URLs;
     alt/title metadata is not preserved. HTML width/height accept pixel
     numbers.
     Inline code and blocks default to Roboto Mono, with inline color #188038;
@@ -393,6 +398,8 @@ def docs_insert_after(
             Uploads to My Drive root, temporarily grants anyone-with-link
             read access, inserts, then deletes sources. Defaults to False.
             Ignored with rich=False. See temporary_image_cleanup_pending.
+        table_borders: Show borders on new tables (default True).
+            False hides outer and internal borders. Ignored with rich=False.
         code_block_style: Pygments theme, e.g. default or monokai.
             Omitted/null inherits config/environment. Ignored with rich=False.
         code_block_theme_background: Apply paragraph theme background.
@@ -414,6 +421,7 @@ def docs_insert_after(
         return docs_edit.insert_after(
             doc_id, anchor, text, heading_id=heading_id, rich=rich,
             upload_local_images=upload_local_images,
+            table_borders=table_borders,
         )
 
 
@@ -432,7 +440,7 @@ def docs_insert_before(
     text: str,
     heading_id: str | None = None,
     rich: bool = True,
-    *, upload_local_images: bool = False,
+    *, upload_local_images: bool = False, table_borders: TableBorders = True,
     code_block_style: CodeBlockStyle | None = None,
     code_block_theme_background: CodeBlockThemeBackground | None = None,
 ) -> InsertSucceedResponse | EditFailedResponse:
@@ -450,8 +458,12 @@ def docs_insert_before(
     Converts Markdown paragraphs and # / ## / ### / ... headings, with
     **bold**, *italic*, and ***bold italic*** inline styles. Heading mapping:
     # is TITLE, ## is SUBTITLE, ### is HEADING_1, and so on. Native homogeneous
-    lists, Markdown images and HTML img[src] are supported; native tables are
-    not yet implemented. Images require public HTTP(S) PNG/JPEG/GIF URLs;
+    lists, rectangular Markdown/HTML tables, Markdown images and HTML img[src]
+    are supported. Tables preserve inline formatting, br line breaks and
+    column alignment;
+    merged/nested tables and block content in cells are unsupported. Tables
+    use multiple revision-guarded batches; failures may leave partial content.
+    Read before retrying. Images require public HTTP(S) PNG/JPEG/GIF URLs;
     alt/title metadata is not preserved. HTML width/height accept pixel
     numbers.
     Inline code and blocks default to Roboto Mono, with inline color #188038;
@@ -470,6 +482,8 @@ def docs_insert_before(
             Uploads to My Drive root, temporarily grants anyone-with-link
             read access, inserts, then deletes sources. Defaults to False.
             Ignored with rich=False. See temporary_image_cleanup_pending.
+        table_borders: Show borders on new tables (default True).
+            False hides outer and internal borders. Ignored with rich=False.
         code_block_style: Pygments theme, e.g. default or monokai.
             Omitted/null inherits config/environment. Ignored with rich=False.
         code_block_theme_background: Apply paragraph theme background.
@@ -491,6 +505,7 @@ def docs_insert_before(
         return docs_edit.insert_before(
             doc_id, anchor, text, heading_id=heading_id, rich=rich,
             upload_local_images=upload_local_images,
+            table_borders=table_borders,
         )
 
 
@@ -546,6 +561,7 @@ def docs_delete_paragraph(
 def docs_append(
     doc_id: str, text: str, rich: bool = True, *,
     upload_local_images: bool = False,
+    table_borders: TableBorders = True,
     code_block_style: CodeBlockStyle | None = None,
     code_block_theme_background: CodeBlockThemeBackground | None = None,
 ) -> AppendSucceedResponse:
@@ -559,7 +575,10 @@ def docs_append(
     Markdown images and HTML img[src] create native images from public HTTP(S)
     PNG/JPEG/GIF URLs. HTML width/height accept pixel numbers; alt/title
     metadata is not preserved. CSS/responsive images are unsupported.
-    Native tables are not yet implemented.
+    Rectangular Markdown/HTML tables preserve inline formatting, br breaks,
+    empty cells and column alignment. Merged/nested tables and block content
+    are unsupported. Tables use multiple revision-guarded batches; failures may
+    leave partial content. Read the document before retrying.
 
     Inline code and blocks default to Roboto Mono, with inline color #188038;
     font/color are configurable on the server. Blocks preserve literal
@@ -577,6 +596,8 @@ def docs_append(
             Uploads to My Drive root, temporarily grants anyone-with-link
             read access, inserts, then deletes sources. Defaults to False.
             Ignored with rich=False. See temporary_image_cleanup_pending.
+        table_borders: Show borders on new tables (default True).
+            False hides outer and internal borders. Ignored with rich=False.
         code_block_style: Pygments theme, e.g. default or monokai.
             Omitted/null inherits config/environment. Ignored with rich=False.
         code_block_theme_background: Apply paragraph theme background.
@@ -594,8 +615,10 @@ def docs_append(
     """
     with code_formatting(style=code_block_style,
                          theme_background=code_block_theme_background):
-        return docs_edit.append(doc_id, text, rich=rich,
-                                upload_local_images=upload_local_images)
+        return docs_edit.append(
+            doc_id, text, rich=rich, upload_local_images=upload_local_images,
+            table_borders=table_borders,
+        )
 
 
 @mcp.tool(

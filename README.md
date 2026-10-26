@@ -14,8 +14,8 @@ well suited to large Google Docs with structured headings.
 
 Another goal is **more complete formatting support** when reading and editing
 documents, including richer Markdown conversion and better preservation of
-Google Docs formatting. This is ongoing work: native list and table conversion
-are not yet implemented by the write converter.
+Google Docs formatting. Native homogeneous lists and rectangular tables are
+supported; advanced list items and arbitrary table structures remain limited.
 
 Typical workflow:
 
@@ -157,7 +157,7 @@ Replacement cannot remove a cell's mandatory final newline or span a non-text
 element. Text beside an object in the same cell uses its original run positions.
 Batch replacement and comment anchoring currently search body paragraphs;
 matches spanning a skipped table or another source gap are rejected before
-writes. Native table creation/conversion remains separate work (#9).
+writes. Rich insertion can also create rectangular native tables (see below).
 Before/after insertion adds `inserted_char_count`, `preview_truncated`,
 `anchor_char_count`, and `anchor_preview_truncated`. The insertion preview
 remains at most 200 code points and the anchor preview at most 80. Append
@@ -575,7 +575,7 @@ are null. Replace-all requires `regex=False` and `heading_id=None`.
 Insert Markdown or literal text after the paragraph containing `anchor`.
 Pass `heading_id` to search only that section subtree; `rich=False` inserts literal text.
 Rich heading mapping: `# -> TITLE`, `## -> SUBTITLE`, `### -> HEADING_1`,
-and so on. Native list/table conversion is not implemented.
+and so on. Native homogeneous lists and rectangular tables are supported.
 
 ```
 docs_insert_after(
@@ -596,7 +596,7 @@ Returns document/scope metadata, `ok`, `anchor` (up to 80 code points),
 Insert Markdown or literal text before the paragraph containing `anchor`.
 Pass `heading_id` to search only that section subtree; `rich=False` inserts literal text.
 Rich heading mapping: `# -> TITLE`, `## -> SUBTITLE`, `### -> HEADING_1`,
-and so on. Native list/table conversion is not implemented.
+and so on. Native homogeneous lists and rectangular tables are supported.
 
 ```
 docs_insert_before(
@@ -631,7 +631,58 @@ final paragraph is skipped.
 Append Markdown paragraphs or literal text at the end of the document, adding
 a paragraph break before the content. With `rich=True`, separate paragraphs
 with blank lines; headings, emphasis and native lists use the shared converter.
-Native tables are not implemented. Set `rich=False` to preserve text literally.
+Rectangular native tables are also supported. Set `rich=False` to preserve text
+literally.
+
+Markdown tables create native rows and cells in all three insertion tools.
+
+The optional MCP parameter `table_borders` defaults to `true`: every new table
+has solid black 1 pt borders. Set `table_borders=false` to hide all outer and
+internal borders (0 pt). It applies to every Markdown/HTML table in that call;
+existing tables and literal `rich=False` insertions are unaffected. Ordinary
+Markdown table syntax has no border visibility setting; pipe and separator
+characters describe structure, not border appearance.
+
+```python
+docs_append(doc_id="...", text="| A | B |\n| --- | --- |\n| C | D |",
+            table_borders=False)
+```
+
+```markdown
+| Name | Quantity | Notes |
+| :--- | ---: | :---: |
+| **Apples** | 3 | [details](https://example.com) |
+| Pears | 2 | |
+```
+
+The separator row is syntax, not data. Header cells are bold. Empty cells remain
+empty. Left, center and right column alignment is applied to every cell; omitted
+alignment uses the native default. Supported inline emphasis, links,
+strikethrough, inline code and images also work inside cells. UTF-16 cell
+positions are read from the newly created table before filling it.
+
+Simple rectangular HTML tables (`table`, `thead`/`tbody`, `tr`, `th`/`td`) use
+the same conversion. Cells can declare `align="left|center|right"` or a single
+`style="text-align: ..."`. Merged cells, nested tables, tables inside lists,
+captions/column/footer groups, and block content inside cells (including lists,
+code blocks and multiple paragraphs) are rejected before
+writes. Arbitrary table styling and widths are not preserved.
+
+Use `<br>`, `<br/>` or `<br />` inside a Markdown or HTML table cell to insert
+a line break, for example `| First line<br>Second line | Value |`. Leading,
+trailing and consecutive breaks are preserved as native soft line breaks in
+the same cell paragraph. Formatting and links on either side keep their own
+ranges. Receipts show these breaks as ordinary newlines. Raw source newlines
+inside HTML cell text remain unsupported; use explicit `br` tags.
+
+Table insertion requires several API batches: create the native structure,
+read cell positions, then populate cells. Each write requires the previous
+revision; concurrent edits stop the operation. The whole edit is **not atomic**:
+a later API failure can leave earlier text or an empty/partly filled table.
+The error instructs the agent to read the document before retrying. Existing
+paragraphs are retained, and table boundaries may add blank separator paragraphs.
+Receipts concatenate native cell paragraph text in row/cell order, including
+cell newlines, without Markdown pipes or table structural indices.
 
 All three rich insertion tools (`docs_append`, `docs_insert_before`, and
 `docs_insert_after`) also accept the reader's HTML for bold (`b`), italic (`i`),
@@ -651,8 +702,8 @@ are supported, while empty heading-ID anchors remain metadata.
 This is a bounded read-to-write subset, not complete HTML or formatting
 round-trip support. Other wrappers retain their child text without preserving
 unsupported formatting or attributes; non-text tags may contribute no content.
-For example, a styled `span` retains its text but loses its styling. Native
-tables still have separate insertion limitations. Use `rich=False` to preserve
+For example, a styled `span` retains its text but loses its styling. Tables
+support the rectangular subset described above. Use `rich=False` to preserve
 HTML tags and Markdown literally.
 
 Inline code (backticks or HTML `code`) and code blocks (backtick/tilde fences,
@@ -904,7 +955,7 @@ selected test document and remove the source files:
 
 ```bash
 GDOCS_SCOPE_MCP_LIVE_TEST_DOC='your-test-document-id' \
-  uv run --locked pytest -q tests/test_live_drive_images.py
+  uv run --locked pytest -q tests/test_live_drive_images.py tests/test_live_tables.py
 ```
 
 `GDOCS_SCOPE_MCP_LIVE_TEST_DOC` both enables live tests and selects their target.

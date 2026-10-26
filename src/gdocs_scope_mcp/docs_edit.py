@@ -8,7 +8,7 @@ Rich mode uses the shared Markdown converter for paragraphs and inline styles:
     # / ## / ### headings
     **bold**, *italic*, ***bold italic***
 
-Native lists are supported; native table insertion is not yet implemented.
+Native homogeneous lists and rectangular tables are supported.
 
 Auth (in priority order):
     1. GOOGLE_DOCS_MCP_TOKEN env var  → path to standalone token JSON
@@ -68,6 +68,7 @@ from .models import (
     InsertSucceedResponse,
     ReplaceSucceedResponse,
 )
+from .table_insertion import TableInsertionPlan
 from .text_indices import utf16_length
 from .tool_errors import ToolFailureError
 
@@ -964,8 +965,10 @@ def search_replace(  # noqa: PLR0911, PLR0917
 def _insert_content(
     service, doc_id: str, text: str, index: int, *, rich: bool,
     newline_before: bool = True, upload_local_images: bool = False,
+    required_revision: str | None = None,
+    table_borders: bool = True,
 ) -> tuple[str, int, list[str]]:
-    """Apply one atomic document batch within the temporary-image lifecycle."""
+    """Apply a validated insertion within the temporary-image lifecycle."""
     if rich:
         context = rich_insertion_requests(
             text, index, newline_before=newline_before,
@@ -979,10 +982,18 @@ def _insert_content(
         }}]))
     with context as prepared:
         inserted = inserted_text_from_requests(prepared.requests)
-        service.documents().batchUpdate(
-            documentId=doc_id, body={'requests': prepared.requests},
-        ).execute()
-    return (inserted, sum('insertInlineImage' in r for r in prepared.requests),
+        if isinstance(prepared.requests, TableInsertionPlan):
+            prepared.requests.execute(
+                service, doc_id, required_revision,
+                table_borders=table_borders,
+            )
+            requests = list(prepared.requests.iter_requests())
+        else:
+            requests = prepared.requests
+            service.documents().batchUpdate(
+                documentId=doc_id, body={'requests': requests},
+            ).execute()
+    return (inserted, sum('insertInlineImage' in r for r in requests),
             prepared.cleanup_pending)
 
 
@@ -992,7 +1003,7 @@ def insert_after(
     text: str,
     heading_id: str | None = None,
     rich: bool = True,
-    *, upload_local_images: bool = False,
+    *, upload_local_images: bool = False, table_borders: bool = True,
 ) -> InsertSucceedResponse | EditFailedResponse:
     """
     Insert Markdown paragraphs after the paragraph containing `anchor`.
@@ -1035,6 +1046,8 @@ def insert_after(
     inserted_text, image_count, cleanup_pending = _insert_content(
         service, doc_id, text, insert_index, rich=rich,
         upload_local_images=upload_local_images,
+        required_revision=doc.get('revisionId'),
+        table_borders=table_borders,
     )
 
     return InsertSucceedResponse(
@@ -1062,7 +1075,7 @@ def insert_before(
     text: str,
     heading_id: str | None = None,
     rich: bool = True,
-    *, upload_local_images: bool = False,
+    *, upload_local_images: bool = False, table_borders: bool = True,
 ) -> InsertSucceedResponse | EditFailedResponse:
     """
     Insert Markdown paragraphs before the paragraph containing `anchor`.
@@ -1104,6 +1117,8 @@ def insert_before(
     inserted_text, image_count, cleanup_pending = _insert_content(
         service, doc_id, text, insert_index, rich=rich, newline_before=False,
         upload_local_images=upload_local_images,
+        required_revision=doc.get('revisionId'),
+        table_borders=table_borders,
     )
 
     return InsertSucceedResponse(
@@ -1197,6 +1212,7 @@ def delete_paragraph(doc_id: str, anchor: str) -> dict:
 def append(
     doc_id: str, text: str, rich: bool = True, *,
     upload_local_images: bool = False,
+    table_borders: bool = True,
 ) -> AppendSucceedResponse:
     """
     Append Markdown or literal text and return a compact typed receipt.
@@ -1223,6 +1239,8 @@ def append(
     inserted_text, image_count, cleanup_pending = _insert_content(
         service, doc_id, text, insert_index, rich=rich,
         upload_local_images=upload_local_images,
+        required_revision=doc.get('revisionId'),
+        table_borders=table_borders,
     )
 
     return AppendSucceedResponse(
