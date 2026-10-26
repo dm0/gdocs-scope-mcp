@@ -1024,6 +1024,7 @@ class GoogleDocumentParagraphStyle(BaseModel, populate_by_name=True):
     """Store a paragraph heading ID, named style, and alignment."""
 
     heading_id: Annotated[str | None, Field(alias='headingId')] = None
+    line_spacing: Annotated[float | None, Field(alias='lineSpacing')] = None
     named_style_type: Annotated[
         GoogleDocumentNamedStyleType, Field(alias='namedStyleType')
     ] = GoogleDocumentNamedStyleType.NAMED_STYLE_TYPE_UNSPECIFIED

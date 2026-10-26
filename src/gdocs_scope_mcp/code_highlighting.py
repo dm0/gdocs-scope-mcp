@@ -58,7 +58,7 @@ def code_spans(
             ),
             'background_color': native_color(
                 attributes['bgcolor'] or theme.background_color,
-            ),
+            ) if settings.code_block_theme_background else None,
             'bold': attributes['bold'], 'italic': attributes['italic'],
             'underline': attributes['underline'],
         })

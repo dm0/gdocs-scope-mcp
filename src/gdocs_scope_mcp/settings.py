@@ -5,7 +5,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Annotated
 
-from pydantic import StringConstraints, field_validator
+from pydantic import Field, StringConstraints, field_validator
 from pydantic_settings import (
     BaseSettings,
     JsonConfigSettingsSource,
@@ -47,6 +47,10 @@ class Settings(BaseSettings):
     ] = '#188038'
     code_block_highlighting: bool = True
     code_block_style: str = 'default'
+    code_block_line_spacing: Annotated[
+        float, Field(gt=0, allow_inf_nan=False),
+    ] = 1.0
+    code_block_theme_background: bool = False
 
     @field_validator('code_block_style')
     @classmethod

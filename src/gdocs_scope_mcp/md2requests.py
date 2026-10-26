@@ -331,6 +331,9 @@ def _convert_page_elements(
                     start_index=start, end_index=end, elements=runs,
                     paragraph_style=GoogleDocumentParagraphStyle(
                         named_style_type=GoogleDocumentNamedStyleType.NORMAL_TEXT,
+                        line_spacing=(
+                            get_settings().code_block_line_spacing * 100
+                        ),
                     ),
                 )
                 added.append(last)
@@ -423,6 +426,7 @@ def gpars_to_requests(
     list_ranges = []
     paragraph_ranges = []
     font_style_requests = []
+    code_paragraph_style_requests = []
     offset = 0
     for p in paragraphs:
         if not len(p):
@@ -451,7 +455,8 @@ def gpars_to_requests(
                     exclude_defaults=True,
                     exclude_unset=True,
                 )
-                if element.text_style.background_color is not None:
+                if (isinstance(element, InsertionCodeRun)
+                        and element.text_style.foreground_color is not None):
                     # Theme styles must also clear inherited emphasis when
                     # the lexer marks a token as plain text.
                     for flag in ('bold', 'italic', 'underline'):
@@ -504,12 +509,21 @@ def gpars_to_requests(
             exclude_defaults=True,
             exclude_unset=True,
         )
-        requests.append(
+        paragraph_requests = (code_paragraph_style_requests
+                              if p.paragraph_style.line_spacing is not None
+                              else requests)
+        paragraph_end = p.end_index + offset
+        if (p.paragraph_style.line_spacing is not None and p.elements
+                and p.elements[-1].content.endswith('\n')):
+            # The block terminator belongs to its final empty paragraph.
+            # Include it to format trailing blank lines without touching prose.
+            paragraph_end += 1
+        paragraph_requests.append(
             {
                 'updateParagraphStyle': {
                     'range': {
                         'startIndex': p.start_index + offset,
-                        'endIndex': p.end_index + offset,
+                        'endIndex': paragraph_end,
                     },
                     'paragraphStyle': style,
                     'fields': ','.join(style.keys()),
@@ -529,8 +543,9 @@ def gpars_to_requests(
                 })
         if not newline_before:
             offset += 1
-    # Apply code fonts after all insertions, so subsequently inserted prose
-    # cannot inherit a font from a code paragraph we just formatted.
+    # Apply code spacing/fonts after all insertions, so subsequent prose
+    # cannot inherit formatting from a code paragraph we just formatted.
+    requests.extend(code_paragraph_style_requests)
     requests.extend(font_style_requests)
     if list_ranges:
         requests.append({'deleteParagraphBullets': {'range': {

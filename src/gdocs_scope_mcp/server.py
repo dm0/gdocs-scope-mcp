@@ -138,8 +138,10 @@ EDITING TOOLS:
     config can override the code font and inline color. Blocks preserve line
     breaks, blank lines and indentation;
     declared languages use Pygments highlighting with the configurable default
-    theme. Unknown/absent languages stay plain monospace. Inline
-    code works in list items; code blocks inside list items fail before writes.
+    theme. Unknown/absent languages stay plain monospace. Blocks default to
+    line spacing 1.0 with theme backgrounds off; both are configurable.
+    Inline code is unaffected by block layout settings and works in list items;
+    code blocks inside list items fail before writes.
 
     docs_get_tree          Read hierarchical document tree (headings)
     docs_read              Read document contents (paragraphs + plain)

@@ -676,11 +676,11 @@ the same mechanism. Blocks without a language or with an unknown language stay
 plain monospace; no language guessing is performed. A lexer that transforms the
 source text also falls back to plain monospace to preserve exact content.
 
-The selected Pygments theme supplies foreground/background colors, bold, italic
-and underline. Theme backgrounds apply to the code's characters, not a full-width
-paragraph box. Dark themes therefore carry their background with their light
-text. Adjacent prose is unaffected. No custom font size or native language
-metadata is written.
+The selected Pygments theme supplies foreground colors, bold, italic and
+underline. Theme backgrounds are disabled by default. When enabled, they apply
+to the code's characters, not a full-width paragraph box. Enable backgrounds
+when choosing a dark theme with light text. Adjacent prose is unaffected.
+No custom font size or native language metadata is written.
 
 Inline code works in supported single-paragraph list items. Code blocks inside
 list items return `INVALID_ARGUMENT` before writing; list-item block semantics
@@ -702,7 +702,9 @@ An absent default file is allowed; an explicitly selected file must exist.
   "code_font_family": "Roboto Mono",
   "inline_code_color": "#188038",
   "code_block_highlighting": true,
-  "code_block_style": "default"
+  "code_block_style": "default",
+  "code_block_line_spacing": 1.0,
+  "code_block_theme_background": false
 }
 ```
 
@@ -712,6 +714,13 @@ Set `code_block_highlighting` to `false` to keep language-labelled blocks plain
 monospace. `code_block_style` selects a Pygments theme such as `default`,
 `friendly` or `monokai`; an unknown theme fails startup validation. Themes can
 be previewed in the [Pygments gallery](https://pygments.org/styles/).
+`code_block_line_spacing` sets a positive finite line-height multiplier: `1.0`
+is single spacing, `1.5` is one-and-a-half spacing. It applies to all code blocks,
+including unlabelled/unknown languages and blocks with highlighting disabled;
+inline code and surrounding prose are unaffected. Google Docs stores this as
+a percentage (`1.0` becomes `100`). `code_block_theme_background` controls both
+the theme's base background and token-specific backgrounds; it takes effect only
+when syntax highlighting is active for a recognised language.
 Font names must be nonempty, and colors must use six-digit RGB hex syntax
 (`#RRGGBB`). Choose a font supported by Google Docs; the server validates the
 name's syntax but does not query font availability. Unknown JSON fields and
@@ -725,6 +734,8 @@ Environment variables override individual file settings:
 | `GOOGLE_DOCS_MCP_INLINE_CODE_COLOR` | `inline_code_color` | `#188038` |
 | `GOOGLE_DOCS_MCP_CODE_BLOCK_HIGHLIGHTING` | `code_block_highlighting` | `true` |
 | `GOOGLE_DOCS_MCP_CODE_BLOCK_STYLE` | `code_block_style` | `default` |
+| `GOOGLE_DOCS_MCP_CODE_BLOCK_LINE_SPACING` | `code_block_line_spacing` | `1.0` |
+| `GOOGLE_DOCS_MCP_CODE_BLOCK_THEME_BACKGROUND` | `code_block_theme_background` | `false` |
 
 Precedence is environment, JSON file, then built-in defaults. Settings are
 loaded and validated at server startup and cached for that process. Restart
