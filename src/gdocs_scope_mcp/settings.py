@@ -1,6 +1,9 @@
 """Load code formatting defaults from JSON and environment overrides."""
 
 import os
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from functools import lru_cache
 from pathlib import Path
 from typing import Annotated
@@ -91,3 +94,32 @@ class Settings(BaseSettings):
 def get_settings() -> Settings:
     """Load and validate settings once for this server process."""
     return Settings()
+
+
+_code_settings: ContextVar[Settings | None] = ContextVar(
+    'code_formatting_settings', default=None,
+)
+
+
+def get_code_settings() -> Settings:
+    """Use request-local code formatting or the cached server defaults."""
+    override = _code_settings.get()
+    return override if override is not None else get_settings()
+
+
+@contextmanager
+def code_formatting(
+    *, style: str | None = None, theme_background: bool | None = None,
+) -> Iterator[None]:
+    """Scope formatting overrides to one call, including on failure."""
+    settings = get_code_settings()
+    updates = {}
+    if style is not None:
+        updates['code_block_style'] = Settings.validate_style(style)
+    if theme_background is not None:
+        updates['code_block_theme_background'] = theme_background
+    token = _code_settings.set(settings.model_copy(update=updates))
+    try:
+        yield
+    finally:
+        _code_settings.reset(token)

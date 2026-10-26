@@ -64,8 +64,10 @@ from .models import (
     ReplyCommentResponse,
     ResolveCommentResponse,
 )
-from .settings import get_settings
+from .settings import code_formatting, get_settings
 from .tool_inputs import (
+    CodeBlockStyle,
+    CodeBlockThemeBackground,
     NonemptyText,
     PositiveInteger,
     ReplacementOccurrence,
@@ -142,6 +144,9 @@ EDITING TOOLS:
     line spacing 1.0 with theme backgrounds off; both are configurable.
     Inline code is unaffected by block layout settings and works in list items;
     code blocks inside list items fail before writes.
+    Optional code_block_style and code_block_theme_background override code
+    formatting for this call. Omitted/null values inherit server settings
+    (including environment overrides). Explicit False disables the background.
 
     docs_get_tree          Read hierarchical document tree (headings)
     docs_read              Read document contents (paragraphs + plain)
@@ -352,6 +357,8 @@ def docs_insert_after(
     heading_id: str | None = None,
     rich: bool = True,
     *, upload_local_images: bool = False,
+    code_block_style: CodeBlockStyle | None = None,
+    code_block_theme_background: CodeBlockThemeBackground | None = None,
 ) -> InsertSucceedResponse | EditFailedResponse:
     """
     Insert a new paragraph immediately after the paragraph containing `anchor`.
@@ -386,6 +393,11 @@ def docs_insert_after(
             Uploads to My Drive root, temporarily grants anyone-with-link
             read access, inserts, then deletes sources. Defaults to False.
             Ignored with rich=False. See temporary_image_cleanup_pending.
+        code_block_style: Pygments theme, e.g. default or monokai.
+            Omitted/null inherits config/environment. Ignored with rich=False.
+        code_block_theme_background: Apply paragraph theme background.
+            Omitted/null inherits server config/environment; False disables it.
+            Ignored with rich=False.
 
     Returns
     -------
@@ -397,10 +409,12 @@ def docs_insert_after(
         preview_truncated signals omitted text. The anchor preview is at most
         80 code points, with anchor_char_count and anchor_preview_truncated.
     """
-    return docs_edit.insert_after(
-        doc_id, anchor, text, heading_id=heading_id, rich=rich,
-        upload_local_images=upload_local_images,
-    )
+    with code_formatting(style=code_block_style,
+                         theme_background=code_block_theme_background):
+        return docs_edit.insert_after(
+            doc_id, anchor, text, heading_id=heading_id, rich=rich,
+            upload_local_images=upload_local_images,
+        )
 
 
 @mcp.tool(
@@ -419,6 +433,8 @@ def docs_insert_before(
     heading_id: str | None = None,
     rich: bool = True,
     *, upload_local_images: bool = False,
+    code_block_style: CodeBlockStyle | None = None,
+    code_block_theme_background: CodeBlockThemeBackground | None = None,
 ) -> InsertSucceedResponse | EditFailedResponse:
     """
     Insert a new paragraph immediately before the paragraph containing
@@ -454,6 +470,11 @@ def docs_insert_before(
             Uploads to My Drive root, temporarily grants anyone-with-link
             read access, inserts, then deletes sources. Defaults to False.
             Ignored with rich=False. See temporary_image_cleanup_pending.
+        code_block_style: Pygments theme, e.g. default or monokai.
+            Omitted/null inherits config/environment. Ignored with rich=False.
+        code_block_theme_background: Apply paragraph theme background.
+            Omitted/null inherits server config/environment; False disables it.
+            Ignored with rich=False.
 
     Returns
     -------
@@ -465,14 +486,12 @@ def docs_insert_before(
         preview_truncated signals omitted text. The anchor preview is at most
         80 code points, with anchor_char_count and anchor_preview_truncated.
     """
-    return docs_edit.insert_before(
-        doc_id,
-        anchor,
-        text,
-        heading_id=heading_id,
-        rich=rich,
-        upload_local_images=upload_local_images,
-    )
+    with code_formatting(style=code_block_style,
+                         theme_background=code_block_theme_background):
+        return docs_edit.insert_before(
+            doc_id, anchor, text, heading_id=heading_id, rich=rich,
+            upload_local_images=upload_local_images,
+        )
 
 
 @mcp.tool(
@@ -527,6 +546,8 @@ def docs_delete_paragraph(
 def docs_append(
     doc_id: str, text: str, rich: bool = True, *,
     upload_local_images: bool = False,
+    code_block_style: CodeBlockStyle | None = None,
+    code_block_theme_background: CodeBlockThemeBackground | None = None,
 ) -> AppendSucceedResponse:
     """
     Append Markdown paragraphs or literal text at the end of a Google Doc.
@@ -556,6 +577,11 @@ def docs_append(
             Uploads to My Drive root, temporarily grants anyone-with-link
             read access, inserts, then deletes sources. Defaults to False.
             Ignored with rich=False. See temporary_image_cleanup_pending.
+        code_block_style: Pygments theme, e.g. default or monokai.
+            Omitted/null inherits config/environment. Ignored with rich=False.
+        code_block_theme_background: Apply paragraph theme background.
+            Omitted/null inherits server config/environment; False disables it.
+            Ignored with rich=False.
 
     Returns
     -------
@@ -566,8 +592,10 @@ def docs_append(
         and ok=True. Read the document to verify formatting.
         scope is document_end and heading_id is null.
     """
-    return docs_edit.append(doc_id, text, rich=rich,
-                            upload_local_images=upload_local_images)
+    with code_formatting(style=code_block_style,
+                         theme_background=code_block_theme_background):
+        return docs_edit.append(doc_id, text, rich=rich,
+                                upload_local_images=upload_local_images)
 
 
 @mcp.tool(

@@ -30,7 +30,7 @@ from .models import (
     GoogleDocumentTextStyle,
     GoogleDocumentWeightedFontFamily,
 )
-from .settings import get_settings
+from .settings import get_code_settings
 from .text_indices import utf16_length
 from .tool_errors import ToolFailureError
 
@@ -263,7 +263,7 @@ def _collect_styles(
         if parent.name in ['s', 'del']:
             style.strikethrough = True
         if parent.name == 'code':
-            settings = get_settings()
+            settings = get_code_settings()
             style.weighted_font_family = GoogleDocumentWeightedFontFamily(
                 font_family=settings.code_font_family,
             )
@@ -332,7 +332,7 @@ def _convert_page_elements(
                     paragraph_style=GoogleDocumentParagraphStyle(
                         named_style_type=GoogleDocumentNamedStyleType.NORMAL_TEXT,
                         line_spacing=(
-                            get_settings().code_block_line_spacing * 100
+                            get_code_settings().code_block_line_spacing * 100
                         ),
                         shading=code_shading(run.text_style for run in runs),
                     ),

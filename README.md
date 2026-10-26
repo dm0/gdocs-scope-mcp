@@ -739,13 +739,36 @@ Environment variables override individual file settings:
 | `GOOGLE_DOCS_MCP_CODE_BLOCK_LINE_SPACING` | `code_block_line_spacing` | `1.0` |
 | `GOOGLE_DOCS_MCP_CODE_BLOCK_THEME_BACKGROUND` | `code_block_theme_background` | `false` |
 
-Precedence is environment, JSON file, then built-in defaults. Settings are
+Precedence is per-call overrides (theme/background only), environment, JSON
+file, then built-in defaults. Server settings are
 loaded and validated at server startup and cached for that process. Restart
-the MCP server after changing the file or environment. These are server-level
-settings, not arguments exposed to agents on individual tool calls. This config
+the MCP server after changing the file or environment. This config
 currently covers code formatting; existing authentication, Drive and logging
 environment variables retain their separate handling. Our config does not
 automatically load `.env` files.
+
+`docs_append`, `docs_insert_before` and `docs_insert_after` also accept optional
+agent-facing `code_block_style` and `code_block_theme_background` arguments.
+The `code_block_style` input schema advertises an `enum` of available themes,
+generated from the installed Pygments version when the server starts. Agents
+can discover names through MCP tool listing without a separate theme-list call.
+Omitting an argument or passing `null` inherits its server setting, including
+environment overrides. An explicit `false` disables the background even if the
+server default enables it. Each argument can be overridden independently:
+
+```python
+docs_append(
+    doc_id='...', text='```python\nprint("Hello")\n```',
+    code_block_style='monokai', code_block_theme_background=True,
+)
+```
+
+Overrides apply only to that call and do not change defaults or concurrent
+requests, including when a write fails. Themes must be valid Pygments names;
+invalid names fail before Google access. Formatting overrides have no effect
+with `rich=False`. Highlighting enablement, font, inline color and line spacing
+remain server settings; choosing a theme does not enable disabled highlighting
+or guess a missing/unknown language.
 
 Set environment overrides in the MCP client's server `env` configuration.
 For isolated FastMCP CLI tests, pass them explicitly to the child command:

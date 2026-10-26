@@ -15,7 +15,7 @@ from .models import (
     GoogleDocumentTextStyle,
     GoogleDocumentWeightedFontFamily,
 )
-from .settings import get_settings
+from .settings import get_code_settings
 
 
 def native_color(value: str) -> GoogleDocumentOptionalColor:
@@ -34,7 +34,7 @@ def code_spans(
     content: str, language: str | None,
 ) -> list[tuple[str, GoogleDocumentTextStyle]]:
     """Highlight a declared language, coalescing adjacent equal styles."""
-    settings = get_settings()
+    settings = get_code_settings()
     base = GoogleDocumentTextStyle(
         weighted_font_family=GoogleDocumentWeightedFontFamily(
             font_family=settings.code_font_family,
@@ -81,7 +81,7 @@ def code_shading(
     styles: Iterable[GoogleDocumentTextStyle],
 ) -> GoogleDocumentShading | None:
     """Fill all code paragraphs only when theme highlighting is active."""
-    settings = get_settings()
+    settings = get_code_settings()
     if not settings.code_block_theme_background:
         return None
     if not any(style.foreground_color is not None for style in styles):
