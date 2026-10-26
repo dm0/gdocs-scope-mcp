@@ -127,6 +127,9 @@ class InsertionParagraph(GoogleDocumentParagraph):
     bullet_preset: str | None = None
     nesting_level: int = 0
     list_key: int | None = None
+    item_key: int | None = None
+    continuation: bool = False
+    loose_list: bool = False
 
 
 class DocsHTMLRenderer(mistune.HTMLRenderer):
@@ -153,7 +156,8 @@ def _unsupported_list(description: str) -> None:
     """Reject list forms that cannot yet preserve their structure."""
     raise ToolFailureError(EditFailedResponse(
         code='INVALID_ARGUMENT', description=description,
-        suggested_action='Use nonempty, single-paragraph list items with '
+        suggested_action='Use nonempty items containing ordinary paragraphs '
+        'and homogeneous nested lists, with '
         'the same list kind at every nesting level, or use rich=False.',
     ))
 
@@ -161,7 +165,7 @@ def _unsupported_list(description: str) -> None:
 def _convert_list(
     element: Tag, start: int, *, level: int = 0, list_key: int | None = None,
 ) -> list[InsertionParagraph]:
-    """Flatten a homogeneous list tree into item paragraphs in source order."""
+    """Preserve logical item membership and paragraph roles in source order."""
     if list_key is None:
         list_key = start
     if element.name == 'ol' and str(element.get('start', '1')) != '1':
@@ -173,51 +177,68 @@ def _convert_list(
             unsupported_table('Tables inside lists are unsupported.')
         if item.find('pre') is not None:
             _unsupported_list('Code blocks inside list items are unsupported.')
-        paragraph = InsertionParagraph(
-            start_index=start, elements=[], list_key=list_key,
-            nesting_level=level,
-            bullet_preset=(
-                'NUMBERED_DECIMAL_ALPHA_ROMAN' if element.name == 'ol'
-                else 'BULLET_DISC_CIRCLE_SQUARE'
-            ),
-            paragraph_style=GoogleDocumentParagraphStyle(
-                named_style_type=GoogleDocumentNamedStyleType.NORMAL_TEXT,
-            ),
-        )
+        item_key = start
+        item_paragraphs = 0
         blocks = []
-        nested = []
+
+        def flush(blocks=blocks, item_key=item_key, item=item):
+            """Convert a paragraph while preserving its logical item role."""
+            nonlocal start, item_paragraphs
+            paragraph = InsertionParagraph(
+                start_index=start, elements=[],
+                paragraph_style=GoogleDocumentParagraphStyle(
+                    named_style_type=GoogleDocumentNamedStyleType.NORMAL_TEXT,
+                ),
+            )
+            extra = _convert_page_elements(blocks, paragraph)
+            for part in [paragraph, *extra]:
+                if not len(part):
+                    continue
+                part.list_key = list_key
+                part.item_key = item_key
+                part.nesting_level = level
+                part.continuation = item_paragraphs > 0
+                part.loose_list = bool(element.find('p', recursive=False)
+                                       or item.find('p', recursive=False))
+                part.bullet_preset = (
+                    'NUMBERED_DECIMAL_ALPHA_ROMAN' if element.name == 'ol'
+                    else 'BULLET_DISC_CIRCLE_SQUARE'
+                )
+                result.append(part)
+                start = part.start_index + len(part)
+                item_paragraphs += 1
+            blocks.clear()
+
         for child in item.children:
             if isinstance(child, Tag) and child.name in {'ul', 'ol'}:
+                flush()
+                if not item_paragraphs:
+                    _unsupported_list('List items must start with a nonempty '
+                                      'ordinary paragraph.')
                 if child.name != element.name:
                     _unsupported_list('Mixed ordered/unordered nesting is '
                                       'not supported in a single list.')
-                nested.append(child)
-            else:
-                if nested and str(child).strip():
-                    _unsupported_list('Text after a nested list is '
-                                      'unsupported.')
+                children = _convert_list(
+                    child, start, level=level + 1, list_key=list_key,
+                )
+                result.extend(children)
+                if children:
+                    start = children[-1].start_index + len(children[-1])
+            elif isinstance(child, Tag) and child.name == 'p':
+                flush()
                 blocks.append(child)
-        extra = _convert_page_elements(blocks, paragraph)
-        nonempty = [p for p in [paragraph, *extra] if len(p)]
-        if len(nonempty) != 1:
-            _unsupported_list('Each list item must contain one nonempty '
-                              'paragraph.')
-        paragraph = nonempty[0]
-        paragraph.list_key = list_key
-        paragraph.nesting_level = level
-        paragraph.bullet_preset = (
-            'NUMBERED_DECIMAL_ALPHA_ROMAN' if element.name == 'ol'
-            else 'BULLET_DISC_CIRCLE_SQUARE'
-        )
-        result.append(paragraph)
-        start = paragraph.start_index + len(paragraph)
-        for child in nested:
-            children = _convert_list(
-                child, start, level=level + 1, list_key=list_key,
-            )
-            result.extend(children)
-            if children:
-                start = children[-1].start_index + len(children[-1])
+                flush()
+            else:
+                if isinstance(child, Tag) and (
+                    child.name in {'blockquote', 'div', 'hr', 'input'}
+                    or re.fullmatch(r'h\d+', child.name)
+                ):
+                    _unsupported_list('Only ordinary paragraphs and nested '
+                                      'lists are supported inside items.')
+                blocks.append(child)
+        flush()
+        if not item_paragraphs:
+            _unsupported_list('List items must contain a nonempty paragraph.')
     return result
 
 
@@ -535,6 +556,12 @@ def gpars_to_requests(
             exclude_defaults=True,
             exclude_unset=True,
         )
+        if p.bullet_preset:
+            style.update({
+                'spaceAbove': {'magnitude': 6 if p.loose_list else 0,
+                               'unit': 'PT'},
+                'spaceBelow': {'magnitude': 0, 'unit': 'PT'},
+            })
         paragraph_requests = (code_paragraph_style_requests
                               if p.paragraph_style.line_spacing is not None
                               else requests)
@@ -566,7 +593,11 @@ def gpars_to_requests(
                 list_ranges.append({
                     'key': p.list_key, 'start': content_start,
                     'end': content_end, 'preset': p.bullet_preset,
+                    'paragraphs': [],
                 })
+            list_ranges[-1]['paragraphs'].append((
+                content_start, content_end, indent, p.continuation,
+            ))
         if not newline_before:
             offset += 1
     # Apply code spacing/fonts after all insertions, so subsequent prose
@@ -578,10 +609,27 @@ def gpars_to_requests(
             'startIndex': paragraph_ranges[0][0],
             'endIndex': paragraph_ranges[-1][1],
         }}})
-        requests.extend({'createParagraphBullets': {
-            'range': {'startIndex': item['start'], 'endIndex': item['end']},
-            'bulletPreset': item['preset'],
-        }} for item in reversed(list_ranges))
+        for item in reversed(list_ranges):
+            requests.append({'createParagraphBullets': {
+                'range': {'startIndex': item['start'],
+                          'endIndex': item['end']},
+                'bulletPreset': item['preset'],
+            }})
+            removed = 0
+            for start, end, depth, continuation in item['paragraphs']:
+                final_start = start - removed
+                removed += depth
+                if not continuation:
+                    continue
+                span = {'startIndex': final_start, 'endIndex': end - removed}
+                requests.append({'deleteParagraphBullets': {'range': span}})
+                indent = {'magnitude': 36 * (depth + 1), 'unit': 'PT'}
+                requests.append({'updateParagraphStyle': {
+                    'range': span,
+                    'paragraphStyle': {'indentStart': indent,
+                                       'indentFirstLine': indent},
+                    'fields': 'indentStart,indentFirstLine',
+                }})
     return requests
 
 

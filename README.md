@@ -735,7 +735,7 @@ Enable backgrounds when choosing a dark theme with light text. Adjacent prose is
 unaffected; paragraph fills are applied after insertion to prevent inheritance.
 No custom font size or native language metadata is written.
 
-Inline code works in supported single-paragraph list items. Code blocks inside
+Inline code works in supported list-item paragraphs. Code blocks inside
 list items return `INVALID_ARGUMENT` before writing; list-item block semantics
 remain outside the supported subset. `rich=False` preserves code markup
 literally. Receipts count the final literal text and paragraph breaks, not fence
@@ -844,10 +844,32 @@ roman numbering according to nesting level. Neighbouring prose stays outside
 the list. Previews and character counts describe the final text without the
 temporary tabs used to set nesting.
 
-Each item currently requires one nonempty paragraph. Mixed ordered/unordered
-nesting, custom starting numbers, empty items, and multi-paragraph items return
-`INVALID_ARGUMENT` before writing. Use separate homogeneous lists, simplify
-items, or choose `rich=False` to insert the original syntax literally.
+Items may contain several ordinary paragraphs, including continuations after
+homogeneous nested lists:
+
+```markdown
+1. First paragraph.
+
+   Second paragraph of the same item, with **emphasis**.
+
+   1. Nested item.
+
+   Parent continuation after the nested list.
+
+2. Second item.
+```
+
+Only the first paragraph of each logical item has a native marker. Continuation
+paragraphs align with its text (36 pt per nesting level); they do not increment
+numbering. Tight lists use zero paragraph spacing; loose lists use 6 pt above
+each paragraph and zero below, without inserting empty items. This applies to
+all three rich insertion tools. Reads preserve text and order, but indentation
+alone cannot reconstruct the original Markdown item membership losslessly.
+
+Mixed ordered/unordered nesting, custom starting numbers, empty items, and
+arbitrary block content inside items return `INVALID_ARGUMENT` before writing.
+Use separate homogeneous lists, ordinary paragraphs, or choose `rich=False`
+to insert the original syntax literally.
 
 Markdown images (`![label](https://example.com/image.png "title")`) and HTML
 `<img src="https://example.com/image.png" alt="label" title="title">` create
