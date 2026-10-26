@@ -5,13 +5,41 @@ import os
 import re
 import struct
 import zlib
+from contextlib import asynccontextmanager
 from copy import deepcopy
 from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
+from fastmcp import Client
+from fastmcp.client.transports import StdioTransport
 
 from gdocs_scope_mcp import docs_edit
+from gdocs_scope_mcp.diagnostics import capture_server_info
+
+
+@pytest.fixture
+def isolated_mcp():
+    """Provide a shared-session STDIO client tied to this checkout's source."""
+    @asynccontextmanager
+    async def connect(log):
+        repo = Path(__file__).resolve().parents[1]
+        transport = StdioTransport(
+            command=str(repo / '.venv/bin/gdocs-scope-mcp'), args=[],
+            cwd=str(repo), env=dict(os.environ), log_file=log,
+            keep_alive=False,
+        )
+        async with Client(transport) as client:
+            identity = await client.call_tool('server_info', {})
+            info = identity.structured_content
+            assert info['source_fingerprint'] == (
+                capture_server_info().source_fingerprint
+            )
+            assert info['package_path'] == str(repo / 'src/gdocs_scope_mcp')
+            yield client, info
+        assert not Path(f'/proc/{info["pid"]}').exists()
+
+    return connect
 
 
 @pytest.fixture

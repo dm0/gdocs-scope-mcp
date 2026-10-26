@@ -372,8 +372,11 @@ def docs_insert_after(
     Converts Markdown paragraphs and # / ## / ### / ... headings, with
     **bold**, *italic*, and ***bold italic*** inline styles. Heading mapping:
     # is TITLE, ## is SUBTITLE, ### is HEADING_1, and so on. Native homogeneous
-    lists, Markdown images and HTML img[src] are supported; native tables are
-    not yet implemented. Images require public HTTP(S) PNG/JPEG/GIF URLs;
+    lists, rectangular Markdown/HTML tables, Markdown images and HTML img[src]
+    are supported. Tables preserve inline cell formatting and column alignment;
+    merged/nested tables and block content in cells are unsupported. Tables
+    use multiple revision-guarded batches; failures may leave partial content.
+    Read before retrying. Images require public HTTP(S) PNG/JPEG/GIF URLs;
     alt/title metadata is not preserved. HTML width/height accept pixel
     numbers.
     Inline code and blocks default to Roboto Mono, with inline color #188038;
@@ -450,8 +453,11 @@ def docs_insert_before(
     Converts Markdown paragraphs and # / ## / ### / ... headings, with
     **bold**, *italic*, and ***bold italic*** inline styles. Heading mapping:
     # is TITLE, ## is SUBTITLE, ### is HEADING_1, and so on. Native homogeneous
-    lists, Markdown images and HTML img[src] are supported; native tables are
-    not yet implemented. Images require public HTTP(S) PNG/JPEG/GIF URLs;
+    lists, rectangular Markdown/HTML tables, Markdown images and HTML img[src]
+    are supported. Tables preserve inline cell formatting and column alignment;
+    merged/nested tables and block content in cells are unsupported. Tables
+    use multiple revision-guarded batches; failures may leave partial content.
+    Read before retrying. Images require public HTTP(S) PNG/JPEG/GIF URLs;
     alt/title metadata is not preserved. HTML width/height accept pixel
     numbers.
     Inline code and blocks default to Roboto Mono, with inline color #188038;
@@ -559,7 +565,10 @@ def docs_append(
     Markdown images and HTML img[src] create native images from public HTTP(S)
     PNG/JPEG/GIF URLs. HTML width/height accept pixel numbers; alt/title
     metadata is not preserved. CSS/responsive images are unsupported.
-    Native tables are not yet implemented.
+    Rectangular Markdown/HTML tables preserve inline formatting, empty cells
+    and column alignment. Merged/nested tables and block content in cells are
+    unsupported. Tables use multiple revision-guarded batches; failures may
+    leave partial content. Read the document before retrying.
 
     Inline code and blocks default to Roboto Mono, with inline color #188038;
     font/color are configurable on the server. Blocks preserve literal

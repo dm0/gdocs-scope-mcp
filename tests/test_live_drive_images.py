@@ -3,48 +3,19 @@
 import asyncio
 import io
 import json
-import os
 import urllib.request
 import uuid
-from contextlib import asynccontextmanager
 from http import HTTPStatus
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
-from fastmcp import Client
-from fastmcp.client.transports import StdioTransport
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaIoBaseUpload
 
 from gdocs_scope_mcp import docs_edit
-from gdocs_scope_mcp.diagnostics import capture_server_info
 
 EXPECTED_HTML_POINTS = 24
-
-
-@pytest.fixture
-def isolated_mcp():
-    """Provide a shared-session STDIO client tied to this checkout's source."""
-    @asynccontextmanager
-    async def connect(log):
-        repo = Path(__file__).resolve().parents[1]
-        transport = StdioTransport(
-            command=str(repo / '.venv/bin/gdocs-scope-mcp'), args=[],
-            cwd=str(repo), env=dict(os.environ), log_file=log,
-            keep_alive=False,
-        )
-        async with Client(transport) as client:
-            identity = await client.call_tool('server_info', {})
-            info = identity.structured_content
-            assert info['source_fingerprint'] == (
-                capture_server_info().source_fingerprint
-            )
-            assert info['package_path'] == str(repo / 'src/gdocs_scope_mcp')
-            yield client, info
-        assert not Path(f'/proc/{info["pid"]}').exists()
-
-    return connect
 
 
 def test_temporary_drive_url_survives_source_deletion(

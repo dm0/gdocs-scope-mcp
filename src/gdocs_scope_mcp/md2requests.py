@@ -31,6 +31,12 @@ from .models import (
     GoogleDocumentWeightedFontFamily,
 )
 from .settings import get_code_settings
+from .table_insertion import (
+    InsertionTable,
+    TableInsertionPlan,
+    convert_table,
+    unsupported_table,
+)
 from .text_indices import utf16_length
 from .tool_errors import ToolFailureError
 
@@ -163,6 +169,8 @@ def _convert_list(
                           'unsupported.')
     result = []
     for item in element.find_all('li', recursive=False):
+        if item.find('table') is not None:
+            unsupported_table('Tables inside lists are unsupported.')
         if item.find('pre') is not None:
             _unsupported_list('Code blocks inside list items are unsupported.')
         paragraph = InsertionParagraph(
@@ -287,7 +295,7 @@ def _collect_styles(
 
 def _convert_page_elements(
     elements: Iterable[PageElement], paragraph: InsertionParagraph
-) -> list[InsertionParagraph]:
+) -> list[InsertionParagraph | InsertionTable]:
     added = []
     last = paragraph
     for element in elements:
@@ -307,6 +315,15 @@ def _convert_page_elements(
             last.end_index = end_index
             continue
         if isinstance(element, Tag):
+            if element.name == 'table':
+                start = last.start_index + len(last)
+                added.append(convert_table(element, start))
+                last = InsertionParagraph(
+                    start_index=start, end_index=start, elements=[],
+                    paragraph_style=GoogleDocumentParagraphStyle(),
+                )
+                added.append(last)
+                continue
             if element.name == 'pre':
                 # Mistune adds one terminal newline to a fenced block. The
                 # surrounding paragraph break represents that terminator;
@@ -401,11 +418,13 @@ def _convert_page_elements(
     return added
 
 
-def html_to_gpars(html: str, start: int = 0) -> list[InsertionParagraph]:
-    """Convert HTML nodes into indexed Google Docs paragraphs."""
+def html_to_gpars(
+    html: str, start: int = 0,
+) -> list[InsertionParagraph | InsertionTable]:
+    """Convert HTML into indexed paragraphs and structural table plans."""
     bs = BeautifulSoup(html, 'html.parser')
     current_index = start
-    paragraphs: list[InsertionParagraph] = [
+    paragraphs: list[InsertionParagraph | InsertionTable] = [
         InsertionParagraph(
             start_index=current_index,
             elements=[],
@@ -420,9 +439,15 @@ def html_to_gpars(html: str, start: int = 0) -> list[InsertionParagraph]:
 
 
 def gpars_to_requests(
-    paragraphs: list[InsertionParagraph], *, newline_before: bool = True
-):
+    paragraphs: list[InsertionParagraph | InsertionTable], *,
+    newline_before: bool = True,
+) -> list[dict] | TableInsertionPlan:
     """Build requests with breaks before or after inserted paragraphs."""
+    if any(isinstance(p, InsertionTable) for p in paragraphs):
+        return TableInsertionPlan(
+            blocks=paragraphs, start=paragraphs[0].start_index,
+            newline_before=newline_before,
+        )
     requests = []
     list_ranges = []
     paragraph_ranges = []
@@ -560,8 +585,12 @@ def gpars_to_requests(
     return requests
 
 
-def inserted_text_from_requests(requests: list[dict]) -> str:
+def inserted_text_from_requests(
+    requests: list[dict] | TableInsertionPlan,
+) -> str:
     """Render final insertion text, using U+FFFC for each native image."""
+    if isinstance(requests, TableInsertionPlan):
+        return requests.text()
     insertions = [
         r['insertText'] if 'insertText' in r else {
             'location': r['insertInlineImage']['location'], 'text': '\ufffc',
@@ -586,7 +615,7 @@ def inserted_text_from_requests(requests: list[dict]) -> str:
 
 def markdown_to_requests(
     markdown: str, start: int = 0, *, newline_before: bool = True
-):
+) -> list[dict] | TableInsertionPlan:
     """Convert Markdown with breaks suited to the insertion side."""
     html = markdown_to_html(markdown)
     gpars = html_to_gpars(html, start)

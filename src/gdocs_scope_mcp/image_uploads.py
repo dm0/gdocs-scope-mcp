@@ -21,6 +21,7 @@ from .md2requests import (
     markdown_to_html,
     markdown_to_requests,
 )
+from .table_insertion import TableInsertionPlan
 
 logger = logging.getLogger('gdocs_scope_mcp')
 MAX_LOCAL_IMAGE_BYTES = 50_000_000
@@ -30,7 +31,7 @@ MAX_LOCAL_IMAGE_BYTES = 50_000_000
 class PreparedInsertion:
     """Keep planned requests and report uploads left behind after cleanup."""
 
-    requests: list[dict]
+    requests: list[dict] | TableInsertionPlan
     cleanup_pending: list[str] = field(default_factory=list)
 
 
@@ -168,6 +169,9 @@ def rich_insertion_requests(
             if not link:
                 _image_failure('Drive did not return a temporary image '
                                'download link; the document was not changed.')
+            if isinstance(planned.requests, TableInsertionPlan):
+                planned.requests.replace_image_uri(placeholder, link)
+                continue
             for request in planned.requests:
                 image = request.get('insertInlineImage')
                 if image and image['uri'] == placeholder:
