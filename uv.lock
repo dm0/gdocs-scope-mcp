@@ -562,6 +562,7 @@ dependencies = [
     { name = "mistune" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
+    { name = "pygments" },
     { name = "rich" },
     { name = "typing-extensions" },
 ]
@@ -582,6 +583,7 @@ requires-dist = [
     { name = "mistune", specifier = "~=3.2" },
     { name = "pydantic", specifier = "~=2.13" },
     { name = "pydantic-settings", specifier = ">=2.6" },
+    { name = "pygments", specifier = ">=2.19" },
     { name = "rich" },
     { name = "typing-extensions" },
 ]

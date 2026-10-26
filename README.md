@@ -669,9 +669,18 @@ indentation and trailing spaces are preserved after Markdown removes the fence
 or indentation syntax. One terminal newline is represented by the surrounding
 paragraph boundary. Neighbouring prose stays separate and does not inherit the
 code font. Code contents are literal: Markdown-looking text and escaped HTML
-inside a fence are not interpreted again. Fence language labels are accepted
-but discarded; this initial policy does not add syntax highlighting, background
-shading, a custom font size or language metadata.
+inside a fence are not interpreted again. A declared fence language (for example,
+`python`, `json`, `bash` or `javascript`) selects a Pygments lexer and syntax
+highlighting. HTML `<pre><code class="language-python">...</code></pre>` uses
+the same mechanism. Blocks without a language or with an unknown language stay
+plain monospace; no language guessing is performed. A lexer that transforms the
+source text also falls back to plain monospace to preserve exact content.
+
+The selected Pygments theme supplies foreground/background colors, bold, italic
+and underline. Theme backgrounds apply to the code's characters, not a full-width
+paragraph box. Dark themes therefore carry their background with their light
+text. Adjacent prose is unaffected. No custom font size or native language
+metadata is written.
 
 Inline code works in supported single-paragraph list items. Code blocks inside
 list items return `INVALID_ARGUMENT` before writing; list-item block semantics
@@ -682,7 +691,7 @@ from font metadata, so this does not promise a lossless code round trip.
 
 ### Code formatting configuration
 
-An optional JSON config sets the code font and inline color. By default, the
+An optional JSON config sets code formatting and highlighting. By default, the
 server reads `~/.config/gdocs-scope-mcp/config.json`, or
 `$XDG_CONFIG_HOME/gdocs-scope-mcp/config.json` when `XDG_CONFIG_HOME` is set.
 Select another file with `GOOGLE_DOCS_MCP_CONFIG=/absolute/path/config.json`.
@@ -691,12 +700,18 @@ An absent default file is allowed; an explicitly selected file must exist.
 ```json
 {
   "code_font_family": "Roboto Mono",
-  "inline_code_color": "#188038"
+  "inline_code_color": "#188038",
+  "code_block_highlighting": true,
+  "code_block_style": "default"
 }
 ```
 
-Both fields are optional; the example shows the built-in defaults. The font
-applies to inline code and blocks; the color applies only to inline code.
+All fields are optional; the example shows the built-in defaults. The font
+applies to inline code and blocks; `inline_code_color` applies only to inline code.
+Set `code_block_highlighting` to `false` to keep language-labelled blocks plain
+monospace. `code_block_style` selects a Pygments theme such as `default`,
+`friendly` or `monokai`; an unknown theme fails startup validation. Themes can
+be previewed in the [Pygments gallery](https://pygments.org/styles/).
 Font names must be nonempty, and colors must use six-digit RGB hex syntax
 (`#RRGGBB`). Choose a font supported by Google Docs; the server validates the
 name's syntax but does not query font availability. Unknown JSON fields and
@@ -708,6 +723,8 @@ Environment variables override individual file settings:
 |---|---|---|
 | `GOOGLE_DOCS_MCP_CODE_FONT_FAMILY` | `code_font_family` | `Roboto Mono` |
 | `GOOGLE_DOCS_MCP_INLINE_CODE_COLOR` | `inline_code_color` | `#188038` |
+| `GOOGLE_DOCS_MCP_CODE_BLOCK_HIGHLIGHTING` | `code_block_highlighting` | `true` |
+| `GOOGLE_DOCS_MCP_CODE_BLOCK_STYLE` | `code_block_style` | `default` |
 
 Precedence is environment, JSON file, then built-in defaults. Settings are
 loaded and validated at server startup and cached for that process. Restart

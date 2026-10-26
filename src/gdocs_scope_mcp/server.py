@@ -137,7 +137,8 @@ EDITING TOOLS:
     Roboto Mono by default; inline code defaults to green #188038. The server
     config can override the code font and inline color. Blocks preserve line
     breaks, blank lines and indentation;
-    fence language labels are discarded without syntax highlighting. Inline
+    declared languages use Pygments highlighting with the configurable default
+    theme. Unknown/absent languages stay plain monospace. Inline
     code works in list items; code blocks inside list items fail before writes.
 
     docs_get_tree          Read hierarchical document tree (headings)
@@ -368,7 +369,8 @@ def docs_insert_after(
     numbers.
     Inline code and blocks default to Roboto Mono, with inline color #188038;
     font/color are configurable on the server. Blocks preserve literal
-    whitespace; language labels and highlighting are ignored.
+    whitespace. Declared languages use Pygments (theme default); highlighting
+    is configurable on the server. Unknown/absent languages stay plain.
     HTML code/pre are supported; blocks inside list items are unsupported.
 
     Args:
@@ -436,7 +438,8 @@ def docs_insert_before(
     numbers.
     Inline code and blocks default to Roboto Mono, with inline color #188038;
     font/color are configurable on the server. Blocks preserve literal
-    whitespace; language labels and highlighting are ignored.
+    whitespace. Declared languages use Pygments (theme default); highlighting
+    is configurable on the server. Unknown/absent languages stay plain.
     HTML code/pre are supported; blocks inside list items are unsupported.
 
     Args:
@@ -537,7 +540,8 @@ def docs_append(
 
     Inline code and blocks default to Roboto Mono, with inline color #188038;
     font/color are configurable on the server. Blocks preserve literal
-    whitespace; language labels and highlighting are ignored.
+    whitespace. Declared languages use Pygments (theme default); highlighting
+    is configurable on the server. Unknown/absent languages stay plain.
     HTML code/pre are supported; blocks inside list items are unsupported.
 
     With rich=False, preserve Markdown delimiters and line breaks literally.

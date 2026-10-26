@@ -14,6 +14,7 @@ from pydantic import BaseModel, field_validator
 from rich.syntax import Syntax
 
 # isort: split
+from .code_highlighting import code_spans
 from .models import (
     EditFailedResponse,
     GoogleDocumentAlignment,
@@ -312,17 +313,22 @@ def _convert_page_elements(
                 # all other whitespace must survive unchanged.
                 content = element.get_text().removesuffix('\n')
                 start = last.start_index + len(last)
-                run = InsertionCodeRun(
-                    start_index=start, end_index=start + utf16_length(content),
-                    content=content,
-                    text_style=GoogleDocumentTextStyle(
-                        weighted_font_family=GoogleDocumentWeightedFontFamily(
-                            font_family=get_settings().code_font_family,
-                        ),
-                    ),
-                )
+                code = element.find('code')
+                classes = code.get('class', []) if code else []
+                language = next((name.removeprefix('language-')
+                                 for name in classes
+                                 if name.startswith('language-')), None)
+                runs = []
+                end = start
+                for value, style in code_spans(content, language):
+                    run = InsertionCodeRun(
+                        start_index=end, end_index=end + utf16_length(value),
+                        content=value, text_style=style,
+                    )
+                    runs.append(run)
+                    end = run.end_index
                 last = InsertionParagraph(
-                    start_index=start, end_index=run.end_index, elements=[run],
+                    start_index=start, end_index=end, elements=runs,
                     paragraph_style=GoogleDocumentParagraphStyle(
                         named_style_type=GoogleDocumentNamedStyleType.NORMAL_TEXT,
                     ),
@@ -445,6 +451,11 @@ def gpars_to_requests(
                     exclude_defaults=True,
                     exclude_unset=True,
                 )
+                if element.text_style.background_color is not None:
+                    # Theme styles must also clear inherited emphasis when
+                    # the lexer marks a token as plain text.
+                    for flag in ('bold', 'italic', 'underline'):
+                        style[flag] = getattr(element.text_style, flag)
                 if not len(style):
                     continue
                 target = (font_style_requests if 'weightedFontFamily' in style

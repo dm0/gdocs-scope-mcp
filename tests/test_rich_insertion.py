@@ -270,9 +270,11 @@ def test_markdown_code_keeps_literal_text_and_font(block, newline_before):
     ]
     assert code_styles
     start = 12 + int(newline_before) + (0 if block else 2)
-    assert any(style['range'] == {
-        'startIndex': start, 'endIndex': start + len(code),
-    } for style in code_styles)
+    cursor = start
+    for style in code_styles:
+        assert style['range']['startIndex'] == cursor
+        cursor = style['range']['endIndex']
+    assert cursor == start + len(code)
     assert all(
         style['textStyle']['weightedFontFamily']['fontFamily']
         for style in code_styles

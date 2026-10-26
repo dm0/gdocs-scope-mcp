@@ -12,6 +12,8 @@ from pydantic_settings import (
     PydanticBaseSettingsSource,
     SettingsConfigDict,
 )
+from pygments.styles import get_style_by_name
+from pygments.util import ClassNotFound
 
 
 def config_path() -> Path:
@@ -43,6 +45,18 @@ class Settings(BaseSettings):
     inline_code_color: Annotated[
         str, StringConstraints(pattern=r'^#[0-9a-fA-F]{6}$'),
     ] = '#188038'
+    code_block_highlighting: bool = True
+    code_block_style: str = 'default'
+
+    @field_validator('code_block_style')
+    @classmethod
+    def validate_style(cls, value: str) -> str:
+        """Reject unknown Pygments themes before serving tool calls."""
+        try:
+            get_style_by_name(value)
+        except ClassNotFound as exc:
+            raise ValueError(f'Unknown Pygments style: {value}') from exc
+        return value
 
     @field_validator('inline_code_color')
     @classmethod

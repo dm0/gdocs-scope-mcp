@@ -910,6 +910,9 @@ class GoogleDocumentTextStyle(BaseModel, populate_by_name=True):
     foreground_color: Annotated[
         GoogleDocumentOptionalColor | None, Field(alias='foregroundColor'),
     ] = None
+    background_color: Annotated[
+        GoogleDocumentOptionalColor | None, Field(alias='backgroundColor'),
+    ] = None
 
     @property
     def format_string(self) -> str:

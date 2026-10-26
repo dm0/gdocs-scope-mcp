@@ -41,7 +41,6 @@ def replay(requests, original, start):
             font = item['textStyle'].get('weightedFontFamily')
             color = item['textStyle'].get('foregroundColor')
             if color:
-                assert color == INLINE_COLOR
                 for cell in cells[left:right]:
                     cell[2] = color
             if font:
