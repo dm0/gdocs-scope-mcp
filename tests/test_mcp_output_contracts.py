@@ -703,7 +703,11 @@ def test_catalog_contract_covers_every_registered_tool():
         async with Client(server.mcp) as client:
             return {tool.name for tool in await client.list_tools()}
 
-    assert asyncio.run(names()) == {name for name, _, _ in TOOL_CASES}
+    # Native entity outputs are schema-validated in test_entities.py.
+    assert asyncio.run(names()) == {name for name, _, _ in TOOL_CASES} | {
+        'docs_get_entity', 'docs_create_dropdown_definition',
+        'docs_select_dropdown',
+    }
 
 
 @pytest.mark.parametrize('name', ['docs_create', 'docs_delete_comment'])

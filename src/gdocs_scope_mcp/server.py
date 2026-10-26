@@ -45,8 +45,13 @@ from fastmcp import FastMCP
 from googleapiclient.discovery import build
 from pydantic import BaseModel, TypeAdapter
 
-from . import docs_edit
+from . import docs_edit, entity_edit
 from .diagnostics import ServerInfo, capture_server_info
+from .entities import (
+    DropdownOptions,
+    EntityDetails,
+    EntityEditResponse,
+)
 from .models import (
     AddCommentResponse,
     AppendSucceedResponse,
@@ -119,6 +124,23 @@ EDITING TOOLS:
     IDs to reuse. Other wrappers retain child text without unsupported styles;
     this does not provide complete formatting round trips. rich=False keeps
     the original markup literal.
+    Smart chips are inline HTML spans in docs_read:
+    <span data-mcp-entity="person" data-mcp-id="..."
+    data-mcp-email="alice@example.com">Alice</span>.
+    All three rich insertion tools recreate native chips from these spans;
+    data-mcp-id is not reused. Supported kinds/properties are person/email,
+    richLink/URI, dateElement/timestamp and dropdown/definition+option IDs.
+    The HTML attributes are data-mcp-email, data-mcp-uri, data-mcp-timestamp,
+    data-mcp-definition-id and optional data-mcp-option-id respectively.
+    Dates also preserve data-mcp-date-format, data-mcp-time-format,
+    data-mcp-time-zone and data-mcp-locale; new dates default to ISO format.
+    Labels are resolved by Google, not editable text runs. Dropdown definitions
+    must already exist in the destination first tab. Use docs_get_entity for
+    native metadata/options, docs_create_dropdown_definition for new templates,
+    and docs_select_dropdown to change only one existing instance.
+    Receipts expose inserted_entity_count and one U+FFFC per smart chip.
+    Smart-chip writes are revision-guarded without automatic retries. Text
+    edits must not cross chip boundaries; paragraph deletion refuses chips.
     Markdown links, recognized bare HTTP(S) URLs, autolinks and HTML a[href]
     become native link styles. Markdown strikethrough and HTML del/s become
     native strikethrough. Both combine with supported inline emphasis and
@@ -264,6 +286,12 @@ def docs_read(
     """
     Read a Google document's content converted to Markdown.
 
+    Native people, resource, date and dropdown chips remain identifiable HTML
+    spans with data-mcp-entity and data-mcp-id, rather than ordinary labels or
+    links. Pass a span to a rich insertion tool to create a native instance.
+    Use docs_get_entity for complete properties, source ranges and dropdown
+    options. Reads/insertion default to the first document tab.
+
     You can read the entire document, or isolate specific sections by passing
     a list of target heading_ids, including their nested subsections.
     Isolating sections reduces token usage on large files.
@@ -286,6 +314,69 @@ def docs_read(
     if isinstance(heading_ids, str):
         heading_ids = [heading_ids]
     return docs_edit.read(doc_id, heading_ids)
+
+
+@mcp.tool(
+    output_schema=_tool_response_schema(EntityDetails),
+    annotations={'readOnlyHint': True, 'destructiveHint': False,
+                 'idempotentHint': True, 'openWorldHint': True},
+)
+def docs_get_entity(
+    doc_id: str, entity_id: NonemptyText, tab_id: str | None = None,
+) -> EntityDetails | EditFailedResponse:
+    """Inspect a native smart chip identified by docs_read's data-mcp-id.
+
+    Returns kind, native ID, tab, revision, original UTF-16 source range,
+    complete API metadata and the shared dropdown definition/options when
+    applicable. Defaults to the first tab. Source indices are diagnostic;
+    labels are not editable text runs. Reads do not modify the document.
+    """
+    return entity_edit.get_entity(doc_id, entity_id, tab_id)
+
+
+@mcp.tool(
+    output_schema=_tool_response_schema(EntityEditResponse),
+    annotations={'readOnlyHint': False, 'destructiveHint': False,
+                 'idempotentHint': False, 'openWorldHint': True},
+)
+def docs_create_dropdown_definition(
+    doc_id: str, title: NonemptyText, options: DropdownOptions,
+    tab_id: str | None = None,
+) -> EntityEditResponse | EditFailedResponse:
+    """Create a reusable native dropdown definition with 2-50 typed options.
+
+    Options have display_value and optional #RRGGBB foreground_color and
+    background_color. Returns dropdown_definition with definition/option IDs.
+    Does not insert an instance or change existing definitions. Defaults to
+    the first tab. Use the returned IDs in smart-chip HTML for the insertion
+    tools. Writes are revision-guarded; inspect state after unknown outcomes
+    before retrying, since creating another definition is not idempotent.
+    """
+    return entity_edit.create_dropdown_definition(
+        doc_id, title, options, tab_id,
+    )
+
+
+@mcp.tool(
+    output_schema=_tool_response_schema(EntityEditResponse),
+    annotations={'readOnlyHint': False, 'destructiveHint': False,
+                 'idempotentHint': False, 'openWorldHint': True},
+)
+def docs_select_dropdown(
+    doc_id: str, entity_id: NonemptyText, option_id: NonemptyText,
+    tab_id: str | None = None, expected_option_id: str | None = None,
+) -> EntityEditResponse | EditFailedResponse:
+    """Select an existing option on one native dropdown instance by ID.
+
+    Does not change the shared definition or other instances. Obtain IDs
+    from docs_read and docs_get_entity. expected_option_id optionally refuses
+    an intervening selection change. Defaults to the first tab. Writes use
+    the freshly read revision; concurrent changes fail without blind retries.
+    Inspect state after ambiguous transport failures before retrying a write.
+    """
+    return entity_edit.select_dropdown(
+        doc_id, entity_id, option_id, tab_id, expected_option_id,
+    )
 
 
 @mcp.tool(
