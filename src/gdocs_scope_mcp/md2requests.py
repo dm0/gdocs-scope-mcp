@@ -10,11 +10,12 @@ from urllib.parse import urlsplit
 import mistune
 from bs4 import BeautifulSoup, Tag
 from bs4.element import NavigableString, PageElement
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, ValidationError, field_validator
 from rich.syntax import Syntax
 
 # isort: split
 from .code_highlighting import code_shading, code_spans
+from .entities import chip_input, insertion_request
 from .models import (
     EditFailedResponse,
     GoogleDocumentAlignment,
@@ -75,6 +76,28 @@ class InsertionImage(BaseModel):
         return '\ufffc'
 
 
+class InsertionChip(BaseModel):
+    """Reserve a native entity slot separately from its displayed label."""
+
+    type: Literal['chip'] = 'chip'
+    start_index: int
+    end_index: int
+    request_kind: str
+    payload: dict
+
+    def __len__(self) -> int:
+        """Reserve one UTF-16 unit for the native smart element."""
+        return 1
+
+    def to_markdown(self, _doc) -> str:
+        """Keep insertion previews independent of Google-resolved labels."""
+        return '\ufffc'
+
+    def to_text(self, _doc) -> str:
+        """Represent the native slot without guessing its displayed text."""
+        return '\ufffc'
+
+
 def _image_failure(description: str) -> None:
     """Refuse unsupported images before submitting any document changes."""
     raise ToolFailureError(EditFailedResponse(
@@ -123,7 +146,7 @@ def _convert_image(element: Tag, start: int) -> InsertionImage:
 class InsertionParagraph(GoogleDocumentParagraph):
     """Keep insertion-only list metadata separate from API list identities."""
 
-    elements: list[GoogleDocumentTextRun | InsertionImage]
+    elements: list[GoogleDocumentTextRun | InsertionImage | InsertionChip]
     bullet_preset: str | None = None
     nesting_level: int = 0
     list_key: int | None = None
@@ -336,6 +359,31 @@ def _convert_page_elements(
             last.end_index = end_index
             continue
         if isinstance(element, Tag):
+            if element.has_attr('data-mcp-entity'):
+                try:
+                    entity = chip_input(element.attrs)
+                except (ValidationError, ValueError, KeyError):
+                    raise ToolFailureError(EditFailedResponse(
+                        code='INVALID_ARGUMENT',
+                        description='Invalid smart-chip HTML attributes.',
+                        suggested_action='Use the data-mcp-entity and '
+                        'identity properties emitted by docs_read; labels '
+                        'alone cannot define a native chip.',
+                    )) from None
+                if element.find(attrs={'data-mcp-entity': True}):
+                    raise ToolFailureError(EditFailedResponse(
+                        code='INVALID_ARGUMENT',
+                        description='Nested smart-chip HTML is unsupported.',
+                        suggested_action='Use separate inline smart chips.',
+                    ))
+                kind, payload = insertion_request(entity)
+                start = last.start_index + len(last)
+                last.elements.append(InsertionChip(
+                    start_index=start, end_index=start + 1,
+                    request_kind=kind, payload=payload,
+                ))
+                last.end_index = start + 1
+                continue
             if element.name == 'table':
                 start = last.start_index + len(last)
                 added.append(convert_table(element, start))
@@ -489,7 +537,7 @@ def gpars_to_requests(
         text += '\t' * indent
         offset += indent
         for element in p.elements:
-            if isinstance(element, InsertionImage):
+            if isinstance(element, (InsertionImage, InsertionChip)):
                 images.append((utf16_length(text), element))
                 # A planning placeholder only; never send it as insertText.
                 text += '\ufffc'
@@ -537,13 +585,16 @@ def gpars_to_requests(
                     'location': {'index': insert_index + cursor},
                     'text': chunk,
                 }})
-            image_request = {
-                'location': {'index': insert_index + position},
-                'uri': image.uri,
-            }
-            if image.object_size:
-                image_request['objectSize'] = image.object_size
-            requests.append({'insertInlineImage': image_request})
+            location = {'index': insert_index + position}
+            if isinstance(image, InsertionChip):
+                requests.append({image.request_kind: {
+                    **image.payload, 'location': location,
+                }})
+            else:
+                image_request = {'location': location, 'uri': image.uri}
+                if image.object_size:
+                    image_request['objectSize'] = image.object_size
+                requests.append({'insertInlineImage': image_request})
             cursor = position + 1
         chunk = buffer[cursor * 2:].decode('utf-16-le')
         if chunk:
@@ -636,15 +687,18 @@ def gpars_to_requests(
 def inserted_text_from_requests(
     requests: list[dict] | TableInsertionPlan,
 ) -> str:
-    """Render final insertion text, using U+FFFC for each native image."""
+    """Render final text, using U+FFFC for each native image or smart chip."""
     if isinstance(requests, TableInsertionPlan):
         return requests.text()
-    insertions = [
-        r['insertText'] if 'insertText' in r else {
-            'location': r['insertInlineImage']['location'], 'text': '\ufffc',
-        }
-        for r in requests if 'insertText' in r or 'insertInlineImage' in r
-    ]
+    insertions = []
+    for request in requests:
+        kind, payload = next(iter(request.items()))
+        if kind == 'insertText':
+            insertions.append(payload)
+        elif kind in {'insertInlineImage', 'insertPerson', 'insertRichLink',
+                      'insertDate', 'insertDropdown'}:
+            insertions.append({'location': payload['location'],
+                               'text': '\ufffc'})
     if not insertions:
         return ''
     start = insertions[0]['location']['index']

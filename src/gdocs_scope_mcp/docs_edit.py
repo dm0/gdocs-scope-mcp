@@ -46,6 +46,8 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
 # isort: split
+from .entities import collect_entities
+from .entity_edit import INSERT_ENTITY_KINDS, validate_insertions
 from .image_uploads import PreparedInsertion, rich_insertion_requests
 from .md2requests import inserted_text_from_requests
 from .models import (
@@ -64,6 +66,7 @@ from .models import (
     GoogleDocument,
     GoogleDocumentNamedStyleType,
     GoogleDocumentParagraph,
+    GoogleDocumentSmartChip,
     GoogleDocumentTable,
     InsertSucceedResponse,
     ReplaceSucceedResponse,
@@ -569,8 +572,15 @@ def _parse_document_tree(doc: dict) -> DocumentTree:
             last.paragraphs.append(paragraph)
             continue
 
+        title = paragraph.text
+        if any(isinstance(element, GoogleDocumentSmartChip)
+               for element in elem.elements):
+            title = ''.join(element.to_text(google_doc)
+                            for element in elem.elements)
+            if paragraph.text.endswith('\n'):
+                title += '\n'
         section = DocumentSection(
-            title=paragraph.text,
+            title=title,
             id=elem.paragraph_style.heading_id,
             level=elem.paragraph_style.named_style_type.compact,
             ancestor_ids=[],
@@ -967,13 +977,16 @@ def _insert_content(
     newline_before: bool = True, upload_local_images: bool = False,
     required_revision: str | None = None,
     table_borders: bool = True,
-) -> tuple[str, int, list[str]]:
+) -> tuple[str, int, int, list[str]]:
     """Apply a validated insertion within the temporary-image lifecycle."""
     if rich:
         context = rich_insertion_requests(
             text, index, newline_before=newline_before,
             upload_local_images=upload_local_images,
             drive_factory=lambda: _get_service('drive', 'v3'),
+            validate_requests=lambda requests: validate_insertions(
+                service, doc_id, requests, required_revision,
+            ),
         )
     else:
         literal = '\n' + text if newline_before else text + '\n'
@@ -990,10 +1003,18 @@ def _insert_content(
             requests = list(prepared.requests.iter_requests())
         else:
             requests = prepared.requests
+            body = {'requests': requests}
+            if required_revision and any(
+                INSERT_ENTITY_KINDS.intersection(r) for r in requests
+            ):
+                body['writeControl'] = {
+                    'requiredRevisionId': required_revision,
+                }
             service.documents().batchUpdate(
-                documentId=doc_id, body={'requests': requests},
+                documentId=doc_id, body=body,
             ).execute()
     return (inserted, sum('insertInlineImage' in r for r in requests),
+            sum(bool(INSERT_ENTITY_KINDS.intersection(r)) for r in requests),
             prepared.cleanup_pending)
 
 
@@ -1043,7 +1064,9 @@ def insert_after(
     # This also stays inside the valid insertion range at the document end.
     insert_index = found.paragraph.end_index - 1
 
-    inserted_text, image_count, cleanup_pending = _insert_content(
+    (
+        inserted_text, image_count, entity_count, cleanup_pending,
+    ) = _insert_content(
         service, doc_id, text, insert_index, rich=rich,
         upload_local_images=upload_local_images,
         required_revision=doc.get('revisionId'),
@@ -1052,6 +1075,7 @@ def insert_after(
 
     return InsertSucceedResponse(
         document_id=doc_id, heading_id=heading_id,
+        inserted_entity_count=entity_count,
         inserted_image_count=image_count,
         temporary_image_cleanup_pending=cleanup_pending,
         scope='heading_subtree' if heading_id is not None else 'document',
@@ -1114,7 +1138,9 @@ def insert_before(
     # Insert at the start of the paragraph
     insert_index = found.paragraph.start_index
 
-    inserted_text, image_count, cleanup_pending = _insert_content(
+    (
+        inserted_text, image_count, entity_count, cleanup_pending,
+    ) = _insert_content(
         service, doc_id, text, insert_index, rich=rich, newline_before=False,
         upload_local_images=upload_local_images,
         required_revision=doc.get('revisionId'),
@@ -1123,6 +1149,7 @@ def insert_before(
 
     return InsertSucceedResponse(
         document_id=doc_id, heading_id=heading_id,
+        inserted_entity_count=entity_count,
         inserted_image_count=image_count,
         temporary_image_cleanup_pending=cleanup_pending,
         scope='heading_subtree' if heading_id is not None else 'document',
@@ -1166,6 +1193,16 @@ def delete_paragraph(doc_id: str, anchor: str) -> dict:
     # Sort by start index descending so deleting earlier content doesn't shift
     # later indices
     targets.sort(key=lambda p: p.start, reverse=True)
+
+    entities = collect_entities(doc)
+    if any(target.start <= entity.start_index < target.end
+           for target in targets for entity in entities):
+        raise ToolFailureError(EditFailedResponse(
+            code='INVALID_ARGUMENT',
+            description='Paragraph deletion would remove a native smart chip.',
+            suggested_action='Edit ordinary text around the chip. Native '
+            'entity deletion is not supported by this tool.',
+        ))
 
     terminal_newline = doc['body']['content'][-1]['endIndex'] - 1
     requests = []
@@ -1236,7 +1273,9 @@ def append(
     last_elem = body_content[-1]
     insert_index = last_elem['endIndex'] - 1
 
-    inserted_text, image_count, cleanup_pending = _insert_content(
+    (
+        inserted_text, image_count, entity_count, cleanup_pending,
+    ) = _insert_content(
         service, doc_id, text, insert_index, rich=rich,
         upload_local_images=upload_local_images,
         required_revision=doc.get('revisionId'),
@@ -1245,6 +1284,7 @@ def append(
 
     return AppendSucceedResponse(
         document_id=doc_id,
+        inserted_entity_count=entity_count,
         inserted_image_count=image_count,
         temporary_image_cleanup_pending=cleanup_pending,
         rich=rich,

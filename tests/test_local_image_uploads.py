@@ -131,6 +131,9 @@ def test_local_upload_is_explicit_and_literal_mode_never_uploads(
     '<img src="data:image/png;base64,AA">',
     '<img src="relative.png">',
     '3. Unsupported custom list start',
+    '<span data-mcp-entity="person">Missing email</span>',
+    '<span data-mcp-entity="dropdown" '
+    'data-mcp-definition-id="foreign">Missing definition</span>',
 ])
 def test_whole_edit_is_validated_before_uploads(
     services, local_image, bad_markup,

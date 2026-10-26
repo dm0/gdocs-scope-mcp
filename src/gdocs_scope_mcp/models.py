@@ -18,6 +18,14 @@ from pydantic import (
 )
 from typing_extensions import Self
 
+from .entities import (
+    DateProperties,
+    DropdownProperties,
+    PersonProperties,
+    RichLinkProperties,
+    chip_html,
+    chip_label,
+)
 from .text_indices import utf16_length
 
 HEADING_LEVELS = {
@@ -433,6 +441,9 @@ class InsertSucceedResponse(DocumentEditReceipt):
     """Result of successful text insertion request"""
 
     ok: Literal[True] = True
+    inserted_entity_count: int = Field(
+        default=0, ge=0, description='Number of native smart chips inserted',
+    )
     anchor: Annotated[
         TruncatedStr80,
         Field(
@@ -463,12 +474,12 @@ class InsertSucceedResponse(DocumentEditReceipt):
     inserted_text: Annotated[
         TruncatedStr200,
         Field(description='Inserted text preview; U+FFFC represents each '
-              'native image; the first 200 characters max'),
+              'native image or smart chip; the first 200 characters max'),
     ]
     inserted_char_count: Annotated[
         int, Field(ge=0, description='Full inserted Unicode code-point count, '
                    'including paragraph breaks and one U+FFFC placeholder '
-                   'per native image')
+                   'per native image or smart chip')
     ]
     preview_truncated: bool
     anchor_char_count: Annotated[
@@ -485,6 +496,9 @@ class AppendSucceedResponse(DocumentEditReceipt):
     """Describe appended content without exposing Google API requests."""
 
     ok: Literal[True] = True
+    inserted_entity_count: int = Field(
+        default=0, ge=0, description='Number of native smart chips inserted',
+    )
     temporary_image_cleanup_pending: Annotated[
         list[str], Field(description='Temporary Drive file IDs that could not '
                          'be deleted; insertion succeeded, do not repeat it. '
@@ -509,7 +523,8 @@ class AppendSucceedResponse(DocumentEditReceipt):
         Field(
             max_length=APPEND_PREVIEW_LIMIT,
             description='Inserted plain-text preview, including paragraph '
-            'breaks and U+FFFC for each native image; at most 200 code points',
+            'breaks and U+FFFC for each native image or smart chip; '
+            'at most 200 code points',
         ),
     ]
     inserted_char_count: Annotated[
@@ -517,7 +532,8 @@ class AppendSucceedResponse(DocumentEditReceipt):
         Field(
             ge=0,
             description='Full inserted length in Unicode code points, '
-            'including paragraph breaks and one U+FFFC per native image',
+            'including paragraph breaks and one U+FFFC per image or '
+            'smart chip',
         ),
     ]
     preview_truncated: Annotated[
@@ -1028,6 +1044,54 @@ class GoogleDocumentShading(BaseModel, populate_by_name=True):
     ] = None
 
 
+class GoogleDocumentSmartChip(GoogleDocumentStructuralElement, extra='allow'):
+    """Keep native entities separate from editable source text runs."""
+
+    type: Literal['person', 'richLink', 'dateElement', 'dropdown']
+    person_id: str | None = Field(default=None, alias='personId')
+    rich_link_id: str | None = Field(default=None, alias='richLinkId')
+    date_id: str | None = Field(default=None, alias='dateId')
+    dropdown_id: str | None = Field(default=None, alias='dropdownId')
+    person_properties: PersonProperties | None = Field(
+        default=None, alias='personProperties',
+    )
+    rich_link_properties: RichLinkProperties | None = Field(
+        default=None, alias='richLinkProperties',
+    )
+    date_element_properties: DateProperties | None = Field(
+        default=None, alias='dateElementProperties',
+    )
+    dropdown_properties: DropdownProperties | None = Field(
+        default=None, alias='dropdownProperties',
+    )
+
+    @property
+    def identity(self) -> str:
+        """Return the native ID appropriate to this entity's kind."""
+        return (self.person_id or self.rich_link_id or self.date_id
+                or self.dropdown_id or '')
+
+    @property
+    def properties(self) -> dict:
+        """Retain typed properties and forward-compatible API additions."""
+        properties = (self.person_properties or self.rich_link_properties
+                      or self.date_element_properties
+                      or self.dropdown_properties)
+        return properties.model_dump(by_alias=True, exclude_none=True)
+
+    def to_markdown(self, doc: 'GoogleDocument') -> str:  # noqa: ARG002
+        """Keep display text, kind and identity in an escaped inline span."""
+        return chip_html(self.type, self.identity, self.properties)
+
+    def to_text(self, doc: 'GoogleDocument') -> str:  # noqa: ARG002
+        """Expose the native label for display, never for source mapping."""
+        return chip_label(self.type, self.properties)
+
+    def __len__(self) -> int:
+        """Use API source width rather than the display label length."""
+        return self.end_index - self.start_index
+
+
 class GoogleDocumentParagraphStyle(BaseModel, populate_by_name=True):
     """Store a paragraph heading ID, named style, and alignment."""
 
@@ -1051,15 +1115,17 @@ class GoogleDocumentBullet(BaseModel, populate_by_name=True):
 
 
 def _unnest_paragraph_element(data: dict) -> dict:
-    kinds = {'textRun', 'horizontalRule', 'inlineObjectElement'}
+    kinds = {'textRun', 'horizontalRule', 'inlineObjectElement',
+             'person', 'richLink', 'dateElement', 'dropdown'}
     present_kinds = kinds.intersection(data.keys())
     if present_kinds:
         kind = next(iter(present_kinds))
-        inner_payload = data.pop(kind)
+        inner_payload = data[kind]
     else:
         kind = 'base'
         inner_payload = {}
-    return {'type': kind, **data, **inner_payload}
+    return {'type': kind, **{k: v for k, v in data.items() if k != kind},
+            **inner_payload}
 
 
 GoogleDocumentParagraphElement = Annotated[
@@ -1067,6 +1133,7 @@ GoogleDocumentParagraphElement = Annotated[
         GoogleDocumentTextRun
         | GoogleDocumentHorizontalRule
         | GoogleDocumentInlineObjectElement
+        | GoogleDocumentSmartChip
         | GoogleDocumentStructuralElement,
         Discriminator('type'),
     ],

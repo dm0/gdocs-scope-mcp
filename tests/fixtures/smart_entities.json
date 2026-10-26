@@ -1,0 +1,65 @@
+{
+  "provenance": "Captured through isolated STDIO MCP on 2026-10-26. Native IDs, document URI, resource title and definition title are anonymized. Source ranges are normalized to one UTF-16 slot.",
+  "elements": [
+    {
+      "startIndex": 1, "endIndex": 2,
+      "person": {
+        "personId": "kix.person", "textStyle": {},
+        "personProperties": {"email": "reader@example.com"}
+      }
+    },
+    {
+      "startIndex": 2, "endIndex": 3,
+      "dateElement": {
+        "dateId": "kix.date", "textStyle": {},
+        "dateElementProperties": {
+          "timestamp": "2026-10-26T12:00:00Z", "locale": "en",
+          "dateFormat": "DATE_FORMAT_ISO8601",
+          "timeFormat": "TIME_FORMAT_DISABLED", "displayText": "2026-10-26"
+        }
+      }
+    },
+    {
+      "startIndex": 3, "endIndex": 4,
+      "richLink": {
+        "richLinkId": "kix.resource", "textStyle": {},
+        "richLinkProperties": {
+          "title": "Example document",
+          "uri": "https://docs.google.com/document/d/example/edit",
+          "mimeType": "application/vnd.google-apps.kix"
+        }
+      }
+    },
+    {
+      "startIndex": 4, "endIndex": 5,
+      "dropdown": {
+        "dropdownId": "kix.dropdown", "textStyle": {},
+        "dropdownProperties": {
+          "dropdownDefinitionId": "kix.definition",
+          "selectedOptionId": "dropdownItem.review", "displayValue": "Review"
+        }
+      }
+    }
+  ],
+  "dropdownDefinitions": {
+    "kix.definition": {
+      "dropdownDefinitionId": "kix.definition",
+      "dropdownDefinitionProperties": {
+        "title": "Status",
+        "options": [
+          {
+            "optionId": "dropdownItem.ready", "displayValue": "Ready",
+            "textStyle": {
+              "backgroundColor": {"color": {"rgbColor": {"green": 1}}},
+              "foregroundColor": {}
+            }
+          },
+          {
+            "optionId": "dropdownItem.review", "displayValue": "Review",
+            "textStyle": {"backgroundColor": {}, "foregroundColor": {}}
+          }
+        ]
+      }
+    }
+  }
+}

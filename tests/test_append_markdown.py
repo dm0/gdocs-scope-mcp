@@ -49,6 +49,7 @@ def test_append_converts_headings_and_emphasis(simple_document, mock_docs):
         'appended': inserted,
         'inserted_char_count': len(inserted),
         'inserted_image_count': 0,
+        'inserted_entity_count': 0,
         'temporary_image_cleanup_pending': [],
         'preview_truncated': False,
     }
@@ -194,6 +195,7 @@ def test_mcp_append_exposes_structured_receipt(mock_docs, rich):
         'appended',
         'inserted_char_count',
         'inserted_image_count',
+        'inserted_entity_count',
         'temporary_image_cleanup_pending',
         'preview_truncated',
     }

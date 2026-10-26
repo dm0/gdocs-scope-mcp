@@ -127,6 +127,8 @@ not authorization or retry guarantees. The per-operation policy is:
 | `docs_insert_before`, `docs_insert_after`, `docs_append` | false | false | false |
 | `docs_create`, `docs_add_comment`, `docs_reply_to_comment` | false | false | false |
 | `docs_resolve_comment` | false | false | false |
+| `docs_get_entity` | true | false | true |
+| `docs_create_dropdown_definition`, `docs_select_dropdown` | false | false | false |
 
 Deletion is idempotent in effect: repeating it cannot remove more of the
 original targets, although a retry can return a not-found error. Resolution
@@ -832,6 +834,102 @@ uv run --locked fastmcp call \
 
 Setting a variable only on the parent CLI process does not guarantee it reaches
 the STDIO server; FastMCP's subprocess environment is filtered.
+
+### Native smart chips
+
+`docs_read` preserves people/name chips, resource chips, dates and dropdowns
+inline as HTML spans. The span's contents are the visible label; attributes
+identify the native entity and the properties needed to create a copy:
+
+```html
+<span data-mcp-entity="person" data-mcp-id="kix.person"
+      data-mcp-email="alice@example.com">Alice</span>
+<span data-mcp-entity="richLink" data-mcp-id="kix.resource"
+      data-mcp-uri="https://docs.google.com/document/d/DOCUMENT_ID/edit">Report</span>
+<span data-mcp-entity="dateElement" data-mcp-id="kix.date"
+      data-mcp-timestamp="2026-10-26T12:00:00Z"
+      data-mcp-date-format="DATE_FORMAT_ISO8601">2026-10-26</span>
+<span data-mcp-entity="dropdown" data-mcp-id="kix.instance"
+      data-mcp-definition-id="kix.definition"
+      data-mcp-option-id="dropdownItem.ready">Ready</span>
+```
+
+Labels and attribute values are HTML-escaped. A native resource chip is distinct
+from a normal Markdown hyperlink. Changing a span's visible label does not edit
+the native entity: Google resolves the person's name, resource title, date
+display, or selected dropdown option. Ordinary spans without `data-mcp-entity`
+keep their existing text conversion behavior.
+
+All three rich insertion tools recognize these spans, including inline chips
+in supported list paragraphs and table cells. They insert **new native
+instances**, preserving the person/resource reference, timestamp/display
+configuration, or dropdown definition/selection. `data-mcp-id` is a read/edit
+reference and is never reused as a newly inserted instance's ID. It may be
+omitted when authoring a new span. `rich=False` keeps the HTML literal.
+
+Dates also preserve `data-mcp-time-format`, `data-mcp-time-zone` and
+`data-mcp-locale` when supplied by the API. New dates default to ISO date format
+without a displayed time. Imported custom date formats cannot be recreated by
+this converter and fail explicitly. Resource URI support and access follow
+Google's native `insertRichLink` restrictions; a generic web link is not
+automatically a supported resource chip. Native chip styling is not a full
+formatting round trip; the API metadata remains available for inspection.
+
+The existing read/insertion tools operate on the first document tab. To copy
+a dropdown, its definition and selected option must exist in that destination
+tab. Cross-document definitions are not copied automatically. All definitions
+and options are validated before any document writes or local-image uploads;
+unsupported kinds and malformed required attributes fail without falling back
+to ordinary text.
+
+Insertion receipts expose `inserted_entity_count` separately from
+`inserted_image_count`. Each native chip occupies one UTF-16 source slot;
+previews and `inserted_char_count` use one U+FFFC object placeholder per chip,
+rather than Google's resolved display-label length. Read back with `docs_read`
+for the actual labels and new native IDs.
+
+#### `docs_get_entity(doc_id, entity_id, tab_id=None)`
+
+Read one chip by `data-mcp-id`. Returns `kind`, `entity_id`, `tab_id`, document
+and revision IDs, original UTF-16 `start_index`/`end_index`, and complete native
+`metadata`, including styles and suggestion metadata. For dropdowns,
+`dropdown_definition` includes the shared definition, available option IDs,
+labels and colors. Other kinds return null for that field. No duplicate entity
+inventory is added to every `docs_read` response. Defaults to the first tab;
+an explicit `tab_id` can select a nested tab. Missing IDs/tabs fail explicitly.
+Ranges are diagnostic and must not be reused as editing handles.
+
+#### `docs_create_dropdown_definition(doc_id, title, options, tab_id=None)`
+
+Create a shared native definition with 2-50 options. Each typed option has
+`display_value`, and optional `foreground_color`/`background_color` in
+`#RRGGBB` form. Returns `dropdown_definition` with generated definition and
+option IDs. Creating a definition does not insert a chip or modify existing
+definitions. Insert a span referencing the returned IDs with an insertion tool.
+
+#### `docs_select_dropdown(doc_id, entity_id, option_id, tab_id=None, expected_option_id=None)`
+
+Change the selected option of **one instance**, without modifying its shared
+definition or sibling instances. `expected_option_id` optionally rejects a
+selection that changed since the agent read it. Use `docs_get_entity` to discover
+option IDs. Creating definitions and selecting options support explicit tab
+IDs; both default to the first tab.
+
+Smart-chip writes use `requiredRevisionId`. Concurrent revision changes stop
+the write; automatic rebasing/retries are separate work (#32). Do not blindly
+repeat a write after an unknown transport outcome. Definition editing/deletion,
+chip deletion, and in-place person/resource/date updates are not currently
+exposed. Shared definitions are not changed implicitly while selecting/copying
+a chip.
+
+Text replacement and comment anchors continue to use actual text-run positions,
+not chip labels. Text edits before/after a chip retain its identity; ranges
+crossing a chip fail explicitly. Paragraph deletion refuses paragraphs containing
+native chips. Native replace-all does not turn immutable chip labels into text.
+
+API references: [paragraph entities](https://developers.google.com/workspace/docs/api/reference/rest/v1/documents#ParagraphElement),
+[native insertion requests](https://developers.google.com/workspace/docs/api/reference/rest/v1/documents/request),
+and [dropdown definitions and instances](https://developers.google.com/workspace/docs/api/how-tos/dropdowns).
 
 ### Native lists
 

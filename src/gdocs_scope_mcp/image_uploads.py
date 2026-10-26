@@ -111,12 +111,16 @@ def _remove_upload(drive, file_id: str, permission_id: str | None) -> bool:
 def rich_insertion_requests(
     text: str, start: int, *, newline_before: bool = True,
     upload_local_images: bool = False, drive_factory: Callable,
+    validate_requests: Callable | None = None,
 ) -> Iterator[PreparedInsertion]:
     """Validate the edit, stage local images, and always attempt cleanup."""
     if not upload_local_images:
-        yield PreparedInsertion(markdown_to_requests(
+        prepared = PreparedInsertion(markdown_to_requests(
             text, start, newline_before=newline_before,
         ))
+        if validate_requests:
+            validate_requests(prepared.requests)
+        yield prepared
         return
     soup = BeautifulSoup(markdown_to_html(text), 'html.parser')
     sources = {}
@@ -135,6 +139,8 @@ def rich_insertion_requests(
     planned = PreparedInsertion(gpars_to_requests(
         html_to_gpars(str(soup), start), newline_before=newline_before,
     ))
+    if validate_requests:
+        validate_requests(planned.requests)
     if not sources:
         yield planned
         return
