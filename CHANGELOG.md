@@ -1,8 +1,8 @@
 # Changelog
 
-User-facing changes are listed in descending version order. Historical entries
-are reconstructed from Git history; an explicit note identifies untagged
-baselines whose publication date is not established.
+User-facing changes to `gdocs-scope-mcp` are listed in descending version order,
+starting with v0.3.0. The upstream 0.2.0 baseline is documented separately for
+provenance; it is not a release of this independent project.
 
 ## [v0.4.0] - 2026-10-26
 
@@ -70,6 +70,8 @@ baselines whose publication date is not established.
 - Dropdown copies require the definition and selected option to exist in the
   destination tab. Definitions are not copied between documents automatically.
 
+[v0.4.0]: https://github.com/dm0/gdocs-scope-mcp/compare/v0.3.0...v0.4.0
+
 ## [v0.3.0] - 2026-10-23
 
 ### Added
@@ -104,14 +106,19 @@ baselines whose publication date is not established.
   Drive reply action.
 - Fetch inline suggestions consistently so source indices remain usable.
 
-## v0.2.0 - Historical upstream baseline
+[v0.3.0]: https://github.com/dm0/gdocs-scope-mcp/tree/v0.3.0
 
-This version first appears in package metadata at commit
+## Upstream baseline: 0.2.0
+
+Version 0.2.0 belongs to the original
+[`dbuxton/google-docs-mcp`](https://github.com/dbuxton/google-docs-mcp) project
+from which `gdocs-scope-mcp` was created. It is not a `gdocs-scope-mcp` release.
+The inherited history first records this version in package metadata at commit
 [`797207f`](https://github.com/dm0/gdocs-scope-mcp/commit/797207f), dated
-2026-03-10. There is no `v0.2.0` tag in this repository; this entry describes the
-recorded baseline, not a verified publication date.
+2026-03-10, when the upstream package used the `google-drive-mcp` name. That
+commit date is not asserted to be the upstream publication date.
 
-### Added
+### Inherited functionality
 
 - Original text-anchor Google Docs operations: reading, search/replace,
   insertion, append, paragraph deletion, and batch replacement.
@@ -121,6 +128,3 @@ recorded baseline, not a verified publication date.
 - Standalone OAuth authentication with browser, headless, and code-exchange
   modes, self-contained token files, and legacy token compatibility.
 - Initial package and console entry points under the `google-drive-mcp` name.
-
-[v0.4.0]: https://github.com/dm0/gdocs-scope-mcp/compare/v0.3.0...v0.4.0
-[v0.3.0]: https://github.com/dm0/gdocs-scope-mcp/tree/v0.3.0
