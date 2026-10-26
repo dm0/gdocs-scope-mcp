@@ -64,7 +64,10 @@ from .models import (
     ReplyCommentResponse,
     ResolveCommentResponse,
 )
+from .settings import code_formatting, get_settings
 from .tool_inputs import (
+    CodeBlockStyle,
+    CodeBlockThemeBackground,
     NonemptyText,
     PositiveInteger,
     ReplacementOccurrence,
@@ -132,6 +135,18 @@ EDITING TOOLS:
     temporary My Drive root files and anyone-with-link reader access; sources
     are deleted after insertion. Check temporary_image_cleanup_pending for
     failed deletions. Do not repeat a successful insertion to clean them up.
+    Inline code and fenced/indented code blocks, including HTML code/pre, use
+    Roboto Mono by default; inline code defaults to green #188038. The server
+    config can override the code font and inline color. Blocks preserve line
+    breaks, blank lines and indentation;
+    declared languages use Pygments highlighting with the configurable default
+    theme. Unknown/absent languages stay plain monospace. Blocks default to
+    line spacing 1.0 with theme backgrounds off; both are configurable.
+    Inline code is unaffected by block layout settings and works in list items;
+    code blocks inside list items fail before writes.
+    Optional code_block_style and code_block_theme_background override code
+    formatting for this call. Omitted/null values inherit server settings
+    (including environment overrides). Explicit False disables the background.
 
     docs_get_tree          Read hierarchical document tree (headings)
     docs_read              Read document contents (paragraphs + plain)
@@ -342,6 +357,8 @@ def docs_insert_after(
     heading_id: str | None = None,
     rich: bool = True,
     *, upload_local_images: bool = False,
+    code_block_style: CodeBlockStyle | None = None,
+    code_block_theme_background: CodeBlockThemeBackground | None = None,
 ) -> InsertSucceedResponse | EditFailedResponse:
     """
     Insert a new paragraph immediately after the paragraph containing `anchor`.
@@ -359,6 +376,11 @@ def docs_insert_after(
     not yet implemented. Images require public HTTP(S) PNG/JPEG/GIF URLs;
     alt/title metadata is not preserved. HTML width/height accept pixel
     numbers.
+    Inline code and blocks default to Roboto Mono, with inline color #188038;
+    font/color are configurable on the server. Blocks preserve literal
+    whitespace. Declared languages use Pygments (theme default); highlighting
+    is configurable on the server. Unknown/absent languages stay plain.
+    HTML code/pre are supported; blocks inside list items are unsupported.
 
     Args:
         doc_id: Google Doc ID
@@ -371,6 +393,11 @@ def docs_insert_after(
             Uploads to My Drive root, temporarily grants anyone-with-link
             read access, inserts, then deletes sources. Defaults to False.
             Ignored with rich=False. See temporary_image_cleanup_pending.
+        code_block_style: Pygments theme, e.g. default or monokai.
+            Omitted/null inherits config/environment. Ignored with rich=False.
+        code_block_theme_background: Apply paragraph theme background.
+            Omitted/null inherits server config/environment; False disables it.
+            Ignored with rich=False.
 
     Returns
     -------
@@ -382,10 +409,12 @@ def docs_insert_after(
         preview_truncated signals omitted text. The anchor preview is at most
         80 code points, with anchor_char_count and anchor_preview_truncated.
     """
-    return docs_edit.insert_after(
-        doc_id, anchor, text, heading_id=heading_id, rich=rich,
-        upload_local_images=upload_local_images,
-    )
+    with code_formatting(style=code_block_style,
+                         theme_background=code_block_theme_background):
+        return docs_edit.insert_after(
+            doc_id, anchor, text, heading_id=heading_id, rich=rich,
+            upload_local_images=upload_local_images,
+        )
 
 
 @mcp.tool(
@@ -404,6 +433,8 @@ def docs_insert_before(
     heading_id: str | None = None,
     rich: bool = True,
     *, upload_local_images: bool = False,
+    code_block_style: CodeBlockStyle | None = None,
+    code_block_theme_background: CodeBlockThemeBackground | None = None,
 ) -> InsertSucceedResponse | EditFailedResponse:
     """
     Insert a new paragraph immediately before the paragraph containing
@@ -423,6 +454,11 @@ def docs_insert_before(
     not yet implemented. Images require public HTTP(S) PNG/JPEG/GIF URLs;
     alt/title metadata is not preserved. HTML width/height accept pixel
     numbers.
+    Inline code and blocks default to Roboto Mono, with inline color #188038;
+    font/color are configurable on the server. Blocks preserve literal
+    whitespace. Declared languages use Pygments (theme default); highlighting
+    is configurable on the server. Unknown/absent languages stay plain.
+    HTML code/pre are supported; blocks inside list items are unsupported.
 
     Args:
         doc_id: Google Doc ID
@@ -434,6 +470,11 @@ def docs_insert_before(
             Uploads to My Drive root, temporarily grants anyone-with-link
             read access, inserts, then deletes sources. Defaults to False.
             Ignored with rich=False. See temporary_image_cleanup_pending.
+        code_block_style: Pygments theme, e.g. default or monokai.
+            Omitted/null inherits config/environment. Ignored with rich=False.
+        code_block_theme_background: Apply paragraph theme background.
+            Omitted/null inherits server config/environment; False disables it.
+            Ignored with rich=False.
 
     Returns
     -------
@@ -445,14 +486,12 @@ def docs_insert_before(
         preview_truncated signals omitted text. The anchor preview is at most
         80 code points, with anchor_char_count and anchor_preview_truncated.
     """
-    return docs_edit.insert_before(
-        doc_id,
-        anchor,
-        text,
-        heading_id=heading_id,
-        rich=rich,
-        upload_local_images=upload_local_images,
-    )
+    with code_formatting(style=code_block_style,
+                         theme_background=code_block_theme_background):
+        return docs_edit.insert_before(
+            doc_id, anchor, text, heading_id=heading_id, rich=rich,
+            upload_local_images=upload_local_images,
+        )
 
 
 @mcp.tool(
@@ -507,6 +546,8 @@ def docs_delete_paragraph(
 def docs_append(
     doc_id: str, text: str, rich: bool = True, *,
     upload_local_images: bool = False,
+    code_block_style: CodeBlockStyle | None = None,
+    code_block_theme_background: CodeBlockThemeBackground | None = None,
 ) -> AppendSucceedResponse:
     """
     Append Markdown paragraphs or literal text at the end of a Google Doc.
@@ -520,6 +561,12 @@ def docs_append(
     metadata is not preserved. CSS/responsive images are unsupported.
     Native tables are not yet implemented.
 
+    Inline code and blocks default to Roboto Mono, with inline color #188038;
+    font/color are configurable on the server. Blocks preserve literal
+    whitespace. Declared languages use Pygments (theme default); highlighting
+    is configurable on the server. Unknown/absent languages stay plain.
+    HTML code/pre are supported; blocks inside list items are unsupported.
+
     With rich=False, preserve Markdown delimiters and line breaks literally.
 
     Args:
@@ -530,6 +577,11 @@ def docs_append(
             Uploads to My Drive root, temporarily grants anyone-with-link
             read access, inserts, then deletes sources. Defaults to False.
             Ignored with rich=False. See temporary_image_cleanup_pending.
+        code_block_style: Pygments theme, e.g. default or monokai.
+            Omitted/null inherits config/environment. Ignored with rich=False.
+        code_block_theme_background: Apply paragraph theme background.
+            Omitted/null inherits server config/environment; False disables it.
+            Ignored with rich=False.
 
     Returns
     -------
@@ -540,8 +592,10 @@ def docs_append(
         and ok=True. Read the document to verify formatting.
         scope is document_end and heading_id is null.
     """
-    return docs_edit.append(doc_id, text, rich=rich,
-                            upload_local_images=upload_local_images)
+    with code_formatting(style=code_block_style,
+                         theme_background=code_block_theme_background):
+        return docs_edit.append(doc_id, text, rich=rich,
+                                upload_local_images=upload_local_images)
 
 
 @mcp.tool(
@@ -1000,6 +1054,7 @@ def docs_create(title: str, initial_text: str = '') -> CreateDocumentResponse:
 def main():
     """Run the command-line entry point for this module."""
     configure_logging()
+    get_settings()
     # Our logger has its own handler; this default is for third-party loggers.
     logging.basicConfig(level=logging.WARNING, stream=sys.stderr)
     mcp.run(transport='stdio')

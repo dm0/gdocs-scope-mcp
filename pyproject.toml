@@ -17,6 +17,8 @@ dependencies = [
     "google-auth-httplib2>=0.1.1",
     "fastmcp>=2.10.0",
     "pydantic~=2.13",
+    "pydantic-settings>=2.6",
+    "pygments>=2.19",
     "mistune~=3.2",
     "beautifulsoup4~=4.15",
     "rich",

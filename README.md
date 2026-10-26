@@ -652,8 +652,137 @@ This is a bounded read-to-write subset, not complete HTML or formatting
 round-trip support. Other wrappers retain their child text without preserving
 unsupported formatting or attributes; non-text tags may contribute no content.
 For example, a styled `span` retains its text but loses its styling. Native
-tables and code formatting still have separate insertion
-limitations. Use `rich=False` to preserve HTML tags and Markdown literally.
+tables still have separate insertion limitations. Use `rich=False` to preserve
+HTML tags and Markdown literally.
+
+Inline code (backticks or HTML `code`) and code blocks (backtick/tilde fences,
+indented Markdown code, or HTML `pre`) use the native **Roboto Mono** font in
+all three insertion tools by default. Inline code is formatted only on its code
+span and defaults to green **#188038**, matching Google Docs' backtick recognition,
+and can combine with outer emphasis or a hyperlink. Markdown code-span whitespace
+follows CommonMark normalization, including turning a source newline into a
+space.
+
+Code blocks become ordinary Google Docs paragraphs with a monospace text range,
+not an editor-specific code-block object. Block line breaks, blank lines, tabs,
+indentation and trailing spaces are preserved after Markdown removes the fence
+or indentation syntax. One terminal newline is represented by the surrounding
+paragraph boundary. Neighbouring prose stays separate and does not inherit the
+code font. Code contents are literal: Markdown-looking text and escaped HTML
+inside a fence are not interpreted again. A declared fence language (for example,
+`python`, `json`, `bash` or `javascript`) selects a Pygments lexer and syntax
+highlighting. HTML `<pre><code class="language-python">...</code></pre>` uses
+the same mechanism. Blocks without a language or with an unknown language stay
+plain monospace; no language guessing is performed. A lexer that transforms the
+source text also falls back to plain monospace to preserve exact content.
+
+The selected Pygments theme supplies foreground colors, bold, italic and
+underline. Theme backgrounds are disabled by default. When enabled, the base
+background fills the full width of every code paragraph, including blank lines,
+using native paragraph shading. Token-specific backgrounds remain text styles.
+Enable backgrounds when choosing a dark theme with light text. Adjacent prose is
+unaffected; paragraph fills are applied after insertion to prevent inheritance.
+No custom font size or native language metadata is written.
+
+Inline code works in supported single-paragraph list items. Code blocks inside
+list items return `INVALID_ARGUMENT` before writing; list-item block semantics
+remain outside the supported subset. `rich=False` preserves code markup
+literally. Receipts count the final literal text and paragraph breaks, not fence
+delimiters or language labels. Reads do not reconstruct code fences/backticks
+from font metadata, so this does not promise a lossless code round trip.
+
+### Code formatting configuration
+
+An optional JSON config sets code formatting and highlighting. By default, the
+server reads `~/.config/gdocs-scope-mcp/config.json`, or
+`$XDG_CONFIG_HOME/gdocs-scope-mcp/config.json` when `XDG_CONFIG_HOME` is set.
+Select another file with `GOOGLE_DOCS_MCP_CONFIG=/absolute/path/config.json`.
+An absent default file is allowed; an explicitly selected file must exist.
+
+```json
+{
+  "code_font_family": "Roboto Mono",
+  "inline_code_color": "#188038",
+  "code_block_highlighting": true,
+  "code_block_style": "default",
+  "code_block_line_spacing": 1.0,
+  "code_block_theme_background": false
+}
+```
+
+All fields are optional; the example shows the built-in defaults. The font
+applies to inline code and blocks; `inline_code_color` applies only to inline code.
+Set `code_block_highlighting` to `false` to keep language-labelled blocks plain
+monospace. `code_block_style` selects a Pygments theme such as `default`,
+`friendly` or `monokai`; an unknown theme fails startup validation. Themes can
+be previewed in the [Pygments gallery](https://pygments.org/styles/).
+`code_block_line_spacing` sets a positive finite line-height multiplier: `1.0`
+is single spacing, `1.5` is one-and-a-half spacing. It applies to all code blocks,
+including unlabelled/unknown languages and blocks with highlighting disabled;
+inline code and surrounding prose are unaffected. Google Docs stores this as
+a percentage (`1.0` becomes `100`). `code_block_theme_background` controls both
+the theme's base background and token-specific backgrounds; it takes effect only
+when syntax highlighting is active for a recognised language.
+Font names must be nonempty, and colors must use six-digit RGB hex syntax
+(`#RRGGBB`). Choose a font supported by Google Docs; the server validates the
+name's syntax but does not query font availability. Unknown JSON fields and
+invalid values fail validation, rather than silently falling back to defaults.
+
+Environment variables override individual file settings:
+
+| Environment variable | JSON field | Default |
+|---|---|---|
+| `GOOGLE_DOCS_MCP_CODE_FONT_FAMILY` | `code_font_family` | `Roboto Mono` |
+| `GOOGLE_DOCS_MCP_INLINE_CODE_COLOR` | `inline_code_color` | `#188038` |
+| `GOOGLE_DOCS_MCP_CODE_BLOCK_HIGHLIGHTING` | `code_block_highlighting` | `true` |
+| `GOOGLE_DOCS_MCP_CODE_BLOCK_STYLE` | `code_block_style` | `default` |
+| `GOOGLE_DOCS_MCP_CODE_BLOCK_LINE_SPACING` | `code_block_line_spacing` | `1.0` |
+| `GOOGLE_DOCS_MCP_CODE_BLOCK_THEME_BACKGROUND` | `code_block_theme_background` | `false` |
+
+Precedence is per-call overrides (theme/background only), environment, JSON
+file, then built-in defaults. Server settings are
+loaded and validated at server startup and cached for that process. Restart
+the MCP server after changing the file or environment. This config
+currently covers code formatting; existing authentication, Drive and logging
+environment variables retain their separate handling. Our config does not
+automatically load `.env` files.
+
+`docs_append`, `docs_insert_before` and `docs_insert_after` also accept optional
+agent-facing `code_block_style` and `code_block_theme_background` arguments.
+The `code_block_style` input schema advertises an `enum` of available themes,
+generated from the installed Pygments version when the server starts. Agents
+can discover names through MCP tool listing without a separate theme-list call.
+Omitting an argument or passing `null` inherits its server setting, including
+environment overrides. An explicit `false` disables the background even if the
+server default enables it. Each argument can be overridden independently:
+
+```python
+docs_append(
+    doc_id='...', text='```python\nprint("Hello")\n```',
+    code_block_style='monokai', code_block_theme_background=True,
+)
+```
+
+Overrides apply only to that call and do not change defaults or concurrent
+requests, including when a write fails. Themes must be valid Pygments names;
+invalid names fail before Google access. Formatting overrides have no effect
+with `rich=False`. Highlighting enablement, font, inline color and line spacing
+remain server settings; choosing a theme does not enable disabled highlighting
+or guess a missing/unknown language.
+
+Set environment overrides in the MCP client's server `env` configuration.
+For isolated FastMCP CLI tests, pass them explicitly to the child command:
+
+```bash
+uv run --locked fastmcp call \
+  --command 'env GOOGLE_DOCS_MCP_CONFIG=/absolute/path/config.json gdocs-scope-mcp' \
+  --target server_info --json
+```
+
+Setting a variable only on the parent CLI process does not guarantee it reaches
+the STDIO server; FastMCP's subprocess environment is filtered.
+
+### Native lists
 
 Markdown unordered lists (`-`, `*`, `+`) and ordered lists starting at 1 create
 native Google Docs lists with separate item paragraphs. Nested lists of the

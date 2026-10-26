@@ -864,6 +864,33 @@ class GoogleDocumentLink(BaseModel, populate_by_name=True):
     url: str | None = None  # The only supported link type - external
 
 
+class GoogleDocumentWeightedFontFamily(BaseModel, populate_by_name=True):
+    """Store the native font family and optional font weight."""
+
+    font_family: Annotated[str, Field(alias='fontFamily')]
+    weight: int | None = None
+
+
+class GoogleDocumentRgbColor(BaseModel):
+    """Store RGB channels in the native zero-to-one range."""
+
+    red: float = 0
+    green: float = 0
+    blue: float = 0
+
+
+class GoogleDocumentColor(BaseModel, populate_by_name=True):
+    """Wrap the native RGB color representation."""
+
+    rgb_color: Annotated[GoogleDocumentRgbColor, Field(alias='rgbColor')]
+
+
+class GoogleDocumentOptionalColor(BaseModel):
+    """Represent a native color or an unset/transparent color."""
+
+    color: GoogleDocumentColor | None = None
+
+
 class GoogleDocumentTextStyle(BaseModel, populate_by_name=True):
     """Store inline formatting and build HTML style wrappers."""
 
@@ -876,6 +903,16 @@ class GoogleDocumentTextStyle(BaseModel, populate_by_name=True):
         GoogleDocumentBaselineOffset, Field(alias='baselineOffset')
     ] = GoogleDocumentBaselineOffset.BASELINE_OFFSET_UNSPECIFIED
     link: GoogleDocumentLink | None = None
+    weighted_font_family: Annotated[
+        GoogleDocumentWeightedFontFamily | None,
+        Field(alias='weightedFontFamily'),
+    ] = None
+    foreground_color: Annotated[
+        GoogleDocumentOptionalColor | None, Field(alias='foregroundColor'),
+    ] = None
+    background_color: Annotated[
+        GoogleDocumentOptionalColor | None, Field(alias='backgroundColor'),
+    ] = None
 
     @property
     def format_string(self) -> str:
@@ -983,10 +1020,20 @@ class GoogleDocumentInlineObjectElement(GoogleDocumentStructuralElement):
         return doc.inline_objects[self.inline_object_id].to_text(doc)
 
 
+class GoogleDocumentShading(BaseModel, populate_by_name=True):
+    """Represent a paragraph's full-width background fill."""
+
+    background_color: Annotated[
+        GoogleDocumentOptionalColor | None, Field(alias='backgroundColor'),
+    ] = None
+
+
 class GoogleDocumentParagraphStyle(BaseModel, populate_by_name=True):
     """Store a paragraph heading ID, named style, and alignment."""
 
     heading_id: Annotated[str | None, Field(alias='headingId')] = None
+    line_spacing: Annotated[float | None, Field(alias='lineSpacing')] = None
+    shading: GoogleDocumentShading | None = None
     named_style_type: Annotated[
         GoogleDocumentNamedStyleType, Field(alias='namedStyleType')
     ] = GoogleDocumentNamedStyleType.NAMED_STYLE_TYPE_UNSPECIFIED
