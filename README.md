@@ -14,10 +14,46 @@ scope replacements or insertions to a heading and its nested subsections.
 This keeps unrelated content out of the agent's context and makes the server
 well suited to large Google Docs with structured headings.
 
-Another goal is **more complete formatting support** when reading and editing
-documents, including richer Markdown conversion and better preservation of
-Google Docs formatting. Native homogeneous lists and rectangular tables are
-supported; advanced list items and arbitrary table structures remain limited.
+## Features
+
+- **Navigate large documents by section.** Discover a compact heading tree,
+  read selected section subtrees, and scope replacements and insertions to a
+  heading and its nested subsections. Keep unrelated content out of the agent's
+  context, even when the same text appears in several chapters.
+- **Edit using text anchors.** Identify text to replace or paragraphs to insert
+  around without asking the agent to calculate Google Docs character indices.
+  Source mapping handles UTF-16 offsets and protects structural gaps around
+  non-text elements from unsupported replacements.
+- **Read and write rich content.** Read documents as Markdown with HTML for
+  supported formatting, and insert headings, emphasis, links, strikethrough,
+  and supported reader-generated HTML through one shared converter.
+- **Create native lists and tables.** Write homogeneous nested lists with
+  multiple paragraphs per item and continuations after nested lists. Insert
+  rectangular Markdown or HTML tables with column alignment, inline formatting,
+  line breaks, and optional borders.
+- **Insert images.** Use Markdown or HTML image references, or explicitly enable
+  local image uploads through temporary, link-shared Google Drive files that
+  are cleaned up after insertion.
+- **Format code for readability.** Use inline code and fenced code blocks with
+  syntax highlighting, configurable fonts, themes, line spacing, and optional
+  paragraph backgrounds. Agents can discover available themes and override the
+  theme and background per insertion.
+- **Work with native smart chips.** Read and insert people, resource, date,
+  and dropdown chips. Inspect their metadata, create dropdown definitions, and
+  change an individual dropdown's selected option.
+- **Use structured MCP contracts.** Typed inputs and outputs, structured errors
+  with recovery guidance, and action annotations make tool calls easier to
+  validate and handle. Bounded edit receipts expose counts and truncation flags;
+  document and comment listings support cursor pagination.
+- **Diagnose the running server.** Inspect the package version, source
+  fingerprint, package path, PID, and startup time with `server_info`. Configurable
+  stderr logs record tool outcomes and durations without logging document content.
+
+Supported content has explicit limits: arbitrary table structures, cross-document
+dropdown definition copying, and general conflict-aware retries are not yet
+supported. See the tool reference below for operation-specific details.
+
+## Section editing workflow
 
 Typical workflow:
 
