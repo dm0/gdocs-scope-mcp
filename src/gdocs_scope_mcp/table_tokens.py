@@ -15,9 +15,15 @@ CellAddress = Annotated[
 ]
 SnapshotField = Literal[
     'content', 'text_style', 'paragraph_style', 'cell_style', 'structure',
+    'cell.background_color', 'cell.vertical_alignment',
+    'cell.padding_top', 'cell.padding_bottom',
+    'cell.padding_left', 'cell.padding_right',
+    'cell.border_top', 'cell.border_bottom', 'cell.border_left',
+    'cell.border_right', 'paragraph.alignment', 'column.width',
+    'row.min_height', 'table.header_rows',
 ]
 SnapshotFields = Annotated[
-    list[SnapshotField], Field(min_length=1, max_length=5),
+    list[SnapshotField], Field(min_length=1, max_length=19),
 ]
 SnapshotToken = Annotated[
     str, Field(strict=True, min_length=1, max_length=262144),
@@ -111,3 +117,12 @@ def address(row, column):
         column, remainder = divmod(column - 1, 26)
         label = chr(65 + remainder) + label
     return f'{label}{row + 1}'
+
+
+def coordinates(value):
+    """Decode a validated A1 address into zero-based row and column."""
+    split = next(i for i, char in enumerate(value) if char.isdecimal())
+    column = 0
+    for char in value[:split]:
+        column = column * 26 + ord(char) - 64
+    return int(value[split:]) - 1, column - 1

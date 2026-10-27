@@ -46,7 +46,14 @@ from fastmcp import FastMCP
 from googleapiclient.discovery import build
 from pydantic import BaseModel, Field, TypeAdapter
 
-from . import docs_edit, entity_edit, table_patch, table_read, table_snapshots
+from . import (
+    docs_edit,
+    entity_edit,
+    table_format,
+    table_patch,
+    table_read,
+    table_snapshots,
+)
 from .diagnostics import ServerInfo, capture_server_info
 from .entities import (
     DropdownOptions,
@@ -71,6 +78,7 @@ from .models import (
     ResolveCommentResponse,
 )
 from .settings import code_formatting, get_settings
+from .table_format import FormatChanges, FormatResponse
 from .table_patch import CellPatches, PatchResponse
 from .table_read import (
     CellLimit,
@@ -215,6 +223,7 @@ EDITING TOOLS:
     docs_table_read        Read table/cell pages and geometry
     docs_table_snapshot    Issue/validate selective cell-state expectations
     docs_table_patch       Atomically replace selected Markdown cells
+    docs_table_format      Atomically change explicit table style properties
     docs_search_replace    Find and replace text (occurrence-targeted or all)
     docs_insert_after      Insert text after a specified paragraph anchor text
     docs_insert_before     Insert text before a specified paragraph anchor text
@@ -453,7 +462,15 @@ def docs_table_snapshot(
     against a fresh read. The position must retain the same table structure;
     row/column/table insertion, deletion or merge requires fresh discovery.
     Snapshots require verified unmerged geometry without nested cell tables.
-    fields selects content, text_style, paragraph_style, cell_style, structure.
+    fields selects content, text_style, paragraph_style, cell_style, structure
+    or granular formatting fields: cell.background_color/vertical_alignment,
+    cell.padding_top/bottom/left/right, cell.border_top/bottom/left/right,
+    paragraph.alignment, column.width, row.min_height, table.header_rows.
+    Formatting fields use their full dotted names, e.g. cell.padding_top.
+    Each shared-border snapshot includes its adjacent opposite side.
+    Formatting native values are returned in each cell's formatting object.
+    A cell anchors its column, row and table-wide properties respectively.
+    Maximum 1000 cell/field pairs per snapshot.
     Defaults to content/text_style/paragraph_style. Only selected cells and
     field groups are checked, so independent cell edits and index shifts pass.
 
@@ -513,6 +530,46 @@ def docs_table_patch(
     Section-position semantics and identical-table swap limits still apply.
     """
     return table_patch.patch(doc_id, table_ref, base_token, changes)
+
+
+@mcp.tool(
+    output_schema=_tool_response_schema(FormatResponse),
+    annotations={'readOnlyHint': False, 'destructiveHint': True,
+                 'idempotentHint': False, 'openWorldHint': True},
+)
+def docs_table_format(
+    doc_id: str, table_ref: ReadReference, base_token: SnapshotToken,
+    changes: FormatChanges,
+) -> FormatResponse:
+    """Apply explicit style changes in one strictly guarded atomic batch.
+
+    changes contains optional cells, columns, rows and header_rows. Cells use
+    A1 addresses and background_color (#RRGGBB or transparent), padding_top /
+    bottom/left/right in points, vertical_alignment TOP/MIDDLE/BOTTOM,
+    horizontal_alignment START/CENTER/END/JUSTIFIED, and
+    border_top/bottom/left/right
+    objects with color, width in points and dash_style SOLID/DOT/DASH.
+    Columns use letters and width (>=5 points or auto); rows use 1-based row
+    and min_height in points. header_rows is a count, including 0 to unpin.
+    Omitted properties are preserved; explicit nulls/empty updates are invalid.
+    Up to 100 cell/row/column/table targets, verified unmerged geometry only.
+
+    Obtain a docs_table_snapshot with matching granular fields first. A cell
+    anchors row/column/table fields; include at least one cell in each row or
+    column being changed. Only explicitly changed properties are compared;
+    unrelated text/styles remain compatible. Borders are atomic shared
+    resources: both sides are checked. Partial border components require
+    readable matching omitted values; otherwise specify the full border.
+    Conflicting updates to the same shared border fail before writing.
+
+    Always requiredRevisionId, up to three revalidated attempts after confirmed
+    races, regardless of general revision mode. EDIT_CONFLICT means a changed
+    property, TARGET_CHANGED a changed table/layout, REVISION_RETRY_EXHAUSTED
+    contention. WRITE_OUTCOME_UNKNOWN is never replayed automatically.
+    Receipts identify updated properties, applied target count, attempts and
+    resulting revision. No content edits or snapshot/binding metadata writes.
+    """
+    return table_format.format_table(doc_id, table_ref, base_token, changes)
 
 
 @mcp.tool(

@@ -41,6 +41,10 @@ well suited to large Google Docs with structured headings.
 - **Patch table cells atomically.** Replace selected cells with inline Markdown
   in one guarded batch, preserving cell/paragraph properties. Revision races
   trigger bounded revalidation; overlapping changes fail without overwriting.
+- **Format tables selectively.** Set cell backgrounds, borders, padding and
+  alignment, column widths, minimum row heights and pinned header rows in one
+  guarded batch. Property-level expectations allow independent text and style
+  edits, including changes to different borders of the same cell.
 - **Insert images.** Use Markdown or HTML image references, or explicitly enable
   local image uploads through temporary, link-shared Google Drive files that
   are cleaned up after insertion.
@@ -60,8 +64,9 @@ well suited to large Google Docs with structured headings.
   stderr logs record tool outcomes and durations without logging document content.
 
 Supported content has explicit limits: arbitrary table writes and cross-document
-dropdown definition copying are not supported. Table read references expire on
-revision changes. See the tool reference below for operation-specific details.
+dropdown definition copying are not supported. Table positions are guarded by
+section structure; table pagination tokens bind the document revision.
+See the tool reference below for operation-specific details.
 
 ## Section editing workflow
 
@@ -632,8 +637,11 @@ details = docs_table_read(doc_id="...", table_ref=page["tables"][0]["table_ref"]
 Reads and issues expected-state tokens for 1-100 selected uppercase A1 addresses,
 for example `cells=["A1", "B2"]`. Snapshots require verified unmerged geometry
 without nested tables in the target's cells. The default field
-groups are `content`, `text_style` and `paragraph_style`; `cell_style` and
-`structure` are optional. Pass a previous `base_token` with the same cell set
+groups are `content`, `text_style` and `paragraph_style`; `cell_style`,
+`structure` and the granular formatting fields documented below are optional.
+Snapshots allow at most 1000 cell/field pairs. Selected granular values appear
+in each cell's `formatting` object using native Google Docs representations.
+Pass a previous `base_token` with the same cell set
 and fields to validate and renew it. Only selected cells/properties are
 compared, allowing independent cell edits anywhere while the section table
 structure inventory remains unchanged. The response includes selected Markdown
@@ -722,6 +730,74 @@ patch sends no write and reports `committed_batches=0`; otherwise one batch
 commits all cells or none. Inputs are limited to 100000 total Markdown
 characters and 1000 generated native requests. Positional reference semantics
 and identical-structure swap/replacement limits remain unchanged.
+
+#### `docs_table_format(doc_id, table_ref, base_token, changes)`
+
+Apply explicit formatting to an unmerged table without replacing its contents.
+First snapshot the properties you intend to change; the default content/style
+groups alone cannot guard this tool. Only requested properties are compared,
+even when the baseline includes additional fields. Text edits, different cell
+properties and changes elsewhere can proceed concurrently.
+
+| Snapshot field | Property in `changes` | Values |
+| --- | --- | --- |
+| `cell.background_color` | `cells[].background_color` | `#RRGGBB` or `transparent` |
+| `cell.vertical_alignment` | `cells[].vertical_alignment` | `TOP`, `MIDDLE`, `BOTTOM` |
+| `cell.padding_top`, `cell.padding_bottom`, `cell.padding_left`, `cell.padding_right` | Corresponding `cells[].padding_*` | Points, 0–10000 |
+| `cell.border_top`, `cell.border_bottom`, `cell.border_left`, `cell.border_right` | Corresponding `cells[].border_*` | Object with `color`, `width`, `dash_style` |
+| `paragraph.alignment` | `cells[].horizontal_alignment` | `START`, `CENTER`, `END`, `JUSTIFIED` |
+| `column.width` | `columns[].width` | Points, 5–10000, or `auto` |
+| `row.min_height` | `rows[].min_height` | Points, 0–10000 |
+| `table.header_rows` | `header_rows` | Number of leading pinned header rows; 0 unpins |
+
+```python
+base = docs_table_snapshot(
+    doc_id="...", table_ref=table_ref, cells=["A1", "B1"],
+    fields=["cell.background_color", "cell.padding_top", "column.width",
+            "table.header_rows"],
+)
+# Inspect base["cells"][...]["formatting"] before choosing changes.
+result = docs_table_format(
+    doc_id="...", table_ref=table_ref, base_token=base["base_token"],
+    changes={
+        "cells": [{"address": "A1", "background_color": "#D9EAF7",
+                   "padding_top": 8}],
+        "columns": [{"column": "B", "width": 120}],
+        "header_rows": 1,
+    },
+)
+```
+
+Use uppercase cell/column addresses and 1-based row numbers. A column change
+needs at least one snapshot cell in that column; a row change needs one in
+that row; header pinning needs any cell in the table. A call accepts 1–100
+targets across cells, columns, rows and the optional header count. Duplicate
+targets, explicit nulls, empty changes and unknown properties are rejected.
+Omitted properties are preserved. Horizontal alignment applies to every
+paragraph in the selected cell. Header pinning repeats leading rows across
+pages; available space and other Google Docs layout constraints still apply.
+
+Each border accepts `color="#RRGGBB"`, `width` in points (0 hides it), and
+`dash_style="SOLID"`, `"DOT"` or `"DASH"`. Google writes a whole border at once,
+so a concurrent change to any component of that border conflicts. An interior
+edge includes the neighboring cell's opposite border in its expected state.
+Different edges remain independent. Partial border changes preserve known,
+consistent components; if Google omits inherited values or the two sides
+disagree, supply all three components explicitly. Contradictory requests for
+the same shared edge fail before writing; compatible requests are coalesced.
+
+All changes use one atomic native batch with strict `requiredRevisionId`,
+including under the general `target` mode. Confirmed revision races get at
+most three attempts, each resolving current positions and rechecking the
+original property expectations. The same conflict, expiry, structural-change,
+contention and unknown-outcome rules as `docs_table_patch` apply. Unknown write
+outcomes are never replayed automatically. Relevant tracked style suggestions,
+merged geometry and tables nested inside cells are unsupported.
+
+The receipt returns `applied_count` (requested targets), `updated_properties`,
+`revision_id`, `attempts` and `committed_batches=1`. It makes no claim that
+text changed. Formatting uses this dedicated tool; no additional Markdown
+syntax is required.
 
 ---
 
