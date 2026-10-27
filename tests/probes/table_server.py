@@ -1,12 +1,19 @@
 """Expose document-bound API probes in explicitly launched test servers."""
 
+import json
 import os
 import re
 import threading
+from pathlib import Path
 
 from googleapiclient.errors import HttpError
 
-from gdocs_scope_mcp import docs_edit, table_insertion, table_patch
+from gdocs_scope_mcp import (
+    docs_edit,
+    table_format,
+    table_insertion,
+    table_patch,
+)
 from gdocs_scope_mcp.server import mcp
 from gdocs_scope_mcp.tool_logging import configure_logging
 
@@ -16,6 +23,7 @@ ALLOWED = {
     'insertTableColumn', 'deleteTableColumn', 'mergeTableCells',
     'unmergeTableCells', 'updateTextStyle', 'updateParagraphStyle',
     'updateTableCellStyle',
+    'updateTableColumnProperties', 'updateTableRowStyle', 'pinTableHeaderRows',
 }
 
 
@@ -32,6 +40,20 @@ def probe_document() -> dict:
     """Read the single environment-selected document with native indices."""
     doc_id = _document_id()
     return docs_edit._get_document(docs_edit._get_service(), doc_id)
+
+
+@mcp.tool
+def probe_export_pdf() -> dict:
+    """Export only the environment-authorized document for local visual QA."""
+    doc_id = _document_id()
+    data = docs_edit._get_service('drive', 'v3').files().export(
+        fileId=doc_id, mimeType='application/pdf',
+    ).execute()
+    if not isinstance(data, bytes) or not data.startswith(b'%PDF'):
+        raise ValueError('Expected a native PDF export')
+    path = Path('/tmp/gdocs-scope-mcp-table-format-preview.pdf')
+    path.write_bytes(data)
+    return {'path': str(path), 'byte_count': len(data)}
 
 
 @mcp.tool
@@ -53,7 +75,10 @@ def probe_batch(requests: list[dict], write_control: dict) -> dict:
     except HttpError as error:
         if error.resp.status != 400:  # noqa: PLR2004
             raise
-        return {'accepted': False, 'http_status': error.resp.status}
+        return {'accepted': False, 'http_status': error.resp.status,
+                'message': json.loads(error.content).get('error', {}).get(
+                    'message', 'Request rejected',
+                )}
     return {'accepted': True, 'response': result}
 
 
@@ -68,6 +93,8 @@ _read = docs_edit._get_document
 _submit_table = table_insertion.guarded_submit
 _submit_patch = table_patch.submit
 _patch_fault = {'armed': False}
+_submit_format = table_format.submit
+_format_fault = {'armed': False}
 
 
 def _paused_read(service, doc_id, **kwargs):
@@ -103,19 +130,34 @@ def _paused_table_submit(service, doc_id, requests, revision, **kwargs):
 table_insertion.guarded_submit = _paused_table_submit
 
 
-def _atomic_failure(service, doc_id, requests, *args, **kwargs):
-    """Inject one invalid request into an explicitly armed patch batch."""
+def _with_fault(submit, fault, service, doc_id, requests, *args, **kwargs):
+    """Inject one invalid request into an explicitly armed native batch."""
     with _gate_lock:
-        fail = _patch_fault['armed']
-        _patch_fault['armed'] = False
+        fail = fault['armed']
+        fault['armed'] = False
     if fail:
         requests = [*requests, {'deleteContentRange': {'range': {
             'startIndex': 0, 'endIndex': 999999999,
         }}}]
-    return _submit_patch(service, doc_id, requests, *args, **kwargs)
+    return submit(service, doc_id, requests, *args, **kwargs)
+
+
+def _atomic_failure(service, doc_id, requests, *args, **kwargs):
+    """Inject one invalid request into an explicitly armed patch batch."""
+    return _with_fault(_submit_patch, _patch_fault, service, doc_id, requests,
+                       *args, **kwargs)
+
+
+def _format_failure(service, doc_id, requests, *args, **kwargs):
+    """Inject one invalid request into an armed formatting batch."""
+    return _with_fault(
+        _submit_format, _format_fault, service, doc_id, requests,
+        *args, **kwargs,
+    )
 
 
 table_patch.submit = _atomic_failure
+table_format.submit = _format_failure
 
 
 @mcp.tool
@@ -124,6 +166,15 @@ def probe_fail_next_patch() -> dict:
     _document_id()
     with _gate_lock:
         _patch_fault['armed'] = True
+    return {'armed': True}
+
+
+@mcp.tool
+def probe_fail_next_format() -> dict:
+    """Arm a single native formatting atomic-failure check."""
+    _document_id()
+    with _gate_lock:
+        _format_fault['armed'] = True
     return {'armed': True}
 
 

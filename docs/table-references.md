@@ -1,7 +1,8 @@
 # Checked table positions and selective cell snapshots
 
 Issue [#27](https://github.com/dm0/gdocs-scope-mcp/issues/27) supplies positional
-references and expected-state primitives used by #28's `docs_table_patch`.
+references and expected-state primitives used by #28's `docs_table_patch`
+and #29's `docs_table_format`.
 Structural editing remains separate work. Reading, reference
 creation and snapshot validation are entirely read-only, including metadata
 and local state. No named ranges, local registry or signing key are used.
@@ -73,6 +74,19 @@ up to 100000 logical slots, and each snapshot selects at most 100 cells.
 | `paragraph_style` | Paragraph styles, bullets and referenced named/list styles |
 | `cell_style` | Native tableCellStyle properties |
 | `structure` | Selected cell paragraph element kinds and spans, without indices |
+| `cell.background_color`, `cell.vertical_alignment`, `cell.padding_*` | One native cell property |
+| `cell.border_top`, `cell.border_bottom`, `cell.border_left`, `cell.border_right` | Whole native border plus the neighbor's opposite border, when present |
+| `paragraph.alignment` | Distinct effective paragraph alignments in the cell, including named-style inheritance |
+| `column.width` | Selected cell's native column width and width type |
+| `row.min_height` | Selected cell's native row minimum height |
+| `table.header_rows` | Contiguous prefix of native pinned header rows |
+
+The four padding fields are `cell.padding_top`, `cell.padding_bottom`,
+`cell.padding_left` and `cell.padding_right`. Snapshots permit at most 1000
+cell/field pairs. Dotted fields additionally return their native values in
+each cell's `formatting` object. Missing inherited values remain missing/null;
+the server does not invent border defaults. Border digests include both sides,
+although the displayed value describes the selected cell's side only.
 
 Defaults are `content`, `text_style`, `paragraph_style`. Content-only snapshots
 allow independent formatting changes within that cell. Adding formatting can
@@ -97,6 +111,18 @@ Unknown write outcomes are never replayed. The patch requires `content` and
 a subset of a larger baseline. See the [patch contract](../README.md#docs_table_patchdoc_id-table_ref-base_token-changes).
 Separate snapshot/patch calls are not atomic together; validation during the
 patch and its strict revision precondition provide the actual write guard.
+
+`docs_table_format` requires the granular dotted fields for its requested
+properties and checks only those dependencies. Additional baseline fields,
+including content, do not create unrelated formatting conflicts. Column and
+row operations use any selected snapshot cell in that column/row as an anchor;
+header pinning uses any selected cell. Independent text edits and different
+style properties remain compatible. Whole-border writes depend on both halves
+of the same physical edge; different edges are independent. All requested
+formatting commits in one strictly guarded batch with the same bounded retry
+and unknown-outcome rules as cell replacement. See the
+[formatting contract](../README.md#docs_table_formatdoc_id-table_ref-base_token-changes)
+for typed properties, units, partial-border limitations and pinning.
 
 ## Portability and integrity
 
@@ -147,3 +173,22 @@ With the explicitly authorized document environment set:
 ```bash
 uv run --locked pytest -q tests/test_live_table_patch.py
 ```
+
+Formatting regressions cover explicit masks, property-level overlap, shared
+edges, omitted border components, strict inputs and bounded retries. The live
+suite checks native style readback, a rendered PDF preview, atomic API failure
+and text/style/shared-border/column races between isolated MCP processes:
+
+```bash
+uv run --locked pytest -q tests/test_table_format.py
+```
+
+With the explicitly authorized document environment set:
+
+```bash
+uv run --locked pytest -q tests/test_live_table_format.py
+```
+
+The preview is exported to `/tmp/gdocs-scope-mcp-table-format-preview.pdf`
+before the fixture restores the document body. It is a verification artifact,
+not a persistent change to the test document.

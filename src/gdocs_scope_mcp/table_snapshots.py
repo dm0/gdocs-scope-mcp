@@ -5,12 +5,14 @@
 
 import time
 from copy import deepcopy
+from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from .models import GoogleDocumentTableCell
 from .settings import get_settings
 from .table_refs import Layout
+from .table_style_state import property_state, property_value
 from .table_tokens import address, decode, digest, encode, fail
 
 
@@ -67,6 +69,7 @@ class CellLocation(BaseModel):
     markdown: str
     markdown_char_count: int
     markdown_truncated: bool
+    formatting: dict[str, Any] = Field(default_factory=dict)
 
 
 class SnapshotResponse(BaseModel):
@@ -116,8 +119,13 @@ def resolve_cells(document, table, selected):
 
 def validate_states(document, baseline, available):
     """Compare only affected cells and the baseline's explicit field groups."""
-    for selected, (_, _, cell) in available.items():
+    entry = (Layout(document).resolve(baseline)
+             if any('.' in f for f in baseline.fields) else None)
+    for selected, (row, column, cell) in available.items():
         state = cell_state(document, cell)
+        if entry is not None:
+            state.update({f: property_state(entry, row, column, f, document)
+                          for f in baseline.fields if '.' in f})
         expected = baseline.cells[selected]
         if (set(expected) != set(baseline.fields) or
                 any(expected[field] != state[field]
@@ -130,6 +138,8 @@ def snapshot(doc_id, table_ref, cells, fields, base_token=None):
     from .table_read import _fetch, _model
     table = decode(table_ref, 'table', doc_id)
     requested = sorted(set(fields))
+    if len(cells) * len(requested) > 1000:  # noqa: PLR2004
+        fail('INVALID_ARGUMENT', 'At most 1000 cell/field pairs per snapshot.')
     baseline = decode(base_token, 'base', doc_id) if base_token else None
     if len(set(cells)) != len(cells):
         fail('INVALID_ARGUMENT', 'Duplicate cell addresses are not allowed.')
@@ -140,10 +150,18 @@ def snapshot(doc_id, table_ref, cells, fields, base_token=None):
     if baseline is not None:
         validate_states(document, baseline, available)
     model = _model(document)
+    entry = (Layout(document).resolve(table)
+             if any('.' in f for f in requested) else None)
     states, locations = {}, []
     for selected in cells:
         r, c, cell = available[selected]
         state = cell_state(document, cell)
+        formatting = {}
+        if entry is not None:
+            formatting = {f: property_value(entry, r, c, f, document)
+                          for f in requested if '.' in f}
+            state.update({f: property_state(entry, r, c, f, document)
+                          for f in formatting})
         states[selected] = {field: state[field] for field in requested}
         markup = GoogleDocumentTableCell.model_validate(
             deepcopy(cell),
@@ -153,6 +171,7 @@ def snapshot(doc_id, table_ref, cells, fields, base_token=None):
             address=selected, row=r, column=c, markdown=markup[:2000],
             markdown_char_count=len(markup),
             markdown_truncated=len(markup) > 2000,  # noqa: PLR2004
+            formatting=formatting,
         ))
     issued = table.model_copy(update={
         'kind': 'base', 'fields': requested, 'cells': states,
