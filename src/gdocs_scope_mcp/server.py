@@ -73,6 +73,7 @@ from .settings import code_formatting, get_settings
 from .tool_inputs import (
     CodeBlockStyle,
     CodeBlockThemeBackground,
+    ExpectedRevision,
     NonemptyText,
     PositiveInteger,
     ReplacementOccurrence,
@@ -105,6 +106,24 @@ ERRORS:
     Failures set isError=true and return {ok:false, code, description,
     suggested_action}. Follow suggested_action; verify document/comment state
     before retrying a failed write.
+
+CONCURRENT EDITS:
+    Server setting write_revision_mode selects required (default) or target.
+    Required uses requiredRevisionId, up to three validated attempts, and
+    rejects changed/deleted/ambiguous targets. Append uses the current end.
+    Target sends targetRevisionId from the original read and lets Google merge
+    concurrent changes, including overlaps; no local conflict guarantee or
+    automatic retry of rejected target revisions. Google controls append order.
+    expected_revision_id always enforces a strict required revision and
+    disables retries, in either configured mode. Multi-stage table insertion
+    always uses required revisions because later stages require known cursors.
+    Completed stages and external side effects are not replayed. Unknown write
+    outcomes require inspection. committed_batches counts confirmed Docs
+    batches. The default guard covers the backend read/write window;
+    expected_revision_id can also protect an agent's earlier read.
+    Native replace-all retains execution-time matching and accepts no such
+    precondition. Comment creation/Apps Script are separate from its Docs
+    anchor batch and are not atomic with it.
 
 DIAGNOSTICS:
     server_info            Read process identity and startup source fingerprint
@@ -401,9 +420,15 @@ def docs_search_replace(  # noqa: PLR0917
     occurrence: ReplacementOccurrence = 1,
     heading_id: str | None = None,
     regex: bool = False,
+    *, expected_revision_id: ExpectedRevision | None = None,
 ) -> ReplaceSucceedResponse | EditFailedResponse:
     """
     Find text and replace.
+
+    Uses configured write_revision_mode: required validates targets with up to
+    three attempts; target delegates concurrent/overlapping edits to Google.
+    expected_revision_id forces a strict required revision without retries.
+    Unknown writes and rejected target revisions are not replayed.
 
     Preserves history using batchUpdate.
     Replace-all (occurrence=0) is only supported if regex=False and heading_id
@@ -438,7 +463,8 @@ def docs_search_replace(  # noqa: PLR0917
         is case-sensitive. at_index is diagnostic only.
     """
     return docs_edit.search_replace(
-        doc_id, find, replace, occurrence, heading_id, regex
+        doc_id, find, replace, occurrence, heading_id, regex,
+        expected_revision_id=expected_revision_id,
     )
 
 
@@ -460,9 +486,16 @@ def docs_insert_after(
     *, upload_local_images: bool = False, table_borders: TableBorders = True,
     code_block_style: CodeBlockStyle | None = None,
     code_block_theme_background: CodeBlockThemeBackground | None = None,
+    expected_revision_id: ExpectedRevision | None = None,
 ) -> InsertSucceedResponse | EditFailedResponse:
     """
     Insert a new paragraph immediately after the paragraph containing `anchor`.
+
+    Configured required mode validates an unchanged, unique anchor with up to
+    three attempts; target lets Google merge overlapping changes without local
+    conflict checks or retries. expected_revision_id forces strict required.
+    Table stages always use required; completed stages/unknown writes are not
+    replayed. Inspect partial results.
 
     The anchor is matched case-insensitively as a substring of the paragraph.
 
@@ -522,6 +555,7 @@ def docs_insert_after(
             doc_id, anchor, text, heading_id=heading_id, rich=rich,
             upload_local_images=upload_local_images,
             table_borders=table_borders,
+            expected_revision_id=expected_revision_id,
         )
 
 
@@ -543,11 +577,18 @@ def docs_insert_before(
     *, upload_local_images: bool = False, table_borders: TableBorders = True,
     code_block_style: CodeBlockStyle | None = None,
     code_block_theme_background: CodeBlockThemeBackground | None = None,
+    expected_revision_id: ExpectedRevision | None = None,
 ) -> InsertSucceedResponse | EditFailedResponse:
     """
     Insert a new paragraph immediately before the paragraph containing
 
     `anchor`.
+
+    Configured required mode validates an unchanged, unique anchor with up to
+    three attempts; target lets Google merge overlapping changes without local
+    conflict checks or retries. expected_revision_id forces strict required.
+    Table stages always use required; completed stages/unknown writes are not
+    replayed. Inspect partial results.
 
     The anchor is matched case-insensitively as a substring of the paragraph.
 
@@ -606,6 +647,7 @@ def docs_insert_before(
             doc_id, anchor, text, heading_id=heading_id, rich=rich,
             upload_local_images=upload_local_images,
             table_borders=table_borders,
+            expected_revision_id=expected_revision_id,
         )
 
 
@@ -620,9 +662,15 @@ def docs_insert_before(
 )
 def docs_delete_paragraph(
     doc_id: str, anchor: NonemptyText,
+    *, expected_revision_id: ExpectedRevision | None = None,
 ) -> DeleteParagraphResponse:
     """
     Delete the paragraph(s) containing `anchor` text.
+
+    Configured required mode validates original targets/styles with up to three
+    attempts. Target lets Google merge overlapping changes without local
+    conflict checks or retries. expected_revision_id forces strict required.
+    Unknown writes and rejected target revisions are not replayed.
 
     Deletes ALL paragraphs that contain the anchor string (case-insensitive).
     If the anchor matches only one paragraph, only that paragraph is deleted.
@@ -645,7 +693,9 @@ def docs_delete_paragraph(
         previews; deleted_count includes all removed/cleared paragraphs.
     """
     return DeleteParagraphResponse.model_validate(
-        docs_edit.delete_paragraph(doc_id, anchor),
+        docs_edit.delete_paragraph(
+            doc_id, anchor, expected_revision_id=expected_revision_id,
+        ),
     )
 
 
@@ -664,9 +714,16 @@ def docs_append(
     table_borders: TableBorders = True,
     code_block_style: CodeBlockStyle | None = None,
     code_block_theme_background: CodeBlockThemeBackground | None = None,
+    expected_revision_id: ExpectedRevision | None = None,
 ) -> AppendSucceedResponse:
     """
     Append Markdown paragraphs or literal text at the end of a Google Doc.
+
+    Configured required mode replans at the current end (up to three attempts).
+    Target lets Google merge concurrent appends and choose their order, without
+    local retries. expected_revision_id forces strict required without retries.
+    Table stages always use required; completed stages and unknown writes are
+    not replayed. Inspect partial failures.
 
     A paragraph break is added before the appended content automatically.
     With rich=True, separate Markdown paragraphs with blank lines. Headings
@@ -718,6 +775,7 @@ def docs_append(
         return docs_edit.append(
             doc_id, text, rich=rich, upload_local_images=upload_local_images,
             table_borders=table_borders,
+            expected_revision_id=expected_revision_id,
         )
 
 
@@ -732,9 +790,15 @@ def docs_append(
 )
 def docs_batch_replace(
     doc_id: str, replacements: Replacements,
+    *, expected_revision_id: ExpectedRevision | None = None,
 ) -> BatchReplaceResponse:
     """
     Apply multiple find→replace operations atomically in a single batchUpdate.
+
+    Configured required mode validates original targets/styles with up to three
+    attempts. Target delegates merging, including overlaps, to Google without
+    local conflict checks or retries. expected_revision_id forces strict
+    required. Unknown writes and rejected target revisions are not replayed.
 
     All replacements are applied in one API call (end-of-document first to
     preserve index validity). Either ALL changes succeed, or none do.
@@ -769,6 +833,7 @@ def docs_batch_replace(
     return BatchReplaceResponse.model_validate(
         docs_edit.batch_replace(
             doc_id, [replacement.model_dump() for replacement in replacements],
+            expected_revision_id=expected_revision_id,
         ),
     )
 
@@ -790,9 +855,17 @@ def docs_add_comment(  # noqa: PLR0917
     occurrence: PositiveInteger = 1,
     include_anchor_text: bool = True,
     bookmark_jump: bool = False,
+    *, expected_revision_id: ExpectedRevision | None = None,
 ) -> AddCommentResponse:
     """
     Add a comment anchored to specific text in a Google Doc.
+
+    The anchor follows configured write_revision_mode: required validates and
+    retries (up to three attempts), target lets Google merge without local
+    conflict checks/retries. expected_revision_id forces strict required.
+    Drive/Apps Script calls follow separately and are not atomic with the
+    anchor. Unknown outcomes are not replayed; failures report
+    committed_batches.
 
     NOTE: The current implementation uses the Drive comments API plus a Docs
     named range. In the Docs UI this still shows as "Original content deleted"
@@ -842,6 +915,7 @@ def docs_add_comment(  # noqa: PLR0917
         occurrence,
         include_anchor_text=include_anchor_text,
         bookmark_jump=bookmark_jump,
+        expected_revision_id=expected_revision_id,
     )
     return AddCommentResponse.model_validate(result)
 

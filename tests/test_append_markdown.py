@@ -128,6 +128,7 @@ def test_literal_append_preserves_input_without_conversion(
     mock_docs.batchUpdate.assert_called_once_with(
         documentId='example',
         body={
+            'writeControl': {'requiredRevisionId': 'revision'},
             'requests': [
                 {
                     'insertText': {

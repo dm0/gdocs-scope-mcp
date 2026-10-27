@@ -221,9 +221,7 @@ def test_chip_insertion_receipts(mock_docs, tool, rich):
     assert result.structured_content.get('appended', result.structured_content[
         'inserted_text'] if tool != 'docs_append' else '') == expected
     body = mock_docs.batchUpdate.call_args.kwargs['body']
-    assert ('writeControl' in body) is rich
-    if rich:
-        assert body['writeControl'] == {'requiredRevisionId': 'revision'}
+    assert body['writeControl'] == {'requiredRevisionId': 'revision'}
 
 
 def test_definition_creation_has_typed_receipt(mock_docs):
@@ -377,12 +375,12 @@ def test_entity_insertion_revision_race_prevents_writes(
     original = deepcopy(simple_document)
     changed = deepcopy(original)
     changed['revisionId'] = 'later-revision'
-    mock_docs.get.return_value.execute.side_effect = [original, changed]
+    mock_docs.get.return_value.execute.side_effect = [original, changed] * 3
     result = call('docs_append', doc_id='example', text=(
         '<span data-mcp-entity="person" data-mcp-email="a@b.org">A</span>'
     ))
     assert result.is_error
-    assert result.structured_content['code'] == 'GOOGLE_API_ERROR'
+    assert result.structured_content['code'] == 'REVISION_RETRY_EXHAUSTED'
     mock_docs.batchUpdate.assert_not_called()
 
 

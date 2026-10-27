@@ -402,11 +402,23 @@ class EditFailedResponse(BaseModel):
         'RATE_LIMITED',
         'GOOGLE_API_ERROR',
         'INTERNAL_ERROR',
+        'EDIT_CONFLICT',
+        'TARGET_AMBIGUOUS',
+        'TARGET_DELETED',
+        'REVISION_RETRY_EXHAUSTED',
+        'REVISION_UNAVAILABLE',
+        'WRITE_OUTCOME_UNKNOWN',
+        'PARTIAL_WRITE',
+        'TARGET_REVISION_REJECTED',
     ]
     description: Annotated[str, Field(description='Failure description')]
     suggested_action: Annotated[
         str, Field(description='Suggested action to resolve the failure')
     ]
+    committed_batches: int = Field(
+        default=0, description='Confirmed completed Docs batches before '
+        'failure; an unknown pending write may also have committed.',
+    )
 
 
 SHORT_PREVIEW_LIMIT = 80

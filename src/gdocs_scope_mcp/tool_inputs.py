@@ -27,6 +27,12 @@ CodeBlockStyle = Annotated[
 ]
 CodeBlockThemeBackground = Annotated[bool, Field(strict=True)]
 TableBorders = Annotated[bool, Field(strict=True)]
+ExpectedRevision = Annotated[str, Field(
+    strict=True, min_length=1,
+    description='Optional strict document revision from an earlier read. '
+    'If supplied, any intervening change is a conflict and automatic '
+    'rebasing is disabled. Unsupported for native replace-all.',
+)]
 
 
 class Replacement(BaseModel):

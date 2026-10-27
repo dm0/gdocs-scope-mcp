@@ -1,6 +1,8 @@
 """Check local image staging, preflight and cleanup at the MCP boundary."""
 
 import asyncio
+import json
+from copy import deepcopy
 from unittest.mock import MagicMock
 
 import httplib2
@@ -100,6 +102,34 @@ def test_local_images_use_temporary_shared_sources(
     assert len(images) == IMAGE_COUNT
     assert all(image['uri'] == URL for image in images)
     drive.files().delete.assert_called_once_with(fileId='temporary')
+
+
+def test_revision_retry_reuses_staged_image(
+    services, local_image, simple_document,
+):
+    """Do not repeat Drive uploads/sharing after a rejected Docs batch."""
+    docs, drive, _ = services
+    latest = deepcopy(simple_document)
+    latest['revisionId'] = 'latest'
+    docs.get.return_value.execute.side_effect = [simple_document, latest]
+    stale = HttpError(httplib2.Response({'status': '400'}), json.dumps({
+        'error': {'message': 'The provided revision ID does not match '
+                 'the current revision ID of the document.'},
+    }).encode())
+    docs.batchUpdate.return_value.execute.side_effect = [stale, {}]
+    result = call('append', f'![one](<{local_image}>)',
+                  upload_local_images=True)
+    assert not result.is_error, result.structured_content
+    drive.files().create.assert_called_once()
+    drive.permissions().create.assert_called_once()
+    drive.files().delete.assert_called_once_with(fileId='temporary')
+    batches = docs.batchUpdate.call_args_list
+    assert len(batches) == IMAGE_COUNT
+    images = [[r['insertInlineImage']['uri']
+               for r in c.kwargs['body']['requests']
+               if 'insertInlineImage' in r]
+              for c in batches]
+    assert images == [[URL], [URL]]
 
 
 @pytest.mark.parametrize('enabled', [False, True])

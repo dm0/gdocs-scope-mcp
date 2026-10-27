@@ -38,6 +38,7 @@ import urllib.parse
 import urllib.request
 import uuid
 from contextlib import nullcontext, suppress
+from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -70,6 +71,13 @@ from .models import (
     GoogleDocumentTable,
     InsertSucceedResponse,
     ReplaceSucceedResponse,
+)
+from .revision_guards import (
+    depend_on,
+    guarded_edit,
+    insertion_context,
+    remember_snapshot,
+    submit,
 )
 from .table_insertion import TableInsertionPlan
 from .text_indices import utf16_length
@@ -263,7 +271,7 @@ def _get_document(service, doc_id: str) -> dict:
 
     for later batchUpdate calls.
     """
-    return (
+    return remember_snapshot(
         service.documents()
         .get(
             documentId=doc_id,
@@ -547,7 +555,7 @@ def _parse_document_tree(doc: dict) -> DocumentTree:
         source['startIndex']: _table_source_paragraphs(source['table'])
         for source in doc['body']['content'] if 'table' in source
     }
-    google_doc = GoogleDocument.model_validate(doc)
+    google_doc = GoogleDocument.model_validate(deepcopy(doc))
 
     headings = {}
 
@@ -784,6 +792,7 @@ def get_full_tree(doc_id: str) -> DocumentTree:
 
 
 # Preserve the public positional calling convention.
+@guarded_edit
 def search_replace(  # noqa: PLR0911, PLR0917
     doc_id: str,
     find: str,
@@ -791,6 +800,7 @@ def search_replace(  # noqa: PLR0911, PLR0917
     occurrence: int = 1,
     heading_id: str | None = None,
     regex: bool = False,
+    *, expected_revision_id: str | None = None,  # noqa: ARG001 - decorator
 ) -> ReplaceSucceedResponse | EditFailedResponse:
     """
     Find text in a document and replace a specific occurrence.
@@ -827,26 +837,12 @@ def search_replace(  # noqa: PLR0911, PLR0917
 
     # Replace-all: use the native replaceAllText API (fast, atomic)
     if occurrence == 0 and not regex and heading_id is None:
-        result = (
-            service.documents()
-            .batchUpdate(
-                documentId=doc_id,
-                body={
-                    'requests': [
-                        {
-                            'replaceAllText': {
-                                'containsText': {
-                                    'text': find,
-                                    'matchCase': True,
-                                },
-                                'replaceText': replace,
-                            }
-                        }
-                    ]
-                },
-            )
-            .execute()
-        )
+        result = submit(service, doc_id, [{
+            'replaceAllText': {
+                'containsText': {'text': find, 'matchCase': True},
+                'replaceText': replace,
+            },
+        }], native=True)
         count = (
             result.get('replies', [{}])[0]
             .get('replaceAllText', {})
@@ -925,6 +921,7 @@ def search_replace(  # noqa: PLR0911, PLR0917
             ),
         )
 
+    depend_on(doc, doc_start, doc_end)
     # Apply: delete old text, then insert replacement at same position
     requests = []
     if replace:
@@ -956,10 +953,7 @@ def search_replace(  # noqa: PLR0911, PLR0917
             }
         )
 
-    service.documents().batchUpdate(
-        documentId=doc_id,
-        body={'requests': requests},
-    ).execute()
+    submit(service, doc_id, requests)
 
     return ReplaceSucceedResponse(
         document_id=doc_id, heading_id=heading_id,
@@ -993,7 +987,10 @@ def _insert_content(
         context = nullcontext(PreparedInsertion([{'insertText': {
             'location': {'index': index}, 'text': literal,
         }}]))
-    with context as prepared:
+    with insertion_context(context, index) as prepared:
+        if rich:
+            validate_insertions(service, doc_id, prepared.requests,
+                                required_revision)
         inserted = inserted_text_from_requests(prepared.requests)
         if isinstance(prepared.requests, TableInsertionPlan):
             prepared.requests.execute(
@@ -1003,22 +1000,13 @@ def _insert_content(
             requests = list(prepared.requests.iter_requests())
         else:
             requests = prepared.requests
-            body = {'requests': requests}
-            if required_revision and any(
-                INSERT_ENTITY_KINDS.intersection(r) or 'createNamedRange' in r
-                for r in requests
-            ):
-                body['writeControl'] = {
-                    'requiredRevisionId': required_revision,
-                }
-            service.documents().batchUpdate(
-                documentId=doc_id, body=body,
-            ).execute()
+            submit(service, doc_id, requests, required_revision)
     return (inserted, sum('insertInlineImage' in r for r in requests),
             sum(bool(INSERT_ENTITY_KINDS.intersection(r)) for r in requests),
             prepared.cleanup_pending)
 
 
+@guarded_edit
 def insert_after(
     doc_id: str,
     anchor: str,
@@ -1026,6 +1014,7 @@ def insert_after(
     heading_id: str | None = None,
     rich: bool = True,
     *, upload_local_images: bool = False, table_borders: bool = True,
+    expected_revision_id: str | None = None,  # noqa: ARG001 - decorator
 ) -> InsertSucceedResponse | EditFailedResponse:
     """
     Insert Markdown paragraphs after the paragraph containing `anchor`.
@@ -1064,6 +1053,7 @@ def insert_after(
     # Split at the anchor's terminating newline, keeping it after the new text.
     # This also stays inside the valid insertion range at the document end.
     insert_index = found.paragraph.end_index - 1
+    depend_on(doc, found.paragraph.start_index, found.paragraph.end_index)
 
     (
         inserted_text, image_count, entity_count, cleanup_pending,
@@ -1094,6 +1084,7 @@ def insert_after(
     )
 
 
+@guarded_edit
 def insert_before(
     doc_id: str,
     anchor: str,
@@ -1101,6 +1092,7 @@ def insert_before(
     heading_id: str | None = None,
     rich: bool = True,
     *, upload_local_images: bool = False, table_borders: bool = True,
+    expected_revision_id: str | None = None,  # noqa: ARG001 - decorator
 ) -> InsertSucceedResponse | EditFailedResponse:
     """
     Insert Markdown paragraphs before the paragraph containing `anchor`.
@@ -1138,6 +1130,7 @@ def insert_before(
 
     # Insert at the start of the paragraph
     insert_index = found.paragraph.start_index
+    depend_on(doc, found.paragraph.start_index, found.paragraph.end_index)
 
     (
         inserted_text, image_count, entity_count, cleanup_pending,
@@ -1168,7 +1161,10 @@ def insert_before(
     )
 
 
-def delete_paragraph(doc_id: str, anchor: str) -> dict:
+@guarded_edit
+def delete_paragraph(doc_id: str, anchor: str, *,
+                     expected_revision_id: str | None = None,  # noqa: ARG001
+                     ) -> dict:
     """
     Delete the paragraph(s) containing `anchor` text.
 
@@ -1211,6 +1207,7 @@ def delete_paragraph(doc_id: str, anchor: str) -> dict:
     deleted_char_counts = []
     deleted_preview_truncated = []
     for t in targets:
+        depend_on(doc, t.start, t.end)
         end = min(t.end, terminal_newline)
         if t.start >= end:
             continue
@@ -1229,10 +1226,7 @@ def delete_paragraph(doc_id: str, anchor: str) -> dict:
         deleted_preview_truncated.append(len(t.text) > SHORT_PREVIEW_LIMIT)
 
     if requests:
-        service.documents().batchUpdate(
-            documentId=doc_id,
-            body={'requests': requests},
-        ).execute()
+        submit(service, doc_id, requests)
 
     return {
         'ok': True,
@@ -1247,10 +1241,12 @@ def delete_paragraph(doc_id: str, anchor: str) -> dict:
     }
 
 
+@guarded_edit(append=True)
 def append(
     doc_id: str, text: str, rich: bool = True, *,
     upload_local_images: bool = False,
     table_borders: bool = True,
+    expected_revision_id: str | None = None,  # noqa: ARG001 - decorator
 ) -> AppendSucceedResponse:
     """
     Append Markdown or literal text and return a compact typed receipt.
@@ -1296,7 +1292,10 @@ def append(
     )
 
 
-def batch_replace(doc_id: str, replacements: list[dict]) -> dict:
+@guarded_edit
+def batch_replace(doc_id: str, replacements: list[dict], *,
+                  expected_revision_id: str | None = None,  # noqa: ARG001
+                  ) -> dict:
     """
     Apply multiple find→replace operations atomically (all or nothing).
 
@@ -1382,6 +1381,8 @@ def batch_replace(doc_id: str, replacements: list[dict]) -> dict:
     # Sort by doc_start DESCENDING (apply end-of-doc first so indices stay
     # valid)
     changes.sort(key=lambda c: c[0], reverse=True)
+    for start, end, _, _ in changes:
+        depend_on(doc, start, end)
 
     # Build batchUpdate requests
     requests = []
@@ -1414,10 +1415,7 @@ def batch_replace(doc_id: str, replacements: list[dict]) -> dict:
                 }
             )
 
-    service.documents().batchUpdate(
-        documentId=doc_id,
-        body={'requests': requests},
-    ).execute()
+    submit(service, doc_id, requests)
 
     return {
         'ok': True,
@@ -1441,6 +1439,7 @@ def batch_replace(doc_id: str, replacements: list[dict]) -> dict:
 
 
 # Preserve the public positional calling convention.
+@guarded_edit
 def add_comment(  # noqa: PLR0917
     doc_id: str,
     comment: str,
@@ -1449,6 +1448,7 @@ def add_comment(  # noqa: PLR0917
     include_anchor_text: bool = True,
     bookmark_jump: bool = False,
     apps_script_id: str | None = None,
+    *, expected_revision_id: str | None = None,  # noqa: ARG001 - decorator
 ) -> dict:
     """
     Add a comment anchored to specific text in a Google Doc.
@@ -1522,30 +1522,17 @@ def add_comment(  # noqa: PLR0917
     doc_start, doc_end = _full_text_range_to_doc_indices(
         ft_start, ft_end, full_text, text_map,
     )
+    depend_on(doc, doc_start, doc_end)
 
     # Create a named range at the anchor position
     range_name = f'comment-anchor-{uuid.uuid4().hex[:12]}'
-    result = (
-        docs_service.documents()
-        .batchUpdate(
-            documentId=doc_id,
-            body={
-                'requests': [
-                    {
-                        'createNamedRange': {
-                            'name': range_name,
-                            'range': {
-                                'startIndex': doc_start,
-                                'endIndex': doc_end,
-                                'segmentId': '',  # empty = main document body
-                            },
-                        }
-                    }
-                ]
-            },
-        )
-        .execute()
-    )
+    result = submit(docs_service, doc_id, [
+        {'createNamedRange': {
+            'name': range_name,
+            'range': {'startIndex': doc_start, 'endIndex': doc_end,
+                      'segmentId': ''},
+        }},
+    ])
 
     named_range_id = (
         result.get('replies', [{}])[0]

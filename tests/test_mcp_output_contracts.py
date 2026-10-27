@@ -443,7 +443,9 @@ def test_edit_failures_are_direct_objects_and_log_failure(
 
     assert response.is_error is True
     data = response.structured_content
-    assert set(data) == {'ok', 'code', 'description', 'suggested_action'}
+    assert set(data) == {'ok', 'code', 'description', 'suggested_action',
+                         'committed_batches'}
+    assert data['committed_batches'] == 0
     assert data['ok'] is False
     assert data['code'] == 'HEADING_NOT_FOUND'
     assert 'missing' in data['description']

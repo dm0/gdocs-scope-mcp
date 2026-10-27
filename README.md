@@ -878,9 +878,9 @@ it does not select a native widget language. See Google's
 Named-range behavior and limits are documented in Google's
 [named ranges guide](https://developers.google.com/workspace/docs/api/how-tos/named-ranges).
 
-### Code formatting configuration
+### Server configuration
 
-An optional JSON config sets code formatting and highlighting. By default, the
+An optional JSON config sets editing behavior and code formatting. By default, the
 server reads `~/.config/gdocs-scope-mcp/config.json`, or
 `$XDG_CONFIG_HOME/gdocs-scope-mcp/config.json` when `XDG_CONFIG_HOME` is set.
 Select another file with `GOOGLE_DOCS_MCP_CONFIG=/absolute/path/config.json`.
@@ -888,6 +888,7 @@ An absent default file is allowed; an explicitly selected file must exist.
 
 ```json
 {
+  "write_revision_mode": "required",
   "code_font_family": "Roboto Mono",
   "inline_code_color": "#188038",
   "code_block_highlighting": true,
@@ -908,7 +909,16 @@ An absent default file is allowed; an explicitly selected file must exist.
 }
 ```
 
-All fields are optional; the example shows the built-in defaults. The font
+All fields are optional; the example shows the built-in defaults.
+`write_revision_mode` selects `required` (validated retries, default) or
+`target` (Google merges concurrent changes, including overlaps). Target mode
+does not provide our local unchanged-target guarantee and never retries a
+rejected/expired target revision. `expected_revision_id` always forces strict
+required mode without retries. Multi-stage table insertion always retains
+required revisions to avoid using stale cursors after a transformed stage.
+See [concurrent edit policies and limitations](docs/concurrent-edits.md).
+
+The font
 applies to inline code and blocks; `inline_code_color` applies only to inline code.
 Set `code_block_highlighting` to `false` to keep language-labelled blocks plain
 monospace. `code_block_style` selects a Pygments theme such as `default`,
@@ -930,6 +940,7 @@ Environment variables override individual file settings:
 
 | Environment variable | JSON field | Default |
 |---|---|---|
+| `GOOGLE_DOCS_MCP_WRITE_REVISION_MODE` | `write_revision_mode` | `required` |
 | `GOOGLE_DOCS_MCP_CODE_FONT_FAMILY` | `code_font_family` | `Roboto Mono` |
 | `GOOGLE_DOCS_MCP_INLINE_CODE_COLOR` | `inline_code_color` | `#188038` |
 | `GOOGLE_DOCS_MCP_CODE_BLOCK_HIGHLIGHTING` | `code_block_highlighting` | `true` |
@@ -1074,8 +1085,9 @@ selection that changed since the agent read it. Use `docs_get_entity` to discove
 option IDs. Creating definitions and selecting options support explicit tab
 IDs; both default to the first tab.
 
-Smart-chip writes use `requiredRevisionId`. Concurrent revision changes stop
-the write; automatic rebasing/retries are separate work (#32). Do not blindly
+The two dedicated dropdown tools use `requiredRevisionId` without automatic
+retries. Chip insertion through append/before/after follows the configured
+`write_revision_mode` and its documented strict exceptions. Do not blindly
 repeat a write after an unknown transport outcome. Definition editing/deletion,
 chip deletion, and in-place person/resource/date updates are not currently
 exposed. Shared definitions are not changed implicitly while selecting/copying
@@ -1249,6 +1261,27 @@ authorization rules before opting in. Ordinary unit tests remain offline.
 
 Table identity and concurrent-write probes use two isolated STDIO processes.
 See the [development findings and reproduction instructions](docs/table-identity.md).
+
+By default, indexed edits use required revision guards and up to three attempts.
+After a confirmed
+revision race, unchanged unambiguous targets are validated and positions
+recalculated; overlapping, deleted or ambiguous targets fail. Concurrent
+appends use the current end. Unknown write outcomes and completed table stages
+are never automatically replayed. Batch replacement remains atomic; table
+insertion and Docs-anchor/Drive-comment creation span separate writes.
+With `write_revision_mode="target"`, Google merges the original plan with
+concurrent changes, including overlaps; local conflict validation/retries do
+not apply. Google determines concurrent append order. A rejected target
+revision requires a fresh read and an explicit new edit. Diagnostic indices
+in target-mode receipts refer to the original planning snapshot, not positions
+after Google's transformation. Multi-stage table insertion remains strict.
+
+By default this protects the backend read-to-write window. Optionally pass
+`expected_revision_id` from an earlier document read for a strict precondition
+that rejects any intervening change and disables rebasing. Native replace-all
+keeps execution-time matching and rejects that parameter. Errors include
+`committed_batches`; an unknown pending write might also have committed.
+See [concurrent edit guarantees, retry limits and recovery](docs/concurrent-edits.md).
 
 ```
 docs_append(doc_id="...", text="Document last updated: March 2026.")

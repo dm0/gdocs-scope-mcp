@@ -1,4 +1,4 @@
-"""Load code formatting and recognition from JSON and environment."""
+"""Load editing and formatting settings from JSON and environment."""
 
 import os
 from collections.abc import Iterator
@@ -41,11 +41,12 @@ def config_path() -> Path:
 
 
 class Settings(BaseSettings):
-    """Configure code formatting and reading; environment overrides JSON."""
+    """Configure editing and formatting; environment overrides JSON."""
 
     model_config = SettingsConfigDict(
         env_prefix='GOOGLE_DOCS_MCP_', extra='forbid', frozen=True,
     )
+    write_revision_mode: Literal['required', 'target'] = 'required'
 
     code_font_family: Annotated[
         str, StringConstraints(strip_whitespace=True, min_length=1),
