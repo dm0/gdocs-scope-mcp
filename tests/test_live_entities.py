@@ -225,7 +225,7 @@ def test_live_chip_blocks_and_heading(live_test_doc, isolated_mcp):
             })
             assert len(chips) == expected_count
             assert len({c['data-mcp-id'] for c in chips}) == expected_count
-            assert '<table>' in markup
+            assert '<table data-mcp-table-ref=' in markup
             report['markdown'] = markup
             for instance in chips:
                 entity = await client.call_tool('docs_get_entity', {

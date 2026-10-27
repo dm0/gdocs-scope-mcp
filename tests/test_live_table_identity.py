@@ -9,6 +9,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 import pytest
+from bs4 import BeautifulSoup
 from fastmcp import Client
 from fastmcp.client.transports import StdioTransport
 
@@ -508,6 +509,77 @@ def test_cell_identity_does_not_fall_back_to_duplicate_text():
     }]}}}
     assert named(document, 'deleted') is None
     assert containing_cells(document, None) == []
+
+
+def test_live_read_only_table_discovery(live_test_doc, table_probe):
+    """Share references across processes and read native merged geometry."""
+    async def run():
+        async with table_probe('discovery') as probe:
+            baseline = await probe.seed(live_test_doc)
+            read = await probe.call(0, 'docs_read', {'doc_id': live_test_doc})
+            markup = ''.join(s['markdown'] for s in read['sections'])
+            html_refs = [t['data-mcp-table-ref'] for t in BeautifulSoup(
+                markup, 'html.parser',
+            ).find_all('table')]
+            arguments = {'doc_id': live_test_doc, 'limit': 1}
+            summaries = []
+            while True:
+                page = await probe.call(0, 'docs_tables_list', arguments)
+                summaries.extend(page['tables'])
+                if not page['has_more']:
+                    break
+                arguments['page_token'] = page['next_page_token']
+            assert [t['table_ref'] for t in summaries] == html_refs
+            first, second = summaries[-2:]
+            assert first['table_ref'] != second['table_ref']
+            assert first['preview'] == second['preview']
+            cells = []
+            arguments = {'doc_id': live_test_doc,
+                         'table_ref': first['table_ref'], 'limit': 1}
+            while True:
+                page = await probe.call(1, 'docs_table_read', arguments)
+                cells.extend(c for r in page['rows'] for c in r['cells'])
+                if not page['has_more']:
+                    break
+                arguments['page_token'] = page['next_page_token']
+            assert len(cells) == 6  # noqa: PLR2004
+            assert '😀' in cells[2]['markdown']
+            assert cells[-1]['markdown'] == ''
+            assert all(c['cell_ref'] and c['simple_text_target']
+                       for c in cells)
+            current = await probe.read()
+            assert current['revisionId'] == baseline['revisionId']
+            assert current.get('namedRanges', {}) == baseline.get(
+                'namedRanges', {},
+            )
+            # Exercise real physical placeholders after a native merge.
+            table = probe.tables(current)[0]
+            await probe.batch([{'mergeTableCells': {'tableRange': {
+                'tableCellLocation': table_location(table, 1, 0),
+                'rowSpan': 1, 'columnSpan': 2,
+            }}}], current)
+            current = await probe.read()
+            stale = await probe.clients[1].call_tool('docs_table_read', {
+                'doc_id': live_test_doc, 'table_ref': first['table_ref'],
+            }, raise_on_error=False)
+            assert stale.is_error
+            assert stale.structured_content['code'] == 'STALE_REFERENCE'
+            refreshed = await probe.call(0, 'docs_tables_list', {
+                'doc_id': live_test_doc,
+            })
+            merged = refreshed['tables'][-2]
+            assert merged['geometry_valid'] and merged['has_merged_cells']
+            detail = await probe.call(1, 'docs_table_read', {
+                'doc_id': live_test_doc, 'table_ref': merged['table_ref'],
+            })
+            covered = [c for r in detail['rows'] for c in r['cells']
+                       if c['covered_by']]
+            assert len(covered) == 1
+            assert covered[0]['cell_ref'] is None
+            assert not covered[0]['simple_text_target']
+            assert (await probe.read())['revisionId'] == current['revisionId']
+            probe.report['checks_passed'] = True
+    asyncio.run(run())
 
 
 async def raced_edit(probe, tool, arguments, mutation,

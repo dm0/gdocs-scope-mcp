@@ -4,6 +4,7 @@ import re
 from abc import abstractmethod
 from collections.abc import Generator, Sequence
 from enum import Enum
+from html import escape
 from typing import Annotated, Literal, Union
 
 from pydantic import (
@@ -410,6 +411,7 @@ class EditFailedResponse(BaseModel):
         'WRITE_OUTCOME_UNKNOWN',
         'PARTIAL_WRITE',
         'TARGET_REVISION_REJECTED',
+        'STALE_REFERENCE',
     ]
     description: Annotated[str, Field(description='Failure description')]
     suggested_action: Annotated[
@@ -1258,8 +1260,8 @@ GoogleDocumentContent = Annotated[
 class GoogleDocumentTableCellStyle(BaseModel, populate_by_name=True):
     """Store row and column spans for a table cell."""
 
-    row_span: Annotated[int, Field(alias='rowSpan')]
-    column_span: Annotated[int, Field(alias='columnSpan')]
+    row_span: Annotated[int, Field(alias='rowSpan')] = 1
+    column_span: Annotated[int, Field(alias='columnSpan')] = 1
 
 
 class GoogleDocumentTableCell(GoogleDocumentStructuralElement):
@@ -1267,7 +1269,9 @@ class GoogleDocumentTableCell(GoogleDocumentStructuralElement):
 
     content: list[GoogleDocumentContent]
     table_cell_style: Annotated[
-        GoogleDocumentTableCellStyle, Field(alias='tableCellStyle')
+        GoogleDocumentTableCellStyle,
+        Field(alias='tableCellStyle',
+              default_factory=GoogleDocumentTableCellStyle),
     ]
 
     def to_markdown(self, doc: 'GoogleDocument') -> str:
@@ -1316,7 +1320,11 @@ class GoogleDocumentTable(GoogleDocumentStructuralElement):
     def to_markdown(self, doc: 'GoogleDocument') -> str:
         """Render this element as Markdown using document metadata."""
         rows = ''.join([row.to_markdown(doc) for row in self.table_rows])
-        return f'<table>{rows}</table>'
+        ref = doc.table_refs.get(self.start_index)
+        attribute = (
+            f' data-mcp-table-ref="{escape(ref, quote=True)}"' if ref else ''
+        )
+        return f'<table{attribute}>{rows}</table>'
 
     def to_text(self, doc: 'GoogleDocument') -> str:
         """Render this element as plain text using document metadata."""
@@ -1351,6 +1359,7 @@ class GoogleDocument(BaseModel, populate_by_name=True):
     document_id: Annotated[str, Field(alias='documentId')]
     code_markdown: dict[int, str] = Field(default_factory=dict, exclude=True)
     plain_native_code: set[int] = Field(default_factory=set, exclude=True)
+    table_refs: dict[int, str] = Field(default_factory=dict, exclude=True)
 
     @model_validator(mode='before')
     @classmethod

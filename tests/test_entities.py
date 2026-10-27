@@ -418,7 +418,9 @@ def test_entities_inside_table_cells_are_inspectable(
     configure(mock_docs, document)
     read = call('docs_read', doc_id='example')
     assert not read.is_error
-    assert '<table>' in read.structured_content['sections'][0]['markdown']
+    assert '<table data-mcp-table-ref=' in (
+        read.structured_content['sections'][0]['markdown']
+    )
     found = call('docs_get_entity', doc_id='example', entity_id='kix.entity')
     assert not found.is_error
     assert found.structured_content['kind'] == kind

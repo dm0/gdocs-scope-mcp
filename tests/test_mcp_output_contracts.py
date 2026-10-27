@@ -705,10 +705,11 @@ def test_catalog_contract_covers_every_registered_tool():
         async with Client(server.mcp) as client:
             return {tool.name for tool in await client.list_tools()}
 
-    # Native entity outputs are schema-validated in test_entities.py.
+    # Entity/table outputs are schema-validated in their dedicated tests.
     assert asyncio.run(names()) == {name for name, _, _ in TOOL_CASES} | {
         'docs_get_entity', 'docs_create_dropdown_definition',
         'docs_select_dropdown',
+        'docs_tables_list', 'docs_table_read',
     }
 
 
@@ -1296,6 +1297,7 @@ def test_invalid_listing_token_has_restart_guidance(contract_api, name):
     ('name', 'read_only'),
     [
         ('docs_get_tree', True), ('docs_read', True),
+        ('docs_tables_list', True), ('docs_table_read', True),
         ('docs_list', True), ('docs_read_comments', True),
         ('docs_search_replace', False), ('docs_insert_before', False),
         ('docs_insert_after', False), ('docs_delete_paragraph', False),

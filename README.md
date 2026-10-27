@@ -31,6 +31,10 @@ well suited to large Google Docs with structured headings.
   multiple paragraphs per item and continuations after nested lists. Insert
   rectangular Markdown or HTML tables with column alignment, inline formatting,
   line breaks, and optional borders.
+- **Discover and inspect tables.** Follow opaque references in document HTML,
+  list compact heading-scoped table previews, and page structured cells with
+  merged geometry, empty cells and explicit truncation metadata. Reads create
+  no bindings or document changes.
 - **Insert images.** Use Markdown or HTML image references, or explicitly enable
   local image uploads through temporary, link-shared Google Drive files that
   are cleaned up after insertion.
@@ -49,9 +53,9 @@ well suited to large Google Docs with structured headings.
   fingerprint, package path, PID, and startup time with `server_info`. Configurable
   stderr logs record tool outcomes and durations without logging document content.
 
-Supported content has explicit limits: arbitrary table structures, cross-document
-dropdown definition copying, and general conflict-aware retries are not yet
-supported. See the tool reference below for operation-specific details.
+Supported content has explicit limits: arbitrary table writes and cross-document
+dropdown definition copying are not supported. Table read references expire on
+revision changes. See the tool reference below for operation-specific details.
 
 ## Section editing workflow
 
@@ -107,7 +111,7 @@ Indexing note: when the MCP reads document content before planning index-based e
 
 ## MCP result contracts
 
-All 16 tools return structured JSON objects with typed output schemas. The
+All tools return structured JSON objects with typed output schemas. The
 MCP text content contains the same JSON object for text-only clients; results
 are not JSON-encoded strings, and edit results have no outer `result` wrapper.
 
@@ -528,6 +532,75 @@ with MCP `isError=true`. Refresh IDs with `docs_get_tree` before retrying.
 
 ```python
 docs_read(doc_id="...", heading_ids=["heading-id-from-outline"])
+```
+
+Native tables, including nested ones, contain `data-mcp-table-ref` attributes
+in their HTML. Pass these opaque references to `docs_table_read`; no duplicate
+table inventory is added to `docs_read`. The first document tab is the scope of
+these references. Tab selection is deferred to
+[issue #34](https://github.com/dm0/gdocs-scope-mcp/issues/34).
+
+#### `docs_tables_list(doc_id, heading_ids=None, limit=50, page_token=None)`
+
+Discover first-tab tables without returning surrounding document text. Each
+summary includes `table_ref`, nearest heading ID/title and ancestor IDs,
+dimensions, nesting depth, `parent_cell_ref` for nested tables, merge/geometry
+flags, unsupported-edit reasons and a preview of at most 200 Unicode code
+points with `preview_truncated`. Tables are returned in preorder: parent before
+its nested tables. Heading titles in summaries are limited to 80 characters.
+Heading selection follows `docs_read`, including empty/mixed selections and
+descendant deduplication.
+
+`limit` is 1-100 tables. `count` describes this page; `total_count` covers all
+matching tables. Continue with `next_page_token`, preserving the exact
+`heading_ids` and `limit`. `snapshot` contains the native revision, first-tab
+scope and `reference_lifetime="same_revision_only"`.
+
+#### `docs_table_read(doc_id, table_ref, limit=100, max_cell_chars=2000, page_token=None)`
+
+Read one table using a reference from document HTML or `docs_tables_list`.
+The response contains the summary/snapshot, `total_cells`, and structured
+`rows`/`cells`. Cells include zero-based logical `row`/`column`, native
+`row_span`/`column_span`, a physical cell-array position, `cell_ref`, Markdown
+and explicit clipping metadata. Nested table HTML also carries references;
+`nested_table_refs` identifies up to 20 immediate children of a cell, with
+`nested_table_count` and `nested_table_refs_truncated` disclosing omissions.
+Use paginated table discovery for additional children (`parent_cell_ref`
+identifies their containing cell).
+
+`limit` counts **physical cells**, including covered merged slots, not rows
+(1-200, default 100). A wide row can span pages; `rows.complete` indicates
+whether all its physical cells are included. Pages include rows with returned
+cells; rows with no physical cells are described through dimensions/spans.
+`count` is returned cells and `total_cells` is the table's physical-cell count.
+Continue with the same `table_ref`, `limit` and `max_cell_chars`.
+
+`max_cell_chars` bounds each Markdown preview to 1-4000 Unicode code points,
+default 2000. `markdown_char_count` is the full length and
+`markdown_truncated` discloses clipping. A clipped preview can cut HTML or code
+syntax; do not treat it as complete replacement content.
+
+Merged heads preserve spans. Covered physical slots have `covered_by` but no
+independent `cell_ref`. Unsupported or inconsistent geometry is flagged, with
+null logical columns/cell handles. Geometry verification is limited to grids
+of at most 100,000 logical slots. Their content remains readable in pages.
+`simple_text_target` describes conservative structural eligibility, not an
+available table editing tool: cells in merged tables, nested/complex cells and
+non-text content are explicitly flagged. Current tools provide reading only.
+
+References and page cursors are portable across independent MCP processes
+using the same Google account, but bound to the document, first-tab scope and
+exact revision. Any revision change returns `STALE_REFERENCE`; reacquire refs
+from a fresh read/list instead of reusing an ordinal, coordinates or duplicate
+text. No named ranges are created. The token checksum detects corruption, not
+forgery: these are not authorization capabilities, and each call checks normal
+Google document permissions. Persistent bindings and more selective snapshots
+are deferred to #27. Native revision metadata is required; Google exposes it
+only to editors, so unavailable metadata returns `REVISION_UNAVAILABLE`.
+
+```python
+page = docs_tables_list(doc_id="...", heading_ids=["heading-id"], limit=10)
+details = docs_table_read(doc_id="...", table_ref=page["tables"][0]["table_ref"])
 ```
 
 ---
