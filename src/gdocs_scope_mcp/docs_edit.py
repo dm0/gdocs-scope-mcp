@@ -80,6 +80,7 @@ from .revision_guards import (
     submit,
 )
 from .table_insertion import TableInsertionPlan
+from .table_read import reference_map
 from .text_indices import utf16_length
 from .tool_errors import ToolFailureError
 
@@ -722,6 +723,7 @@ def read(
     service = _get_service('docs', 'v1')
     doc = _get_document(service, doc_id)
 
+    doc['table_refs'] = reference_map(doc)
     google_doc = _parse_document_tree(doc)
 
     if heading_ids is None:

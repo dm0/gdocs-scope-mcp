@@ -116,7 +116,7 @@ def test_native_table_insertion(
             markdown = '\n'.join(section['markdown'] for section in sections)
             assert marker + ' before' in markdown
             assert marker + ' after' in markdown
-            assert '<table>' in markdown
+            assert '<table data-mcp-table-ref=' in markdown
             report['checks_passed'] = True
 
     try:

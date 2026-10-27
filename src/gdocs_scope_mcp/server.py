@@ -45,7 +45,7 @@ from fastmcp import FastMCP
 from googleapiclient.discovery import build
 from pydantic import BaseModel, TypeAdapter
 
-from . import docs_edit, entity_edit
+from . import docs_edit, entity_edit, table_read
 from .diagnostics import ServerInfo, capture_server_info
 from .entities import (
     DropdownOptions,
@@ -70,6 +70,14 @@ from .models import (
     ResolveCommentResponse,
 )
 from .settings import code_formatting, get_settings
+from .table_read import (
+    CellLimit,
+    CellPreviewLimit,
+    ReadReference,
+    TableLimit,
+    TableReadResponse,
+    TablesListResponse,
+)
 from .tool_inputs import (
     CodeBlockStyle,
     CodeBlockThemeBackground,
@@ -196,6 +204,8 @@ EDITING TOOLS:
 
     docs_get_tree          Read hierarchical document tree (headings)
     docs_read              Read document contents (paragraphs + plain)
+    docs_tables_list       Discover first-tab tables and compact previews
+    docs_table_read        Read revision-bound table/cell pages and geometry
     docs_search_replace    Find and replace text (occurrence-targeted or all)
     docs_insert_after      Insert text after a specified paragraph anchor text
     docs_insert_before     Insert text before a specified paragraph anchor text
@@ -311,6 +321,11 @@ def docs_read(
     Use docs_get_entity for complete properties, source ranges and dropdown
     options. Reads/insertion default to the first document tab.
 
+    Table HTML includes data-mcp-table-ref, including nested tables. Pass a
+    reference to docs_table_read for bounded structured cells. References are
+    document/first-tab/revision-bound; reacquire after any revision change.
+    Reads create no bindings and return no duplicate table inventory.
+
     You can read the entire document, or isolate specific sections by passing
     a list of target heading_ids, including their nested subsections.
     Isolating sections reduces token usage on large files.
@@ -338,6 +353,69 @@ def docs_read(
     if isinstance(heading_ids, str):
         heading_ids = [heading_ids]
     return docs_edit.read(doc_id, heading_ids)
+
+
+@mcp.tool(
+    output_schema=_tool_response_schema(TablesListResponse),
+    annotations={'readOnlyHint': True, 'destructiveHint': False,
+                 'idempotentHint': True, 'openWorldHint': True},
+)
+def docs_tables_list(
+    doc_id: str, heading_ids: list[str] | None = None,
+    limit: TableLimit = 50, page_token: ReadReference | None = None,
+) -> TablesListResponse:
+    """Discover native tables in the first document tab without full text.
+
+    Returns compact summaries: opaque table_ref, nearest heading context,
+    dimensions, nesting/parent-cell reference, merged geometry warnings and
+    a preview of at most 200 Unicode code points. Tables are in preorder,
+    including nested tables. heading_ids follows docs_read subtree semantics:
+    null=whole first tab, []=none; unknown IDs are reported, all-unknown fails.
+
+    limit is 1-100 tables (default 50). count is page size, total_count covers
+    matching tables. Follow next_page_token with exactly the same arguments.
+    Tables and page tokens are bound to document, first-tab scope and revision;
+    STALE_REFERENCE requires a new first-page read. Never infer identity from
+    an old ordinal or duplicate text. This tool creates no named ranges or
+    document writes. Tab selection is a separate feature.
+    """
+    return table_read.tables_list(doc_id, heading_ids, limit, page_token)
+
+
+@mcp.tool(
+    output_schema=_tool_response_schema(TableReadResponse),
+    annotations={'readOnlyHint': True, 'destructiveHint': False,
+                 'idempotentHint': True, 'openWorldHint': True},
+)
+def docs_table_read(
+    doc_id: str, table_ref: ReadReference, limit: CellLimit = 100,
+    max_cell_chars: CellPreviewLimit = 2000,
+    page_token: ReadReference | None = None,
+) -> TableReadResponse:
+    """Inspect a revision-bound table reference from docs_read or tables_list.
+
+    Returns rows/cells, cell_ref, zero-based row/column, native spans,
+    physical_cell positions, merged-slot covered_by and unsupported-edit
+    reasons. No raw Google indices are returned. Unknown geometry has null
+    columns/cell refs; covered placeholders have no independent cell_ref.
+    simple_text_target is structural eligibility, not an available write tool.
+
+    limit bounds physical cells, not rows (1-200, default 100). A wide row can
+    span pages; rows.complete explicitly reports this. max_cell_chars bounds
+    each Markdown preview to 1-4000 Unicode code points (default 2000).
+    markdown_char_count and markdown_truncated disclose clipping; a clipped
+    preview may cut HTML/code syntax and must not be used as complete content.
+    Nested table HTML and nested_table_refs carry table references. At most
+    20 immediate child refs are returned per cell; nested_table_count and
+    nested_table_refs_truncated disclose omissions. Discover more via the list.
+
+    Follow next_page_token with the same table_ref, limit and max_cell_chars.
+    count is cells on this page, total_cells includes physical covered slots.
+    Revision changes invalidate refs/cursors with STALE_REFERENCE; reacquire
+    them rather than changing token data. This first-tab read writes nothing.
+    """
+    return table_read.table_read(doc_id, table_ref, limit, max_cell_chars,
+                                 page_token)
 
 
 @mcp.tool(
