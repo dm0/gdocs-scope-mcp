@@ -279,16 +279,25 @@ def _flush_heuristic(pending: list, result: dict, minimum: int) -> None:
     pending.clear()
 
 
-def block_markdown(doc: dict) -> dict[int, str]:
+def block_markdown(
+    doc: dict, *, plain_native: set[int] | None = None,
+) -> dict[int, str]:
     """Compute block overrides before normalizing raw API text."""
     containers = list(_containers(doc.get('body', {}).get('content', [])))
     settings = get_settings()
     result, blocked = (_marked_blocks(doc, containers)
                        if settings.code_block_named_ranges else ({}, set()))
-    if not settings.read_code_block_heuristic:
-        return result
     for content in containers:
-        _native_blocks(content, result, blocked)
+        native = {}
+        _native_blocks(content, native, blocked | set(result))
+        if settings.read_native_code_blocks:
+            result.update(native)
+        else:
+            blocked.update(native)
+            if plain_native is not None:
+                plain_native.update(native)
+        if not settings.read_code_block_heuristic:
+            continue
         pending = []
         signature = None
 

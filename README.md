@@ -847,8 +847,12 @@ the same formatting can be misclassified; disable `read_code_block_heuristic`
 or tighten the font, spacing, background, and minimum-line settings as needed.
 Neither recognition mechanism writes to the document or uses a local database.
 
-The same heuristic switch also enables a separate rule for UI-created Google
-Docs code blocks. A live check with both None and Python selected in the UI
+`read_native_code_blocks` separately controls recognition of UI-created Google
+Docs code blocks and defaults to `true`, independently of the generic block
+heuristic. When disabled, recognized native blocks use ordinary paragraph
+rendering, without fenced blocks or inline-code inference. Service boundary
+runs are omitted from display; source coordinates remain unchanged. A live
+check with both None and Python selected in the UI
 returned paired U+E907 delimiters as separate text runs, with code-font text
 between them, but no API language, line-spacing, or shading field. This rule
 requires both boundary runs and contiguous normal code-font paragraphs; it
@@ -884,6 +888,7 @@ An absent default file is allowed; an explicitly selected file must exist.
   "read_inline_code_colors": null,
   "read_inline_code_match": "both",
   "read_code_block_heuristic": true,
+  "read_native_code_blocks": true,
   "read_code_block_fonts": null,
   "read_code_block_line_spacing": 1.0,
   "read_code_block_require_background": false,
@@ -925,6 +930,7 @@ Environment variables override individual file settings:
 | `GOOGLE_DOCS_MCP_READ_INLINE_CODE_COLORS` | `read_inline_code_colors` | `null` (insertion color) |
 | `GOOGLE_DOCS_MCP_READ_INLINE_CODE_MATCH` | `read_inline_code_match` | `both` |
 | `GOOGLE_DOCS_MCP_READ_CODE_BLOCK_HEURISTIC` | `read_code_block_heuristic` | `true` |
+| `GOOGLE_DOCS_MCP_READ_NATIVE_CODE_BLOCKS` | `read_native_code_blocks` | `true` |
 | `GOOGLE_DOCS_MCP_READ_CODE_BLOCK_FONTS` | `read_code_block_fonts` | `null` (insertion font) |
 | `GOOGLE_DOCS_MCP_READ_CODE_BLOCK_LINE_SPACING` | `read_code_block_line_spacing` | `1.0` |
 | `GOOGLE_DOCS_MCP_READ_CODE_BLOCK_REQUIRE_BACKGROUND` | `read_code_block_require_background` | `false` |

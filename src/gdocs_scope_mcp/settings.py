@@ -65,6 +65,7 @@ class Settings(BaseSettings):
     read_inline_code_colors: list[HexColor] | None = None
     read_inline_code_match: Literal['font', 'color', 'both'] = 'both'
     read_code_block_heuristic: bool = True
+    read_native_code_blocks: bool = True
     read_code_block_fonts: list[FontName] | None = None
     read_code_block_line_spacing: Annotated[
         float, Field(gt=0, allow_inf_nan=False),

@@ -386,8 +386,32 @@ def test_native_ui_code_without_spacing(native_code_document, monkeypatch):
                 '    return UI_CODE_20261027\n\n```\n\n')
     assert render(native_code_document) == expected
     monkeypatch.setenv('GOOGLE_DOCS_MCP_READ_CODE_BLOCK_HEURISTIC', 'false')
+    monkeypatch.setenv('GOOGLE_DOCS_MCP_READ_NATIVE_CODE_BLOCKS', 'false')
     get_settings.cache_clear()
     assert '```' not in render(native_code_document)
+
+
+@pytest.mark.parametrize('heuristic', [True, False])
+def test_native_switch_is_independent(native_code_document, monkeypatch,
+                                      heuristic):
+    """Keep native blocks plain even when generic heuristics are enabled."""
+    assert Settings().read_native_code_blocks is True
+    monkeypatch.setenv('GOOGLE_DOCS_MCP_READ_CODE_BLOCK_HEURISTIC',
+                       str(heuristic))
+    monkeypatch.setenv('GOOGLE_DOCS_MCP_READ_NATIVE_CODE_BLOCKS', 'false')
+    for item in native_code_document['body']['content']:
+        item['paragraph']['paragraphStyle']['lineSpacing'] = 100
+        for element in item['paragraph']['elements']:
+            element['textRun']['textStyle'].update({**FONT, **GREEN})
+    markup = render(native_code_document)
+    assert '```' not in markup
+    assert '`UI_CODE' not in markup
+    assert '\ue907' not in markup
+    assert 'UI_CODE_20261027 = 1' in markup
+    monkeypatch.setenv('GOOGLE_DOCS_MCP_READ_NATIVE_CODE_BLOCKS', 'true')
+    get_settings.cache_clear()
+    assert markup != render(native_code_document)
+    assert render(native_code_document).startswith('```\n')
 
 
 @pytest.mark.parametrize('change', ['missing_end', 'body_font', 'heading',
