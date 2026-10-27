@@ -773,14 +773,87 @@ background fills the full width of every code paragraph, including blank lines,
 using native paragraph shading. Token-specific backgrounds remain text styles.
 Enable backgrounds when choosing a dark theme with light text. Adjacent prose is
 unaffected; paragraph fills are applied after insertion to prevent inheritance.
-No custom font size or native language metadata is written.
+No custom font size or native language property is written. A versioned named
+range stores each inserted block's language for later reads.
 
 Inline code works in supported list-item paragraphs. Code blocks inside
 list items return `INVALID_ARGUMENT` before writing; list-item block semantics
 remain outside the supported subset. `rich=False` preserves code markup
 literally. Receipts count the final literal text and paragraph breaks, not fence
-delimiters or language labels. Reads do not reconstruct code fences/backticks
-from font metadata, so this does not promise a lossless code round trip.
+delimiters or language labels.
+
+### Reading code
+
+`docs_read` returns recognized inline code as backtick spans and blocks as fenced
+Markdown. Inside recognized code, bold, italic, links, colors, and other visual
+formatting are ignored: the result contains literal source rather than HTML
+style wrappers. Blocks preserve indentation, tabs, blank lines, trailing spaces,
+and Unicode. Delimiters grow when the source contains backticks. Inline code
+follows CommonMark code-span whitespace rules; line breaks normalize to spaces
+and arbitrary soft line breaks are not reconstructed as inline code.
+
+Inline recognition is enabled by default and requires both the configured code
+font and inline color. Adjacent matching text runs are combined, regardless of
+differences in emphasis or other styles. Recognition stops at paragraph and
+non-text element boundaries. Override the font/color lists, choose `font`,
+`color`, or `both`, or disable recognition using the settings below. A null list
+follows the corresponding insertion setting; an empty list matches nothing.
+Font matching is case-insensitive; colors are compared as rounded 8-bit RGB.
+Only explicitly returned text-run formatting is recognized; inherited fonts
+that the API omits can produce false negatives.
+
+Newly inserted code blocks carry `gdocs-scope-mcp:code:v1:` named ranges storing
+the declared language. Reads validate that a marker covers contiguous, complete
+text-only normal paragraphs, including any trailing blank lines. Valid markers
+take precedence over heuristics and work across server restarts and independent
+processes. Malformed, split, overlapping, or incomplete markers fall back to
+ordinary rendering; their covered paragraphs are excluded from block heuristics.
+Markers are document metadata visible to collaborators and API clients, not
+visible text. They are not automatically recreated when copying plain text.
+Copying the returned Markdown through rich insertion creates fresh markers.
+
+Google can shrink or split named ranges during editing. In particular, replacing
+text at a block boundary can invalidate its marker; a stale range is never
+silently expanded to include neighboring prose. Deleting or clearing a block
+does not leave a valid code reference. This is not a guarantee of lossless code
+semantics after arbitrary manual edits. The published Docs API has no explicit
+code-block/language field; blocks created in the Google Docs UI are recognized
+through their exposed formatting, not a presumed native type.
+
+**Unmarked block detection is also enabled by default.** It requires all of:
+
+- Normal text-only paragraphs without headings or list bullets.
+- Every nonempty text run uses an allowed code font (default: `code_font_family`).
+- Explicit paragraph line spacing matches `read_code_block_line_spacing`
+  (default `1.0`, represented by the API as `100` percent).
+- Consecutive paragraphs have matching line spacing and paragraph shading,
+  including consistently absent shading.
+- At least `read_code_block_min_lines` paragraphs remain after trimming blank
+  edges (default `2`). Internal blank lines count and are preserved when their
+  paragraph spacing and shading match.
+
+Set `read_code_block_require_background=true` to additionally require a paragraph
+background. Text colors and emphasis may vary because syntax highlighting uses
+them. Detection stops at incompatible formatting, structural gaps, or table-cell
+boundaries. Unmarked blocks never get a guessed language. Ordinary prose with
+the same formatting can be misclassified; disable `read_code_block_heuristic`
+or tighten the font, spacing, background, and minimum-line settings as needed.
+Neither recognition mechanism writes to the document or uses a local database.
+
+The same heuristic switch also enables a separate rule for UI-created Google
+Docs code blocks. A live check with both None and Python selected in the UI
+returned paired U+E907 delimiters as separate text runs, with code-font text
+between them, but no API language, line-spacing, or shading field. This rule
+requires both boundary runs and contiguous normal code-font paragraphs; it
+does not use spacing, background, or minimum-line checks. The service delimiters
+are omitted from rendered code; source coordinates remain unchanged. A lone
+delimiter, missing end, intervening heading, object, or incompatible font is
+insufficient. This is observed, undocumented behavior and may change. A
+normalized capture is covered by offline tests. The UI-selected language is not
+inferred from colors or delimiter text.
+
+Named-range behavior and limits are documented in Google's
+[named ranges guide](https://developers.google.com/workspace/docs/api/how-tos/named-ranges).
 
 ### Code formatting configuration
 
@@ -797,7 +870,16 @@ An absent default file is allowed; an explicitly selected file must exist.
   "code_block_highlighting": true,
   "code_block_style": "default",
   "code_block_line_spacing": 1.0,
-  "code_block_theme_background": false
+  "code_block_theme_background": false,
+  "read_inline_code": true,
+  "read_inline_code_fonts": null,
+  "read_inline_code_colors": null,
+  "read_inline_code_match": "both",
+  "read_code_block_heuristic": true,
+  "read_code_block_fonts": null,
+  "read_code_block_line_spacing": 1.0,
+  "read_code_block_require_background": false,
+  "read_code_block_min_lines": 2
 }
 ```
 
@@ -829,6 +911,18 @@ Environment variables override individual file settings:
 | `GOOGLE_DOCS_MCP_CODE_BLOCK_STYLE` | `code_block_style` | `default` |
 | `GOOGLE_DOCS_MCP_CODE_BLOCK_LINE_SPACING` | `code_block_line_spacing` | `1.0` |
 | `GOOGLE_DOCS_MCP_CODE_BLOCK_THEME_BACKGROUND` | `code_block_theme_background` | `false` |
+| `GOOGLE_DOCS_MCP_READ_INLINE_CODE` | `read_inline_code` | `true` |
+| `GOOGLE_DOCS_MCP_READ_INLINE_CODE_FONTS` | `read_inline_code_fonts` | `null` (insertion font) |
+| `GOOGLE_DOCS_MCP_READ_INLINE_CODE_COLORS` | `read_inline_code_colors` | `null` (insertion color) |
+| `GOOGLE_DOCS_MCP_READ_INLINE_CODE_MATCH` | `read_inline_code_match` | `both` |
+| `GOOGLE_DOCS_MCP_READ_CODE_BLOCK_HEURISTIC` | `read_code_block_heuristic` | `true` |
+| `GOOGLE_DOCS_MCP_READ_CODE_BLOCK_FONTS` | `read_code_block_fonts` | `null` (insertion font) |
+| `GOOGLE_DOCS_MCP_READ_CODE_BLOCK_LINE_SPACING` | `read_code_block_line_spacing` | `1.0` |
+| `GOOGLE_DOCS_MCP_READ_CODE_BLOCK_REQUIRE_BACKGROUND` | `read_code_block_require_background` | `false` |
+| `GOOGLE_DOCS_MCP_READ_CODE_BLOCK_MIN_LINES` | `read_code_block_min_lines` | `2` |
+
+Font/color lists in environment variables use JSON arrays, for example
+`GOOGLE_DOCS_MCP_READ_CODE_BLOCK_FONTS='["Roboto Mono", "Consolas"]'`.
 
 Precedence is per-call overrides (theme/background only), environment, JSON
 file, then built-in defaults. Server settings are

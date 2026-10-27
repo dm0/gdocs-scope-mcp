@@ -15,9 +15,11 @@ from pydantic import (
     PlainSerializer,
     computed_field,
     field_validator,
+    model_validator,
 )
 from typing_extensions import Self
 
+from .code_reading import block_markdown, inline_markdown
 from .entities import (
     DateProperties,
     DropdownProperties,
@@ -1151,10 +1153,12 @@ class GoogleDocumentParagraph(GoogleDocumentStructuralElement):
     ]
     bullet: GoogleDocumentBullet | None = None
 
-    def to_markdown(self, doc: 'GoogleDocument') -> str:
+    def to_markdown(self, doc: 'GoogleDocument') -> str:  # noqa: PLR0911
         """Render this element as Markdown using document metadata."""
         style = self.paragraph_style
-        text = ''.join([el.to_markdown(doc) for el in self.elements])
+        if doc is not None and self.start_index in doc.code_markdown:
+            return doc.code_markdown[self.start_index]
+        text = inline_markdown(self.elements, doc)
         if style.heading_id or style.named_style_type.level < len(
             HEADING_LEVELS
         ):
@@ -1324,6 +1328,15 @@ class GoogleDocument(BaseModel, populate_by_name=True):
     ]
     revision_id: Annotated[str, Field(alias='revisionId')]
     document_id: Annotated[str, Field(alias='documentId')]
+    code_markdown: dict[int, str] = Field(default_factory=dict, exclude=True)
+
+    @model_validator(mode='before')
+    @classmethod
+    def recover_code_blocks(cls, data):
+        """Preserve raw code newlines before text-run display normalization."""
+        if isinstance(data, dict) and 'body' in data:
+            return {**data, 'code_markdown': block_markdown(data)}
+        return data
 
     def to_markdown(self) -> str:
         """Render this element as Markdown using document metadata."""

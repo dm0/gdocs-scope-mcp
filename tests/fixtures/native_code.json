@@ -1,0 +1,69 @@
+{
+  "documentId": "example",
+  "revisionId": "revision",
+  "title": "Native UI code fixture",
+  "body": {
+    "content": [
+      {
+        "startIndex": 1,
+        "endIndex": 23,
+        "paragraph": {
+          "paragraphStyle": {"namedStyleType": "NORMAL_TEXT", "direction": "LEFT_TO_RIGHT"},
+          "elements": [
+            {"startIndex": 1, "endIndex": 2, "textRun": {"content": "\ue907", "textStyle": {}}},
+            {"startIndex": 2, "endIndex": 21, "textRun": {
+              "content": "UI_CODE_20261027 = ",
+              "textStyle": {"weightedFontFamily": {"fontFamily": "Roboto Mono", "weight": 400}, "fontSize": {"magnitude": 9, "unit": "PT"}, "foregroundColor": {"color": {"rgbColor": {"red": 0.21568628, "green": 0.2784314, "blue": 0.30980393}}}}
+            }},
+            {"startIndex": 21, "endIndex": 23, "textRun": {
+              "content": "1\n",
+              "textStyle": {"weightedFontFamily": {"fontFamily": "Roboto Mono", "weight": 400}, "fontSize": {"magnitude": 9, "unit": "PT"}, "foregroundColor": {"color": {"rgbColor": {"red": 0.77254903, "green": 0.13333334, "blue": 0.12156863}}}}
+            }}
+          ]
+        }
+      },
+      {
+        "startIndex": 23,
+        "endIndex": 24,
+        "paragraph": {
+          "paragraphStyle": {"namedStyleType": "NORMAL_TEXT", "direction": "LEFT_TO_RIGHT"},
+          "elements": [{"startIndex": 23, "endIndex": 24, "textRun": {"content": "\n", "textStyle": {"weightedFontFamily": {"fontFamily": "Roboto Mono", "weight": 400}}}}]
+        }
+      },
+      {
+        "startIndex": 24,
+        "endIndex": 52,
+        "paragraph": {
+          "paragraphStyle": {"namedStyleType": "NORMAL_TEXT", "direction": "LEFT_TO_RIGHT"},
+          "elements": [
+            {"startIndex": 24, "endIndex": 28, "textRun": {"content": "    ", "textStyle": {"weightedFontFamily": {"fontFamily": "Roboto Mono", "weight": 400}}}},
+            {"startIndex": 28, "endIndex": 35, "textRun": {
+              "content": "return ",
+              "textStyle": {"weightedFontFamily": {"fontFamily": "Roboto Mono", "weight": 400}, "foregroundColor": {"color": {"rgbColor": {"red": 0.09803922, "green": 0.40392157, "blue": 0.8235294}}}}
+            }},
+            {"startIndex": 35, "endIndex": 52, "textRun": {"content": "UI_CODE_20261027\n", "textStyle": {"weightedFontFamily": {"fontFamily": "Roboto Mono", "weight": 400}}}}
+          ]
+        }
+      },
+      {
+        "startIndex": 52,
+        "endIndex": 53,
+        "paragraph": {
+          "paragraphStyle": {"namedStyleType": "NORMAL_TEXT", "direction": "LEFT_TO_RIGHT", "spaceBelow": {"unit": "PT"}},
+          "elements": [{"startIndex": 52, "endIndex": 53, "textRun": {"content": "\n", "textStyle": {"weightedFontFamily": {"fontFamily": "Roboto Mono", "weight": 400}}}}]
+        }
+      },
+      {
+        "startIndex": 53,
+        "endIndex": 55,
+        "paragraph": {
+          "paragraphStyle": {"namedStyleType": "NORMAL_TEXT", "direction": "LEFT_TO_RIGHT"},
+          "elements": [
+            {"startIndex": 53, "endIndex": 54, "textRun": {"content": "\ue907", "textStyle": {}}},
+            {"startIndex": 54, "endIndex": 55, "textRun": {"content": "\n", "textStyle": {}}}
+          ]
+        }
+      }
+    ]
+  }
+}
