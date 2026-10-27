@@ -310,6 +310,11 @@ def docs_read(
         include the preamble with heading_id=null. Mixed selections return
         valid content and diagnostics; all-unknown selections fail with
         HEADING_NOT_FOUND. Refresh IDs with docs_get_tree after that error.
+        Code reads use configured inline font/color matching, validated block
+        markers, and a configurable block-formatting heuristic enabled by
+        default. Recognized code omits visual style wrappers and preserves
+        literal block whitespace. Only marked blocks retain a language;
+        formatting heuristics never guess it. Reading does not create markers.
     """
     if isinstance(heading_ids, str):
         heading_ids = [heading_ids]

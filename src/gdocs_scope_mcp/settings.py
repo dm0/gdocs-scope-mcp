@@ -1,4 +1,4 @@
-"""Load code formatting defaults from JSON and environment overrides."""
+"""Load code formatting and recognition from JSON and environment."""
 
 import os
 from collections.abc import Iterator
@@ -6,7 +6,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from functools import lru_cache
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import Field, StringConstraints, field_validator
 from pydantic_settings import (
@@ -17,6 +17,11 @@ from pydantic_settings import (
 )
 from pygments.styles import get_style_by_name
 from pygments.util import ClassNotFound
+
+FontName = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1),
+]
+HexColor = Annotated[str, StringConstraints(pattern=r'^#[0-9a-fA-F]{6}$')]
 
 
 def config_path() -> Path:
@@ -36,7 +41,7 @@ def config_path() -> Path:
 
 
 class Settings(BaseSettings):
-    """Configure code font and inline color; environment overrides JSON."""
+    """Configure code formatting and reading; environment overrides JSON."""
 
     model_config = SettingsConfigDict(
         env_prefix='GOOGLE_DOCS_MCP_', extra='forbid', frozen=True,
@@ -54,6 +59,19 @@ class Settings(BaseSettings):
         float, Field(gt=0, allow_inf_nan=False),
     ] = 1.0
     code_block_theme_background: bool = False
+    code_block_named_ranges: bool = True
+    read_inline_code: bool = True
+    read_inline_code_fonts: list[FontName] | None = None
+    read_inline_code_colors: list[HexColor] | None = None
+    read_inline_code_match: Literal['font', 'color', 'both'] = 'both'
+    read_code_block_heuristic: bool = True
+    read_native_code_blocks: bool = True
+    read_code_block_fonts: list[FontName] | None = None
+    read_code_block_line_spacing: Annotated[
+        float, Field(gt=0, allow_inf_nan=False),
+    ] = 1.0
+    read_code_block_require_background: bool = False
+    read_code_block_min_lines: Annotated[int, Field(ge=1)] = 2
 
     @field_validator('code_block_style')
     @classmethod

@@ -1005,7 +1005,8 @@ def _insert_content(
             requests = prepared.requests
             body = {'requests': requests}
             if required_revision and any(
-                INSERT_ENTITY_KINDS.intersection(r) for r in requests
+                INSERT_ENTITY_KINDS.intersection(r) or 'createNamedRange' in r
+                for r in requests
             ):
                 body['writeControl'] = {
                     'requiredRevisionId': required_revision,

@@ -15,6 +15,7 @@ from rich.syntax import Syntax
 
 # isort: split
 from .code_highlighting import code_shading, code_spans
+from .code_reading import block_marker
 from .entities import chip_input, insertion_request
 from .models import (
     EditFailedResponse,
@@ -153,6 +154,8 @@ class InsertionParagraph(GoogleDocumentParagraph):
     item_key: int | None = None
     continuation: bool = False
     loose_list: bool = False
+    code_block: bool = False
+    code_language: str | None = None
 
 
 class DocsHTMLRenderer(mistune.HTMLRenderer):
@@ -415,6 +418,7 @@ def _convert_page_elements(
                     end = run.end_index
                 last = InsertionParagraph(
                     start_index=start, end_index=end, elements=runs,
+                    code_block=True, code_language=language,
                     paragraph_style=GoogleDocumentParagraphStyle(
                         named_style_type=GoogleDocumentNamedStyleType.NORMAL_TEXT,
                         line_spacing=(
@@ -522,9 +526,11 @@ def gpars_to_requests(
     paragraph_ranges = []
     font_style_requests = []
     code_paragraph_style_requests = []
+    code_markers = []
+    removed_tabs = []
     offset = 0
     for p in paragraphs:
-        if not len(p):
+        if not len(p) and not p.code_block:
             continue
         text_style_requests = []
         images = []
@@ -636,6 +642,11 @@ def gpars_to_requests(
         )
         requests.extend(text_style_requests)
         content_end = p.end_index + offset
+        if p.code_block and get_code_settings().code_block_named_ranges:
+            code_markers.append((p.code_language, content_start,
+                                 max(content_start + 1, content_end)))
+        if indent:
+            removed_tabs.extend(range(content_start, content_start + indent))
         paragraph_ranges.append((content_start, content_end))
         if p.bullet_preset:
             if list_ranges and list_ranges[-1]['key'] == p.list_key:
@@ -681,6 +692,18 @@ def gpars_to_requests(
                                        'indentFirstLine': indent},
                     'fields': 'indentStart,indentFirstLine',
                 }})
+    for language, start, end in code_markers:
+        final_start = start - sum(p < start for p in removed_tabs)
+        final_end = end - sum(p < end for p in removed_tabs)
+        try:
+            requests.append(block_marker(language, final_start, final_end))
+        except ValueError:
+            raise ToolFailureError(EditFailedResponse(
+                code='INVALID_ARGUMENT',
+                description='Code language label exceeds the named-range '
+                'metadata limit.',
+                suggested_action='Use a shorter language label.',
+            )) from None
     return requests
 
 

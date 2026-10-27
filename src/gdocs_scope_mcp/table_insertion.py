@@ -184,7 +184,7 @@ class TableInsertionPlan:
                     yield paragraphs
                     paragraphs = []
                 yield block
-            elif len(block):
+            elif len(block) or block.code_block:
                 paragraphs.append(block)
         if paragraphs:
             yield paragraphs
@@ -196,7 +196,7 @@ class TableInsertionPlan:
                 for row in block.cells:
                     for cell in row:
                         yield from cell.requests
-            elif len(block):
+            elif len(block) or block.code_block:
                 yield from self.paragraph_requests([block], self.start)
 
     def replace_image_uri(self, old: str, new: str) -> None:
