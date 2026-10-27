@@ -1,8 +1,8 @@
 # Checked table positions and selective cell snapshots
 
 Issue [#27](https://github.com/dm0/gdocs-scope-mcp/issues/27) supplies positional
-references and expected-state primitives for future table edits. It does not
-yet provide cell replacement or structural editing tools. Reading, reference
+references and expected-state primitives used by #28's `docs_table_patch`.
+Structural editing remains separate work. Reading, reference
 creation and snapshot validation are entirely read-only, including metadata
 and local state. No named ranges, local registry or signing key are used.
 
@@ -88,11 +88,15 @@ a fresh read/snapshot. TTL defaults to 86400 seconds; configure JSON
 `table_snapshot_ttl_seconds` or `GOOGLE_DOCS_MCP_TABLE_SNAPSHOT_TTL_SECONDS`
 from 1 to 604800 seconds. Table refs have no time expiry.
 
-Snapshot validation takes no lock. A future write must resolve and validate
-within its own call, then submit with requiredRevisionId from that fresh read.
-A racing write must be revalidated or rejected; old native indices must never
-be reused after an intervening change. These primitives do not themselves
-implement a content write or promise atomicity across separate MCP calls.
+Snapshot validation takes no lock. `docs_table_patch` resolves and validates
+within its own call, then submits all replacements in one batch with
+requiredRevisionId from that fresh read. Confirmed revision races trigger
+bounded revalidation of the original baseline and complete index replanning.
+Unknown write outcomes are never replayed. The patch requires `content` and
+`text_style` fields and checks every supplied group for changed cells, allowing
+a subset of a larger baseline. See the [patch contract](../README.md#docs_table_patchdoc_id-table_ref-base_token-changes).
+Separate snapshot/patch calls are not atomic together; validation during the
+patch and its strict revision precondition provide the actual write guard.
 
 ## Portability and integrity
 
@@ -127,3 +131,19 @@ uv run --locked pytest -q tests/test_live_table_identity.py::test_live_positiona
 The live fixtures verify source identity, independent processes and restart,
 capture stderr under `/tmp/gdocs-scope-mcp-table-probe-*`, restore the initial
 document body and reap all test servers.
+
+Cell-patch regressions also cover strict inputs, unsupported content, exact
+UTF-16 ranges, no-op clears, subset expectations, overlap, bounded contention
+and unknown outcomes. The live patch suite checks rich native readback,
+retained cell/paragraph properties, atomic API failure, read/write races under
+the general target setting and simultaneous disjoint/overlapping patches:
+
+```bash
+uv run --locked pytest -q tests/test_table_patch.py
+```
+
+With the explicitly authorized document environment set:
+
+```bash
+uv run --locked pytest -q tests/test_live_table_patch.py
+```

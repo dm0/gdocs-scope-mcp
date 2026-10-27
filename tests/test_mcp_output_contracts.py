@@ -710,7 +710,7 @@ def test_catalog_contract_covers_every_registered_tool():
         'docs_get_entity', 'docs_create_dropdown_definition',
         'docs_select_dropdown',
         'docs_tables_list', 'docs_table_read',
-        'docs_table_snapshot',
+        'docs_table_snapshot', 'docs_table_patch',
     }
 
 
@@ -1300,6 +1300,7 @@ def test_invalid_listing_token_has_restart_guidance(contract_api, name):
         ('docs_get_tree', True), ('docs_read', True),
         ('docs_tables_list', True), ('docs_table_read', True),
         ('docs_table_snapshot', True),
+        ('docs_table_patch', False),
         ('docs_list', True), ('docs_read_comments', True),
         ('docs_search_replace', False), ('docs_insert_before', False),
         ('docs_insert_after', False), ('docs_delete_paragraph', False),
@@ -1325,6 +1326,7 @@ def test_google_tools_declare_action_hints(name, read_only):
     assert hints.destructiveHint is (name in {
         'docs_search_replace', 'docs_batch_replace',
         'docs_delete_paragraph', 'docs_delete_comment',
+        'docs_table_patch',
     })
     assert hints.idempotentHint is (
         read_only or name in {'docs_delete_paragraph', 'docs_delete_comment'}
