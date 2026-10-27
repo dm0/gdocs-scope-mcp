@@ -5,11 +5,15 @@
 
 import re
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from bs4 import NavigableString, Tag
 
 from .models import EditFailedResponse
+from .revision_guards import (
+    RevisionRaceError,
+    submit as guarded_submit,
+)
 from .text_indices import utf16_length
 from .tool_errors import ToolFailureError
 
@@ -156,6 +160,7 @@ class TableInsertionPlan:
     blocks: list
     start: int
     newline_before: bool
+    completed_batches: int = field(default=0, init=False)
 
     def paragraph_requests(self, paragraphs: list, start: int) -> list[dict]:
         """Rebase paragraph/run positions at the current native cursor."""
@@ -232,11 +237,15 @@ class TableInsertionPlan:
                 required_revision: str | None = None, *,
                 table_borders: bool = True) -> None:
         """Insert each table, read real cell locations, then populate it."""
+        self.completed_batches = 0
         try:
             self._execute(service, doc_id, required_revision, table_borders)
+        except (RevisionRaceError, ToolFailureError):
+            raise
         except Exception as error:
             raise ToolFailureError(EditFailedResponse(
-                code='GOOGLE_API_ERROR',
+                code='PARTIAL_WRITE',
+                committed_batches=self.completed_batches,
                 description='Multi-stage table insertion stopped. Earlier '
                 'stages may already have changed the document.',
                 suggested_action='Read the document and inspect partial '
@@ -255,10 +264,8 @@ class TableInsertionPlan:
 
         def submit(requests):
             nonlocal revision
-            response = documents.batchUpdate(documentId=doc_id, body={
-                'requests': requests,
-                'writeControl': {'requiredRevisionId': revision},
-            }).execute()
+            response = guarded_submit(service, doc_id, requests, revision)
+            self.completed_batches += 1
             revision = response['writeControl']['requiredRevisionId']
 
         cursor = self.start

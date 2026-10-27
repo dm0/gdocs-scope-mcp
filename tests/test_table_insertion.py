@@ -226,6 +226,8 @@ def test_failure_reports_partial_result_without_retries():
     with pytest.raises(ToolFailureError) as failure:
         plan.execute(native.service, 'test')
     assert 'Earlier stages' in failure.value.failure.description
+    assert failure.value.failure.code == 'PARTIAL_WRITE'
+    assert failure.value.failure.committed_batches == 1
     assert 'before retrying' in failure.value.failure.suggested_action
     assert len(native.batches) == 1
 

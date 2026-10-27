@@ -38,7 +38,9 @@ def failure_from_exception(
 ) -> EditFailedResponse:
     """Classify known exceptions without exposing API bodies or internals."""
     # FastMCP wraps backend exceptions in ToolError, preserving their cause.
-    while isinstance(error.__cause__, Exception):
+    while not isinstance(error, ToolFailureError) and isinstance(
+        error.__cause__, Exception,
+    ):
         error = error.__cause__
     if isinstance(error, ToolFailureError):
         return error.failure

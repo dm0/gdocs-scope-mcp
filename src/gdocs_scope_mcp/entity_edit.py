@@ -7,6 +7,7 @@ import uuid
 
 from .entities import EntityDetails, EntityEditResponse, collect_entities
 from .models import EditFailedResponse
+from .revision_guards import revision_changed
 from .table_insertion import TableInsertionPlan
 from .tool_errors import ToolFailureError
 
@@ -88,6 +89,7 @@ def validate_insertions(service, doc_id, requests, required_revision=None):
         return
     document, tab, _ = _tab_document(service, doc_id)
     if required_revision and document['revisionId'] != required_revision:
+        revision_changed()
         _fail('Document changed while planning the smart-chip insertion. '
               'No insertion was submitted.', 'GOOGLE_API_ERROR')
     for request in entities:

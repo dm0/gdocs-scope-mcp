@@ -505,3 +505,106 @@ def test_cell_identity_does_not_fall_back_to_duplicate_text():
     }]}}}
     assert named(document, 'deleted') is None
     assert containing_cells(document, None) == []
+
+
+async def raced_edit(probe, tool, arguments, mutation,
+                     arm='probe_pause_read'):
+    """Force a separate process to write inside a public edit's read window."""
+    await probe.call(1, arm)
+    task = asyncio.create_task(probe.clients[1].call_tool(
+        tool, arguments, raise_on_error=False,
+    ))
+    try:
+        async with asyncio.timeout(25):
+            while not (await probe.call(1, 'probe_read_gate'))['ready']:
+                await asyncio.sleep(0.05)
+            await mutation()
+    finally:
+        await probe.call(1, 'probe_release_read')
+    return await asyncio.wait_for(task, timeout=30)
+
+
+@pytest.mark.parametrize('scenario', ['shift', 'overlap', 'append', 'table'])
+def test_live_public_edit_revision_race(live_test_doc, table_probe, scenario):
+    """Exercise actual guarded public tools, not only raw API probes."""
+    async def run():
+        async with table_probe('public-' + scenario) as probe:
+            before = await probe.read()
+            probe.initial_body = before['body']
+            probe.start = before['body']['content'][-1]['endIndex'] - 1
+            await probe.call(0, 'docs_append', {
+                'doc_id': live_test_doc,
+                'text': 'Guard prefix😀\n\n### Guard scope\n\n'
+                        'Guard target 🦷 phrase\n\nGuard independent\n\n'
+                        'Guard tail',
+            })
+            native = await probe.read()
+            heading = next(item['paragraph']['paragraphStyle']['headingId']
+                           for item in native['body']['content']
+                           if paragraph_text(item) == 'Guard scope\n')
+            arguments = {'doc_id': live_test_doc}
+            arm = 'probe_pause_read'
+            if scenario in {'append', 'table'}:
+                tool = 'docs_append'
+                arguments.update(text='Guard ours appended😀', rich=False)
+                if scenario == 'table':
+                    arguments.update(text='| Guard header |\n| --- |\n'
+                                     '| Guard cell |', rich=True)
+                    arm = 'probe_pause_table_lookup'
+
+                async def mutation():
+                    """Commit an independent append before the stale write."""
+                    await probe.call(0, 'docs_append', {
+                        'doc_id': live_test_doc,
+                        'text': 'Guard collaborator appended🦷', 'rich': False,
+                    })
+            else:
+                tool = 'docs_search_replace'
+                arguments.update(find='Guard target 🦷 phrase',
+                                 replace='Guard ours replacement😀',
+                                 heading_id=heading)
+
+                async def mutation():
+                    """Either shift indices or overlap the original target."""
+                    if scenario == 'shift':
+                        await probe.call(0, 'docs_insert_before', {
+                            'doc_id': live_test_doc,
+                            'anchor': 'Guard prefix😀',
+                            'text': 'Guard collaborator prefix🦷',
+                            'rich': False,
+                        })
+                    else:
+                        await probe.call(0, 'docs_search_replace', {
+                            'doc_id': live_test_doc,
+                            'find': 'Guard target 🦷 phrase',
+                            'replace': 'Guard collaborator replacement😀',
+                            'heading_id': heading,
+                        })
+            result = await raced_edit(probe, tool, arguments, mutation, arm)
+            content = ''.join(paragraph_text(item) for item in (
+                await probe.read())['body']['content'])
+            if scenario == 'table':
+                assert result.is_error
+                assert result.structured_content['code'] == 'PARTIAL_WRITE'
+                assert result.structured_content['committed_batches'] == 1
+                native = await probe.read()
+                assert len(probe.tables(native)) == 1
+                assert 'Guard collaborator appended🦷' in content
+                assert 'Guard header' not in content
+            elif scenario == 'overlap':
+                assert result.is_error
+                assert result.structured_content['code'] == 'EDIT_CONFLICT'
+                assert 'Guard collaborator replacement😀' in content
+                assert 'Guard ours replacement😀' not in content
+            elif scenario == 'append':
+                assert not result.is_error, result.structured_content
+                assert content.count('Guard ours appended😀') == 1
+                assert content.count('Guard collaborator appended🦷') == 1
+                assert content.index('Guard collaborator appended🦷') < (
+                    content.index('Guard ours appended😀'))
+            else:
+                assert not result.is_error, result.structured_content
+                assert 'Guard collaborator prefix🦷' in content
+                assert content.count('Guard ours replacement😀') == 1
+            probe.report['checks_passed'] = True
+    asyncio.run(run())

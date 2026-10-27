@@ -1250,6 +1250,20 @@ authorization rules before opting in. Ordinary unit tests remain offline.
 Table identity and concurrent-write probes use two isolated STDIO processes.
 See the [development findings and reproduction instructions](docs/table-identity.md).
 
+Indexed edits use revision guards and up to three attempts. After a confirmed
+revision race, unchanged unambiguous targets are validated and positions
+recalculated; overlapping, deleted or ambiguous targets fail. Concurrent
+appends use the current end. Unknown write outcomes and completed table stages
+are never automatically replayed. Batch replacement remains atomic; table
+insertion and Docs-anchor/Drive-comment creation span separate writes.
+
+By default this protects the backend read-to-write window. Optionally pass
+`expected_revision_id` from an earlier document read for a strict precondition
+that rejects any intervening change and disables rebasing. Native replace-all
+keeps execution-time matching and rejects that parameter. Errors include
+`committed_batches`; an unknown pending write might also have committed.
+See [concurrent edit guarantees, retry limits and recovery](docs/concurrent-edits.md).
+
 ```
 docs_append(doc_id="...", text="Document last updated: March 2026.")
 ```
