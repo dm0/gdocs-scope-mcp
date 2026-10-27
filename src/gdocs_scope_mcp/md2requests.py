@@ -642,7 +642,7 @@ def gpars_to_requests(
         )
         requests.extend(text_style_requests)
         content_end = p.end_index + offset
-        if p.code_block:
+        if p.code_block and get_code_settings().code_block_named_ranges:
             code_markers.append((p.code_language, content_start,
                                  max(content_start + 1, content_end)))
         if indent:

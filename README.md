@@ -812,6 +812,13 @@ Markers are document metadata visible to collaborators and API clients, not
 visible text. They are not automatically recreated when copying plain text.
 Copying the returned Markdown through rich insertion creates fresh markers.
 
+Set `code_block_named_ranges=false` to stop creating and reading code markers.
+Existing ranges remain in the document but are ignored, including malformed
+ranges that would otherwise exclude content from heuristics. Only enabled
+formatting/native-block heuristics are used, without retaining a language.
+This switch applies only to code metadata; comment-anchor named ranges are
+unaffected. It is enabled by default.
+
 Google can shrink or split named ranges during editing. In particular, replacing
 text at a block boundary can invalidate its marker; a stale range is never
 silently expanded to include neighboring prose. Deleting or clearing a block
@@ -871,6 +878,7 @@ An absent default file is allowed; an explicitly selected file must exist.
   "code_block_style": "default",
   "code_block_line_spacing": 1.0,
   "code_block_theme_background": false,
+  "code_block_named_ranges": true,
   "read_inline_code": true,
   "read_inline_code_fonts": null,
   "read_inline_code_colors": null,
@@ -911,6 +919,7 @@ Environment variables override individual file settings:
 | `GOOGLE_DOCS_MCP_CODE_BLOCK_STYLE` | `code_block_style` | `default` |
 | `GOOGLE_DOCS_MCP_CODE_BLOCK_LINE_SPACING` | `code_block_line_spacing` | `1.0` |
 | `GOOGLE_DOCS_MCP_CODE_BLOCK_THEME_BACKGROUND` | `code_block_theme_background` | `false` |
+| `GOOGLE_DOCS_MCP_CODE_BLOCK_NAMED_RANGES` | `code_block_named_ranges` | `true` |
 | `GOOGLE_DOCS_MCP_READ_INLINE_CODE` | `read_inline_code` | `true` |
 | `GOOGLE_DOCS_MCP_READ_INLINE_CODE_FONTS` | `read_inline_code_fonts` | `null` (insertion font) |
 | `GOOGLE_DOCS_MCP_READ_INLINE_CODE_COLORS` | `read_inline_code_colors` | `null` (insertion color) |

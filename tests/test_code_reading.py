@@ -246,6 +246,38 @@ def test_code_marker_write_is_revision_guarded(mock_docs):
     assert 'createNamedRange' in body['requests'][-1]
 
 
+def test_named_ranges_are_enabled_by_default():
+    """Keep language-preserving code markers enabled without configuration."""
+    assert Settings().code_block_named_ranges is True
+
+
+def test_disabled_named_ranges_are_not_created(mock_docs, monkeypatch):
+    """Keep rich code styling while disabling only code metadata writes."""
+    monkeypatch.setenv('GOOGLE_DOCS_MCP_CODE_BLOCK_NAMED_RANGES', 'false')
+    docs_edit.append('example', '```python\nx = 1\n```')
+    requests = mock_docs.batchUpdate.call_args.kwargs['body']['requests']
+    assert not any('createNamedRange' in request for request in requests)
+    assert any('updateTextStyle' in request for request in requests)
+
+
+@pytest.mark.parametrize('malformed', [False, True])
+def test_disabled_named_ranges_do_not_affect_reading(
+    code_document, monkeypatch, malformed,
+):
+    """Ignore both valid and broken markers, allowing formatting heuristics."""
+    monkeypatch.setenv('GOOGLE_DOCS_MCP_CODE_BLOCK_NAMED_RANGES', 'false')
+    monkeypatch.setenv('GOOGLE_DOCS_MCP_READ_CODE_BLOCK_HEURISTIC', 'true')
+    doc = code_document(['first\n', 'second\n'], style=FONT,
+                        paragraph_style={'lineSpacing': 100}, marked=True)
+    if malformed:
+        named = next(iter(doc['namedRanges'].values()))['namedRanges'][0]
+        named['ranges'].append({'startIndex': 1, 'endIndex': 4})
+    assert render(doc) == '```\nfirst\nsecond\n```\n\n'
+    monkeypatch.setenv('GOOGLE_DOCS_MCP_READ_CODE_BLOCK_HEURISTIC', 'false')
+    get_settings.cache_clear()
+    assert render(doc) == 'first\n\nsecond\n\n'
+
+
 def test_block_heuristic_is_enabled_by_default(monkeypatch):
     """Use the default policy requested for documents without code markers."""
     monkeypatch.delenv('GOOGLE_DOCS_MCP_READ_CODE_BLOCK_HEURISTIC')

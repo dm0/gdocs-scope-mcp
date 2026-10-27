@@ -59,6 +59,7 @@ class Settings(BaseSettings):
         float, Field(gt=0, allow_inf_nan=False),
     ] = 1.0
     code_block_theme_background: bool = False
+    code_block_named_ranges: bool = True
     read_inline_code: bool = True
     read_inline_code_fonts: list[FontName] | None = None
     read_inline_code_colors: list[HexColor] | None = None
