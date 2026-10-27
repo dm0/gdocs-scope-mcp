@@ -6,7 +6,7 @@ import threading
 
 from googleapiclient.errors import HttpError
 
-from gdocs_scope_mcp import docs_edit, table_insertion
+from gdocs_scope_mcp import docs_edit, table_insertion, table_patch
 from gdocs_scope_mcp.server import mcp
 from gdocs_scope_mcp.tool_logging import configure_logging
 
@@ -14,7 +14,8 @@ ALLOWED = {
     'createNamedRange', 'deleteNamedRange', 'insertText',
     'deleteContentRange', 'insertTableRow', 'deleteTableRow',
     'insertTableColumn', 'deleteTableColumn', 'mergeTableCells',
-    'unmergeTableCells', 'updateTextStyle',
+    'unmergeTableCells', 'updateTextStyle', 'updateParagraphStyle',
+    'updateTableCellStyle',
 }
 
 
@@ -65,6 +66,8 @@ _release = threading.Event()
 _gate = {'armed': False, 'ready': False, 'kind': 'read'}
 _read = docs_edit._get_document
 _submit_table = table_insertion.guarded_submit
+_submit_patch = table_patch.submit
+_patch_fault = {'armed': False}
 
 
 def _paused_read(service, doc_id, **kwargs):
@@ -98,6 +101,30 @@ def _paused_table_submit(service, doc_id, requests, revision, **kwargs):
 
 
 table_insertion.guarded_submit = _paused_table_submit
+
+
+def _atomic_failure(service, doc_id, requests, *args, **kwargs):
+    """Inject one invalid request into an explicitly armed patch batch."""
+    with _gate_lock:
+        fail = _patch_fault['armed']
+        _patch_fault['armed'] = False
+    if fail:
+        requests = [*requests, {'deleteContentRange': {'range': {
+            'startIndex': 0, 'endIndex': 999999999,
+        }}}]
+    return _submit_patch(service, doc_id, requests, *args, **kwargs)
+
+
+table_patch.submit = _atomic_failure
+
+
+@mcp.tool
+def probe_fail_next_patch() -> dict:
+    """Arm a single native atomic-failure check in this test-only server."""
+    _document_id()
+    with _gate_lock:
+        _patch_fault['armed'] = True
+    return {'armed': True}
 
 
 @mcp.tool

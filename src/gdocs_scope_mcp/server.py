@@ -46,7 +46,7 @@ from fastmcp import FastMCP
 from googleapiclient.discovery import build
 from pydantic import BaseModel, Field, TypeAdapter
 
-from . import docs_edit, entity_edit, table_read, table_snapshots
+from . import docs_edit, entity_edit, table_patch, table_read, table_snapshots
 from .diagnostics import ServerInfo, capture_server_info
 from .entities import (
     DropdownOptions,
@@ -71,6 +71,7 @@ from .models import (
     ResolveCommentResponse,
 )
 from .settings import code_formatting, get_settings
+from .table_patch import CellPatches, PatchResponse
 from .table_read import (
     CellLimit,
     CellPreviewLimit,
@@ -213,6 +214,7 @@ EDITING TOOLS:
     docs_tables_list       Discover first-tab tables and compact previews
     docs_table_read        Read table/cell pages and geometry
     docs_table_snapshot    Issue/validate selective cell-state expectations
+    docs_table_patch       Atomically replace selected Markdown cells
     docs_search_replace    Find and replace text (occurrence-targeted or all)
     docs_insert_after      Insert text after a specified paragraph anchor text
     docs_insert_before     Insert text before a specified paragraph anchor text
@@ -464,12 +466,53 @@ def docs_table_snapshot(
     not signed capabilities; no local key or document bindings are used.
     Expired/corrupt tokens,
     changed/deleted/ambiguous targets and property conflicts fail explicitly.
-    Reads/validates only; future writes must revalidate and use strict CAS.
+    Reads/validates only. Use the returned state to prepare docs_table_patch.
+    Markdown patches require content and text_style expectations; defaults
+    include both. Patches revalidate internally and use strict CAS.
     """
     return table_snapshots.snapshot(
         doc_id, table_ref, cells,
         fields or ['content', 'text_style', 'paragraph_style'], base_token,
     )
+
+
+@mcp.tool(
+    output_schema=_tool_response_schema(PatchResponse),
+    annotations={'readOnlyHint': False, 'destructiveHint': True,
+                 'idempotentHint': False, 'openWorldHint': True},
+)
+def docs_table_patch(
+    doc_id: str, table_ref: ReadReference, base_token: SnapshotToken,
+    changes: CellPatches,
+) -> PatchResponse:
+    """Replace selected Markdown cells in one strictly guarded atomic batch.
+
+    changes is 1-100 objects {address:"A1", markdown:"new **text**"}; an empty
+    string clears a cell. Use a docs_table_snapshot base_token containing at
+    least content and text_style expectations. Changes can select a subset of
+    its cells; every supplied field group is checked for affected cells only.
+
+    Supports inline emphasis, underline, strike, links, inline code, super/sub
+    and br soft breaks in single-paragraph unmerged text cells. Blocks, lists,
+    images, chips, suggestions and complex targets fail before any write.
+    Replaces inline text styles, retaining paragraph/cell properties and the
+    mandatory final newline. At most 100000 total Markdown characters and
+    1000 native requests; previews are bounded to 200 Unicode code points.
+
+    Rechecks table position/structure and selected state at each attempt,
+    recalculates UTF-16 positions and uses requiredRevisionId even when the
+    server's general revision mode is target. Up to three attempts after
+    confirmed revision races; independent cell edits/index shifts are allowed.
+    Overlap returns EDIT_CONFLICT; changed layout returns TARGET_CHANGED;
+    exhausted contention returns REVISION_RETRY_EXHAUSTED. An unknown write
+    outcome is never retried automatically; inspect the document first.
+
+    Receipts include applied_count, per-cell text previews/full character and
+    UTF-16 counts, attempts, committed_batches and resulting revision_id.
+    An all-empty-to-empty patch makes no write (committed_batches=0).
+    Section-position semantics and identical-table swap limits still apply.
+    """
+    return table_patch.patch(doc_id, table_ref, base_token, changes)
 
 
 @mcp.tool(

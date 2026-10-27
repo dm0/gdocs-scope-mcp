@@ -38,6 +38,9 @@ well suited to large Google Docs with structured headings.
 - **Validate independent table edits.** Use checked table positions and A1 cell
   addresses across MCP processes. Selective snapshots detect changed cell
   properties while allowing independent edits, without document metadata writes.
+- **Patch table cells atomically.** Replace selected cells with inline Markdown
+  in one guarded batch, preserving cell/paragraph properties. Revision races
+  trigger bounded revalidation; overlapping changes fail without overwriting.
 - **Insert images.** Use Markdown or HTML image references, or explicitly enable
   local image uploads through temporary, link-shared Google Drive files that
   are cleaned up after insertion.
@@ -588,9 +591,9 @@ Merged heads preserve spans. Covered physical slots have `covered_by` but no
 independent `cell_ref`. Unsupported or inconsistent geometry is flagged, with
 null logical columns/cell handles. Geometry verification is limited to grids
 of at most 100,000 logical slots. Their content remains readable in pages.
-`simple_text_target` describes conservative structural eligibility, not an
-available table editing tool: cells in merged tables, nested/complex cells and
-non-text content are explicitly flagged. Current tools provide reading only.
+`simple_text_target` describes conservative structural eligibility; the patch
+tool also validates snapshots and native target details. Cells in merged
+tables, nested/complex cells and non-text content are explicitly flagged.
 
 References describe checked **section positions**: heading ID ancestry, the
 table's ordinal in its direct section, and hashes of its structure and the
@@ -639,8 +642,10 @@ truncation flags), current coordinates, revision and renewed expectations.
 Prepare an edit from that returned state; if clipped, obtain complete content
 before preparing a replacement. The token hashes complete native state even
 when the preview is clipped. A snapshot does not reserve cells or perform
-writes. A future write tool must revalidate inside its call and use strict CAS
-against that fresh revision.
+writes. `docs_table_patch` revalidates inside its call and uses strict CAS
+against that fresh revision. Its baseline must include `content` and
+`text_style`; the default snapshot fields include both. A content-only snapshot
+can be validated but cannot guard a Markdown replacement that changes styles.
 
 ```python
 table_ref = page["tables"][0]["table_ref"]
@@ -659,6 +664,64 @@ default; set JSON
 to an integer between 1 and 604,800 seconds.
 
 See [positional references, dependency groups and limits](docs/table-references.md).
+
+#### `docs_table_patch(doc_id, table_ref, base_token, changes)`
+
+Replace 1-100 cells with typed changes such as
+`[{"address": "A2", "markdown": "New **value**<br>next line"}]`.
+Use the content returned by a default `docs_table_snapshot` to prepare the
+replacement. The patch may select a subset of the snapshot's cells; unused
+cells do not create conflicts. Every field group included in the baseline
+is checked for affected cells. The baseline must include `content` and
+`text_style` because a Markdown replacement changes both.
+
+```python
+base = docs_table_snapshot(doc_id="...", table_ref=table_ref, cells=["A2", "B2"])
+# Inspect base["cells"] and prepare the complete replacements.
+result = docs_table_patch(
+    doc_id="...", table_ref=table_ref, base_token=base["base_token"],
+    changes=[{"address": "A2", "markdown": "**Updated** 🦷<br>second line"},
+             {"address": "B2", "markdown": ""}],
+)
+```
+
+The initial subset is one ordinary text paragraph per target, unmerged table
+geometry and no nested tables in the target table's cells. Bold, italic,
+underline, strikethrough, links, inline code, superscript/subscript and HTML
+`br` are supported. Markdown soft source wraps become spaces. Use `br` for a
+native U+000B soft break. Empty Markdown clears the cell's text. Images, smart
+chips, lists, block content, tracked suggestions and unsupported native
+structures fail before any write. Full text and inline styles are replaced;
+unspecified inline styles reset to inherited defaults. Paragraph properties,
+cell background/borders/padding and the mandatory final newline are retained.
+An independent background change therefore remains compatible unless the
+caller explicitly included `cell_style` among its snapshot expectations.
+Characters that Google silently strips from inserted text are rejected,
+including decoded HTML entities, to keep UTF-16 style ranges correct.
+See Google's [text insertion rules](https://developers.google.com/workspace/docs/api/concepts/rules-behavior#insert_text).
+
+All changed cells are planned from the same fresh snapshot, in descending
+native index order, and submitted in **one atomic batchUpdate**. The tool
+always uses `requiredRevisionId`, including with server revision mode `target`.
+A confirmed revision race causes a fresh read, structural/state revalidation
+and UTF-16 replanning, with at most three attempts. It never replaces the
+agent's baseline with a new one during retries. Nonintersecting cell edits and
+ordinary text shifts can succeed; genuine overlap returns `EDIT_CONFLICT`,
+changed structure returns `TARGET_CHANGED`, expired expectations return
+`SNAPSHOT_EXPIRED`. Repeated contention returns `REVISION_RETRY_EXHAUSTED`:
+retry later with the same token if still valid. `WRITE_OUTCOME_UNKNOWN` means
+the write may have committed and **must not be blindly repeated**; inspect the
+document first.
+
+Receipts include `document_id`, `table_ref`, resulting `revision_id`,
+`applied_count`, `attempts`, `committed_batches` and per-cell text previews
+(up to 200 Unicode code points), full text lengths, truncation flags and native
+UTF-16 inserted/deleted counts. Counts exclude the preserved final newline;
+preview soft breaks display as ordinary line breaks. An all-empty-to-empty
+patch sends no write and reports `committed_batches=0`; otherwise one batch
+commits all cells or none. Inputs are limited to 100000 total Markdown
+characters and 1000 generated native requests. Positional reference semantics
+and identical-structure swap/replacement limits remain unchanged.
 
 ---
 
