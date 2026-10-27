@@ -1247,6 +1247,9 @@ Choose a disposable document that you are authorized to modify. Test insertions
 remain in the document; temporary source images are deleted. Follow any workspace
 authorization rules before opting in. Ordinary unit tests remain offline.
 
+Table identity and concurrent-write probes use two isolated STDIO processes.
+See the [development findings and reproduction instructions](docs/table-identity.md).
+
 ```
 docs_append(doc_id="...", text="Document last updated: March 2026.")
 ```
