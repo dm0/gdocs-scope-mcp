@@ -710,6 +710,7 @@ def test_catalog_contract_covers_every_registered_tool():
         'docs_get_entity', 'docs_create_dropdown_definition',
         'docs_select_dropdown',
         'docs_tables_list', 'docs_table_read',
+        'docs_table_snapshot',
     }
 
 
@@ -1298,6 +1299,7 @@ def test_invalid_listing_token_has_restart_guidance(contract_api, name):
     [
         ('docs_get_tree', True), ('docs_read', True),
         ('docs_tables_list', True), ('docs_table_read', True),
+        ('docs_table_snapshot', True),
         ('docs_list', True), ('docs_read_comments', True),
         ('docs_search_replace', False), ('docs_insert_before', False),
         ('docs_insert_after', False), ('docs_delete_paragraph', False),

@@ -1,5 +1,11 @@
 # Table identity and concurrent writes
 
+The implemented reference contract is now based on checked section positions
+and structural hashes, with A1 cell addresses and selective snapshots. See
+[table references](table-references.md). The named-range probes and candidate
+native-identity strategy below remain research evidence; the production table
+tools do not create bindings or require a local key.
+
 Research for [issue #25](https://github.com/dm0/gdocs-scope-mcp/issues/25).
 These are API observations and a proposed contract for later table tools;
 this change does not introduce public table-editing tools or persistent refs.
@@ -102,7 +108,7 @@ These tests exercise real request interleaving across two processes, not two
 different OAuth identities. They do not establish ordering fairness, long-term
 revision retention, or behavior with simultaneous human UI edits.
 
-## Recommended identity and write strategy
+## Candidate native-identity strategy (research only)
 
 1. Discover from a fresh native snapshot. Create document-local metadata refs
    bound to native named-range IDs, never visible ID text. Names, table

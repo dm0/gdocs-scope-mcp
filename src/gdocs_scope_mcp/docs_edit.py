@@ -81,6 +81,7 @@ from .revision_guards import (
 )
 from .table_insertion import TableInsertionPlan
 from .table_read import reference_map
+from .table_refs import first_tab
 from .text_indices import utf16_length
 from .tool_errors import ToolFailureError
 
@@ -266,18 +267,19 @@ def _get_service(api: str = 'docs', version: str = 'v1'):
 SUGGESTIONS_VIEW_MODE = 'SUGGESTIONS_INLINE'
 
 
-def _get_document(service, doc_id: str) -> dict:
+def _get_document(service, doc_id: str, *, include_tabs=False) -> dict:
     """
     Fetch a document with inline suggestions so returned indices stay usable
 
     for later batchUpdate calls.
     """
+    arguments = {'documentId': doc_id,
+                 'suggestionsViewMode': SUGGESTIONS_VIEW_MODE}
+    if include_tabs:
+        arguments['includeTabsContent'] = True
     return remember_snapshot(
         service.documents()
-        .get(
-            documentId=doc_id,
-            suggestionsViewMode=SUGGESTIONS_VIEW_MODE,
-        )
+        .get(**arguments)
         .execute()
     )
 
@@ -721,7 +723,7 @@ def read(
     Read Google document or its parts including all nested headings.
     """
     service = _get_service('docs', 'v1')
-    doc = _get_document(service, doc_id)
+    doc = first_tab(_get_document(service, doc_id, include_tabs=True))
 
     doc['table_refs'] = reference_map(doc)
     google_doc = _parse_document_tree(doc)

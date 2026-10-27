@@ -84,7 +84,13 @@ def table_source(mock_docs, simple_document):
             native,
         )
         return native
-    yield build
+    return build
+
+
+@pytest.fixture(autouse=True)
+def read_only_boundary(mock_docs):
+    """Keep every discovery regression free of metadata/content writes."""
+    yield
     mock_docs.batchUpdate.assert_not_called()
 
 
@@ -211,30 +217,27 @@ def test_cursor_binds_filter_and_output_options():
                                 page_token=listing.next_page_token)
 
 
-def test_revision_change_invalidates_refs_and_cursors(source):
-    """Even identical replacement content cannot silently reuse an old path."""
+def test_revision_change_invalidates_only_page_cursors(source):
+    """Positional refs survive a revision; pagination needs one snapshot."""
     listing = table_read.tables_list('example', limit=1)
     ref = listing.tables[0].table_ref
     source['revisionId'] = 'changed'
-    for operation in [
-        lambda: table_read.table_read('example', ref),
-        lambda: table_read.tables_list('example', limit=1,
-                                       page_token=listing.next_page_token),
-    ]:
-        with pytest.raises(ToolFailureError) as caught:
-            operation()
-        assert caught.value.failure.code == 'STALE_REFERENCE'
+    assert table_read.table_read('example', ref)
+    with pytest.raises(ToolFailureError) as caught:
+        table_read.tables_list('example', limit=1,
+                                page_token=listing.next_page_token)
+    assert caught.value.failure.code == 'STALE_REFERENCE'
 
 
-def test_table_fingerprint_detects_changed_path_at_same_revision(source):
-    """Validate the snapshot as well as the opaque structural path."""
+def test_table_structure_reference_allows_text_changes(source):
+    """Selected-state snapshots, not table refs, detect content changes."""
     ref = table_read.tables_list('example').tables[0].table_ref
     row = source['body']['content'][2]['table']['tableRows'][0]
     run = row['tableCells'][0]['content'][0]['paragraph']['elements'][0]
     run['textRun']['content'] = 'new\n'
-    with pytest.raises(ToolFailureError) as caught:
-        table_read.table_read('example', ref)
-    assert caught.value.failure.code == 'STALE_REFERENCE'
+    result = table_read.table_read('example', ref)
+    assert result.rows[0].cells[0].markdown == 'new'
+    assert result.table.table_ref == ref
 
 
 @pytest.mark.parametrize('bad', ['bad', 'gdt1.bad.00', 'x' * 8193])
