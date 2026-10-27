@@ -863,6 +863,18 @@ insufficient. This is observed, undocumented behavior and may change. A
 normalized capture is covered by offline tests. The UI-selected language is not
 inferred from colors or delimiter text.
 
+**Native code-block creation is not supported by the public Docs API.** The
+published request schema provides no native block creation or language-setting
+operation. Sending the observed U+E907 boundaries through `insertText` does not
+create a block: Google strips characters in U+E000–U+F8FF from inserted text.
+An opt-in live capability probe verifies that behavior. Rich code insertion
+therefore creates formatted ordinary paragraphs with optional named-range
+metadata, rather than claiming to create a native widget. In the Google Docs
+UI, the native widget's language is selected from its dropdown. A Markdown
+fence language controls this MCP's Pygments highlighting and optional metadata;
+it does not select a native widget language. See Google's
+[InsertTextRequest reference](https://developers.google.com/workspace/docs/api/reference/rest/v1/documents/request#InsertTextRequest).
+
 Named-range behavior and limits are documented in Google's
 [named ranges guide](https://developers.google.com/workspace/docs/api/how-tos/named-ranges).
 
