@@ -67,9 +67,9 @@ _read = docs_edit._get_document
 _submit_table = table_insertion.guarded_submit
 
 
-def _paused_read(service, doc_id):
+def _paused_read(service, doc_id, **kwargs):
     """Pause one environment-selected read after taking its native snapshot."""
-    document = _read(service, doc_id)
+    document = _read(service, doc_id, **kwargs)
     with _gate_lock:
         pause = (_gate['armed'] and _gate['kind'] == 'read'
                  and doc_id == _document_id())

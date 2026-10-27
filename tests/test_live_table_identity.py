@@ -563,7 +563,7 @@ def test_live_read_only_table_discovery(live_test_doc, table_probe):
                 'doc_id': live_test_doc, 'table_ref': first['table_ref'],
             }, raise_on_error=False)
             assert stale.is_error
-            assert stale.structured_content['code'] == 'STALE_REFERENCE'
+            assert stale.structured_content['code'] == 'TARGET_CHANGED'
             refreshed = await probe.call(0, 'docs_tables_list', {
                 'doc_id': live_test_doc,
             })
@@ -578,6 +578,155 @@ def test_live_read_only_table_discovery(live_test_doc, table_probe):
             assert covered[0]['cell_ref'] is None
             assert not covered[0]['simple_text_target']
             assert (await probe.read())['revisionId'] == current['revisionId']
+            probe.report['checks_passed'] = True
+    asyncio.run(run())
+
+
+def test_live_positional_table_references(
+    live_test_doc, table_probe, isolated_mcp,
+):
+    """Validate selective state across processes without identity metadata."""
+    async def run():
+        async with table_probe('positions') as probe:
+            before = await probe.seed(live_test_doc)
+            listing = await probe.call(0, 'docs_tables_list', {
+                'doc_id': live_test_doc,
+            })
+            ref = listing['tables'][-2]['table_ref']
+            native = before
+            detail = await probe.call(1, 'docs_table_read', {
+                'doc_id': live_test_doc, 'table_ref': ref,
+            })
+            assert detail['table']['reference_semantics'] == 'section_position'
+            target_ref = detail['rows'][1]['cells'][1]['cell_ref']
+            arguments = {'doc_id': live_test_doc, 'table_ref': ref,
+                         'cells': ['B2'], 'fields': ['content']}
+            base = await probe.call(0, 'docs_table_snapshot', arguments)
+            arguments['base_token'] = base['base_token']
+            # A different process changes another cell and shifts all indices.
+            first = probe.tables(native)[0]
+            neighbor = first['table']['tableRows'][0]['tableCells'][0]
+            await probe.batch(replacement(neighbor, 'independent😀'), native,
+                              client=1)
+            native = await probe.read()
+            first = probe.tables(native)[0]
+            await probe.batch([{'insertText': {
+                'location': {'index': first['startIndex'] - 1},
+                'text': 'prefix🦷\n',
+            }}], native, client=1)
+            checked = await probe.call(0, 'docs_table_snapshot', arguments)
+            assert checked['validated']
+            assert (checked['cells'][0]['row'],
+                    checked['cells'][0]['column']) == (1, 1)
+            detail = await probe.call(1, 'docs_table_read', {
+                'doc_id': live_test_doc, 'table_ref': ref,
+            })
+            assert detail['table']['table_ref'] == ref
+            assert detail['rows'][1]['cells'][1]['cell_ref'] == target_ref
+            # Clearing/refilling retains the address, changes expectations.
+            for value in ['', 'refilled😀']:
+                native = await probe.read()
+                target = probe.tables(native)[0]['table']['tableRows'][1][
+                    'tableCells'][1]
+                await probe.batch(replacement(target, value), native, client=1)
+                stale = await probe.clients[0].call_tool(
+                    'docs_table_snapshot', arguments, raise_on_error=False,
+                )
+                assert stale.is_error
+                assert stale.structured_content['code'] == 'EDIT_CONFLICT'
+                fresh = {k: v for k, v in arguments.items()
+                         if k != 'base_token'}
+                current = await probe.call(0, 'docs_table_snapshot', fresh)
+                assert current['cells'][0]['row'] == 1
+            arguments['base_token'] = current['base_token']
+            # A third normal server knows nothing about the original read.
+            log = Path('/tmp/gdocs-scope-mcp-table-positions-restart.log')
+            async with isolated_mcp(log) as (client, info):
+                probe.report['restarted_server'] = info
+                checked = await client.call_tool('docs_table_snapshot',
+                                                  arguments)
+                assert checked.structured_content['validated']
+            probe.report['restart_reaped'] = True
+            # Structural edits require rediscovery instead of rebasing cells.
+            for operation in ['insertTableRow', 'insertTableColumn']:
+                native = await probe.read()
+                fresh = await probe.call(0, 'docs_tables_list', {
+                    'doc_id': live_test_doc,
+                })
+                previous_ref = fresh['tables'][-2]['table_ref']
+                await probe.batch([{operation: {
+                    'tableCellLocation': table_location(
+                        probe.tables(native)[0], 0, 0,
+                    ),
+                    ('insertBelow' if operation == 'insertTableRow'
+                     else 'insertRight'): False,
+                }}], native, client=1)
+                stale = await probe.clients[0].call_tool('docs_table_read', {
+                    'doc_id': live_test_doc, 'table_ref': previous_ref,
+                }, raise_on_error=False)
+                assert stale.is_error
+                assert stale.structured_content['code'] == 'TARGET_CHANGED'
+            native = await probe.read()
+            assert native.get('namedRanges', {}) == before.get(
+                'namedRanges', {},
+            )
+            probe.report['checks_passed'] = True
+    asyncio.run(run())
+
+
+def test_live_positional_structure_invalidation(live_test_doc, table_probe):
+    """Guard merge/unmerge state changes and removed original cells."""
+    async def run():
+        async with table_probe('position-structure') as probe:
+            await probe.seed(live_test_doc)
+            listing = await probe.call(0, 'docs_tables_list', {
+                'doc_id': live_test_doc,
+            })
+            refs = [t['table_ref'] for t in listing['tables'][-2:]]
+            original = await probe.call(0, 'docs_table_read', {
+                'doc_id': live_test_doc, 'table_ref': refs[0],
+            })
+            cell_refs = [c['cell_ref'] for c in original['rows'][1]['cells']]
+            expectations = {'doc_id': live_test_doc, 'table_ref': refs[0],
+                            'cells': ['A2', 'B2'], 'fields': ['content']}
+            base = await probe.call(0, 'docs_table_snapshot', expectations)
+            expectations['base_token'] = base['base_token']
+            for operation in ['mergeTableCells', 'unmergeTableCells']:
+                native = await probe.read()
+                location = table_location(probe.tables(native)[0], 1, 0)
+                await probe.batch([{operation: {'tableRange': {
+                    'tableCellLocation': location,
+                    'rowSpan': 1, 'columnSpan': 2,
+                }}}], native, client=1)
+                result = await probe.clients[0].call_tool(
+                    'docs_table_snapshot', expectations, raise_on_error=False,
+                )
+                assert result.is_error
+                expected = ('TARGET_CHANGED' if operation == 'mergeTableCells'
+                            else 'EDIT_CONFLICT')
+                assert result.structured_content['code'] == expected
+                if operation == 'unmergeTableCells':
+                    current = await probe.call(0, 'docs_table_read', {
+                        'doc_id': live_test_doc, 'table_ref': refs[0],
+                    })
+                    assert [c['cell_ref'] for c in current['rows'][1][
+                        'cells']] == cell_refs
+                # Both positions share one direct-section structural inventory.
+                other = await probe.clients[0].call_tool('docs_table_read', {
+                    'doc_id': live_test_doc, 'table_ref': refs[1],
+                }, raise_on_error=False)
+                assert other.is_error is (operation == 'mergeTableCells')
+            native = await probe.read()
+            await probe.batch([{'deleteTableRow': {
+                'tableCellLocation': table_location(
+                    probe.tables(native)[1], 1, 0,
+                ),
+            }}], native, client=1)
+            result = await probe.clients[0].call_tool('docs_table_read', {
+                'doc_id': live_test_doc, 'table_ref': refs[1],
+            }, raise_on_error=False)
+            assert result.is_error
+            assert result.structured_content['code'] == 'TARGET_CHANGED'
             probe.report['checks_passed'] = True
     asyncio.run(run())
 

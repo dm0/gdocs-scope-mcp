@@ -47,6 +47,17 @@ class Settings(BaseSettings):
         env_prefix='GOOGLE_DOCS_MCP_', extra='forbid', frozen=True,
     )
     write_revision_mode: Literal['required', 'target'] = 'required'
+    table_snapshot_ttl_seconds: Annotated[
+        int, Field(strict=True, ge=1, le=604800),
+    ] = 86400
+
+    @field_validator('table_snapshot_ttl_seconds', mode='before')
+    @classmethod
+    def parse_snapshot_ttl(cls, value):
+        """Accept integer environment strings without coercing floats/bools."""
+        if isinstance(value, str) and value.isascii() and value.isdecimal():
+            return int(value)
+        return value
 
     code_font_family: Annotated[
         str, StringConstraints(strip_whitespace=True, min_length=1),

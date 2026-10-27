@@ -40,12 +40,13 @@ import json
 import logging
 import os
 import sys
+from typing import Annotated
 
 from fastmcp import FastMCP
 from googleapiclient.discovery import build
-from pydantic import BaseModel, TypeAdapter
+from pydantic import BaseModel, Field, TypeAdapter
 
-from . import docs_edit, entity_edit, table_read
+from . import docs_edit, entity_edit, table_read, table_snapshots
 from .diagnostics import ServerInfo, capture_server_info
 from .entities import (
     DropdownOptions,
@@ -78,6 +79,8 @@ from .table_read import (
     TableReadResponse,
     TablesListResponse,
 )
+from .table_snapshots import SnapshotResponse
+from .table_tokens import CellAddress, SnapshotFields, SnapshotToken
 from .tool_inputs import (
     CodeBlockStyle,
     CodeBlockThemeBackground,
@@ -91,6 +94,9 @@ from .tool_inputs import (
 from .tool_logging import ToolCallLoggingMiddleware, configure_logging
 
 SERVER_INFO = capture_server_info()
+TableCells = Annotated[
+    list[CellAddress], Field(min_length=1, max_length=100),
+]
 
 
 def _tool_response_schema(success_model: type[BaseModel]) -> dict:
@@ -205,7 +211,8 @@ EDITING TOOLS:
     docs_get_tree          Read hierarchical document tree (headings)
     docs_read              Read document contents (paragraphs + plain)
     docs_tables_list       Discover first-tab tables and compact previews
-    docs_table_read        Read revision-bound table/cell pages and geometry
+    docs_table_read        Read table/cell pages and geometry
+    docs_table_snapshot    Issue/validate selective cell-state expectations
     docs_search_replace    Find and replace text (occurrence-targeted or all)
     docs_insert_after      Insert text after a specified paragraph anchor text
     docs_insert_before     Insert text before a specified paragraph anchor text
@@ -322,9 +329,13 @@ def docs_read(
     options. Reads/insertion default to the first document tab.
 
     Table HTML includes data-mcp-table-ref, including nested tables. Pass a
-    reference to docs_table_read for bounded structured cells. References are
-    document/first-tab/revision-bound; reacquire after any revision change.
-    Reads create no bindings and return no duplicate table inventory.
+    reference to docs_table_read for bounded structured cells and A1 addresses.
+    Refs describe checked section positions, not persistent object identity:
+    heading ID hierarchy + table ordinal + section table structure inventory.
+    Text/style changes preserve refs; structural changes require fresh refs.
+    Swapping structurally identical tables preserves position meaning.
+    Snapshot checks compare selected cells/fields, allowing independent edits.
+    Reads/snapshots create no bindings or files and write no metadata.
 
     You can read the entire document, or isolate specific sections by passing
     a list of target heading_ids, including their nested subsections.
@@ -374,10 +385,12 @@ def docs_tables_list(
 
     limit is 1-100 tables (default 50). count is page size, total_count covers
     matching tables. Follow next_page_token with exactly the same arguments.
-    Tables and page tokens are bound to document, first-tab scope and revision;
-    STALE_REFERENCE requires a new first-page read. Never infer identity from
-    an old ordinal or duplicate text. This tool creates no named ranges or
-    document writes. Tab selection is a separate feature.
+    Table refs describe the Nth table in its direct heading section. Text/style
+    changes preserve refs; count/order/structural changes in that section
+    require fresh discovery (TARGET_CHANGED). Swapping structurally identical
+    tables retains position meaning, not original object identity. Page tokens
+    require the same revision (STALE_REFERENCE). No named ranges or writes.
+    Tab selection is a separate feature.
     """
     return table_read.tables_list(doc_id, heading_ids, limit, page_token)
 
@@ -392,9 +405,9 @@ def docs_table_read(
     max_cell_chars: CellPreviewLimit = 2000,
     page_token: ReadReference | None = None,
 ) -> TableReadResponse:
-    """Inspect a revision-bound table reference from docs_read or tables_list.
+    """Inspect a table reference from docs_read or docs_tables_list.
 
-    Returns rows/cells, cell_ref, zero-based row/column, native spans,
+    Returns rows/cells, A1 address, cell_ref, zero-based coordinates and spans,
     physical_cell positions, merged-slot covered_by and unsupported-edit
     reasons. No raw Google indices are returned. Unknown geometry has null
     columns/cell refs; covered placeholders have no independent cell_ref.
@@ -411,11 +424,52 @@ def docs_table_read(
 
     Follow next_page_token with the same table_ref, limit and max_cell_chars.
     count is cells on this page, total_cells includes physical covered slots.
-    Revision changes invalidate refs/cursors with STALE_REFERENCE; reacquire
-    them rather than changing token data. This first-tab read writes nothing.
+    Cursors require the same revision. Table refs survive text/style edits;
+    changes to the section table structure inventory require fresh discovery.
+    Table refs identify section positions, including structurally identical
+    replacements/swaps. Use docs_table_snapshot with A1 addresses to check
+    selected content/properties. This first-tab read writes nothing.
     """
     return table_read.table_read(doc_id, table_ref, limit, max_cell_chars,
                                  page_token)
+
+
+@mcp.tool(
+    output_schema=_tool_response_schema(SnapshotResponse),
+    annotations={'readOnlyHint': True, 'destructiveHint': False,
+                 'idempotentHint': True, 'openWorldHint': True},
+)
+def docs_table_snapshot(
+    doc_id: str, table_ref: ReadReference, cells: TableCells,
+    fields: SnapshotFields | None = None,
+    base_token: SnapshotToken | None = None,
+) -> SnapshotResponse:
+    """Issue or validate selected-cell expected-state snapshots.
+
+    Accepts 1-100 distinct uppercase A1 addresses, e.g. ["A1", "B2"].
+    Validates the table's heading hierarchy, ordinal and structural inventory
+    against a fresh read. The position must retain the same table structure;
+    row/column/table insertion, deletion or merge requires fresh discovery.
+    Snapshots require verified unmerged geometry without nested cell tables.
+    fields selects content, text_style, paragraph_style, cell_style, structure.
+    Defaults to content/text_style/paragraph_style. Only selected cells and
+    field groups are checked, so independent cell edits and index shifts pass.
+
+    Omit base_token to issue expectations; pass it later with the same cell set
+    and fields to validate. Returns selected cell Markdown (up to 2000 Unicode
+    code points each, full lengths/truncation flags), current coordinates,
+    renewed base_token,
+    revision_id, expires_at (Unix UTC seconds), and validated. Default token
+    lifetime is 24 hours, configurable. Tokens are portable checksummed state,
+    not signed capabilities; no local key or document bindings are used.
+    Expired/corrupt tokens,
+    changed/deleted/ambiguous targets and property conflicts fail explicitly.
+    Reads/validates only; future writes must revalidate and use strict CAS.
+    """
+    return table_snapshots.snapshot(
+        doc_id, table_ref, cells,
+        fields or ['content', 'text_style', 'paragraph_style'], base_token,
+    )
 
 
 @mcp.tool(

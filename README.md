@@ -35,6 +35,9 @@ well suited to large Google Docs with structured headings.
   list compact heading-scoped table previews, and page structured cells with
   merged geometry, empty cells and explicit truncation metadata. Reads create
   no bindings or document changes.
+- **Validate independent table edits.** Use checked table positions and A1 cell
+  addresses across MCP processes. Selective snapshots detect changed cell
+  properties while allowing independent edits, without document metadata writes.
 - **Insert images.** Use Markdown or HTML image references, or explicitly enable
   local image uploads through temporary, link-shared Google Drive files that
   are cleaned up after insertion.
@@ -554,15 +557,16 @@ descendant deduplication.
 `limit` is 1-100 tables. `count` describes this page; `total_count` covers all
 matching tables. Continue with `next_page_token`, preserving the exact
 `heading_ids` and `limit`. `snapshot` contains the native revision, first-tab
-scope and `reference_lifetime="same_revision_only"`.
+scope and `reference_lifetime="same_structure_only"`. Page cursors still require
+the exact revision.
 
 #### `docs_table_read(doc_id, table_ref, limit=100, max_cell_chars=2000, page_token=None)`
 
 Read one table using a reference from document HTML or `docs_tables_list`.
 The response contains the summary/snapshot, `total_cells`, and structured
 `rows`/`cells`. Cells include zero-based logical `row`/`column`, native
-`row_span`/`column_span`, a physical cell-array position, `cell_ref`, Markdown
-and explicit clipping metadata. Nested table HTML also carries references;
+`row_span`/`column_span`, a physical cell-array position, A1 `address`,
+`cell_ref`, Markdown and explicit clipping metadata. Nested table HTML carries references;
 `nested_table_refs` identifies up to 20 immediate children of a cell, with
 `nested_table_count` and `nested_table_refs_truncated` disclosing omissions.
 Use paginated table discovery for additional children (`parent_cell_ref`
@@ -588,20 +592,73 @@ of at most 100,000 logical slots. Their content remains readable in pages.
 available table editing tool: cells in merged tables, nested/complex cells and
 non-text content are explicitly flagged. Current tools provide reading only.
 
-References and page cursors are portable across independent MCP processes
-using the same Google account, but bound to the document, first-tab scope and
-exact revision. Any revision change returns `STALE_REFERENCE`; reacquire refs
-from a fresh read/list instead of reusing an ordinal, coordinates or duplicate
-text. No named ranges are created. The token checksum detects corruption, not
-forgery: these are not authorization capabilities, and each call checks normal
-Google document permissions. Persistent bindings and more selective snapshots
-are deferred to #27. Native revision metadata is required; Google exposes it
-only to editors, so unavailable metadata returns `REVISION_UNAVAILABLE`.
+References describe checked **section positions**: heading ID ancestry, the
+table's ordinal in its direct section, and hashes of its structure and the
+section's ordered table structures. Text/style edits and native index shifts
+preserve refs. Insertion/deletion or a structural change to a table in that
+direct section returns `TARGET_CHANGED` and requires fresh discovery. Changes
+inside child heading sections have independent inventories. Nested references
+add a cell/nested-table position checked against the parent structure.
+
+Swapping or replacing structurally identical tables preserves the reference's
+**position meaning**. It does not establish persistent native object identity
+or prove edit history. Use selective snapshots below to detect changed target
+content/properties. Identical replacement with identical selected state is
+accepted under this positional contract. Table summaries expose
+`reference_semantics="section_position"`, `section_table_number` (1-based
+top-level ordinal, also the root ordinal for nested tables), and
+`reference_lifetime="same_structure_only"`. Cells include an `address` such
+as `A1`, `Z3` or `AA2`, alongside their opaque scoped `cell_ref`.
+
+All page cursors still require the exact revision: a revision change returns
+`STALE_REFERENCE`. Refs/tokens work across independent MCP processes with no
+local registry, signing key or binding step. SHA-256 checksums detect
+corruption, not forgery; these are not authorization capabilities. Each call
+checks normal Google permissions. Reads and snapshots never create named
+ranges or local files, and write no metadata.
+Native revision metadata is required; Google exposes it only to editors, so
+unavailable metadata returns `REVISION_UNAVAILABLE`.
 
 ```python
 page = docs_tables_list(doc_id="...", heading_ids=["heading-id"], limit=10)
 details = docs_table_read(doc_id="...", table_ref=page["tables"][0]["table_ref"])
 ```
+
+#### `docs_table_snapshot(doc_id, table_ref, cells, fields=None, base_token=None)`
+
+Reads and issues expected-state tokens for 1-100 selected uppercase A1 addresses,
+for example `cells=["A1", "B2"]`. Snapshots require verified unmerged geometry
+without nested tables in the target's cells. The default field
+groups are `content`, `text_style` and `paragraph_style`; `cell_style` and
+`structure` are optional. Pass a previous `base_token` with the same cell set
+and fields to validate and renew it. Only selected cells/properties are
+compared, allowing independent cell edits anywhere while the section table
+structure inventory remains unchanged. The response includes selected Markdown
+from the same read (up to 2000 Unicode code points per cell, full lengths and
+truncation flags), current coordinates, revision and renewed expectations.
+Prepare an edit from that returned state; if clipped, obtain complete content
+before preparing a replacement. The token hashes complete native state even
+when the preview is clipped. A snapshot does not reserve cells or perform
+writes. A future write tool must revalidate inside its call and use strict CAS
+against that fresh revision.
+
+```python
+table_ref = page["tables"][0]["table_ref"]
+base = docs_table_snapshot(doc_id="...", table_ref=table_ref,
+                           cells=["A2"], fields=["content"])
+# Inspect base["cells"] and prepare the intended change.
+# Independent edits to other cells are allowed between these calls.
+checked = docs_table_snapshot(doc_id="...", table_ref=table_ref,
+                              cells=["A2"], fields=["content"],
+                              base_token=base["base_token"])
+```
+
+Table refs have no time expiry. Snapshot tokens expire after 86,400 seconds by
+default; set JSON
+`table_snapshot_ttl_seconds` or `GOOGLE_DOCS_MCP_TABLE_SNAPSHOT_TTL_SECONDS`
+to an integer between 1 and 604,800 seconds.
+
+See [positional references, dependency groups and limits](docs/table-references.md).
 
 ---
 

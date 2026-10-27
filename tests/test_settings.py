@@ -18,6 +18,7 @@ def isolated_settings(monkeypatch, tmp_path):
         'GOOGLE_DOCS_MCP_CONFIG', 'GOOGLE_DOCS_MCP_CODE_FONT_FAMILY',
         'GOOGLE_DOCS_MCP_INLINE_CODE_COLOR',
         'GOOGLE_DOCS_MCP_WRITE_REVISION_MODE',
+        'GOOGLE_DOCS_MCP_TABLE_SNAPSHOT_TTL_SECONDS',
     ):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv('XDG_CONFIG_HOME', str(tmp_path))
@@ -44,6 +45,7 @@ def test_defaults_need_no_config_file():
     assert settings.code_font_family == 'Roboto Mono'
     assert settings.inline_code_color == '#188038'
     assert settings.write_revision_mode == 'required'
+    assert settings.table_snapshot_ttl_seconds == 86400  # noqa: PLR2004
 
 
 def test_default_file_is_discovered():
@@ -88,6 +90,9 @@ def test_explicit_missing_or_empty_path_fails(value, monkeypatch):
     {'inline_code_colour': '#112233'},
     {'write_revision_mode': 'automatic'},
     {'write_revision_mode': ''},
+    {'table_snapshot_ttl_seconds': 0},
+    {'table_snapshot_ttl_seconds': 604801},
+    {'table_snapshot_ttl_seconds': True},
 ])
 def test_invalid_settings_fail(custom_config, data):
     """Reject invalid RGB syntax, blank fonts and unknown/typo fields."""
@@ -101,6 +106,12 @@ def test_invalid_environment_fails(monkeypatch):
     monkeypatch.setenv('GOOGLE_DOCS_MCP_INLINE_CODE_COLOR', 'invalid')
     with pytest.raises(ValidationError):
         get_settings()
+
+
+def test_table_snapshot_environment(monkeypatch):
+    """Choose snapshot expiry independently of process lifetime."""
+    monkeypatch.setenv('GOOGLE_DOCS_MCP_TABLE_SNAPSHOT_TTL_SECONDS', '3600')
+    assert get_settings().table_snapshot_ttl_seconds == 3600  # noqa: PLR2004
 
 
 def test_malformed_json_fails_before_server_runs(custom_config, monkeypatch):

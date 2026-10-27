@@ -1,4 +1,4 @@
-"""Discover first-tab tables with read-only, revision-bound references."""
+"""Read checked table positions and revision-bound pages without writes."""
 
 # Reuse the existing OAuth boundary without a docs_edit import cycle.
 # ruff: noqa: PLC0415
@@ -17,6 +17,13 @@ from .models import (
     GoogleDocument,
     GoogleDocumentTableCell,
     ListingPage,
+)
+from .table_refs import Layout, first_tab
+from .table_tokens import (
+    Token,
+    address,
+    decode as decode_position,
+    encode as encode_position,
 )
 from .tool_errors import ToolFailureError
 
@@ -38,7 +45,8 @@ def _fail(code, description, action=None):
         suggested_action=action or (
             'Read the document or call docs_tables_list and use the returned '
             'reference/page token with unchanged arguments. References are '
-            'first-tab and revision-bound; do not edit tokens.'
+            'first-tab scoped; page tokens require the same revision. '
+            'Structural changes require fresh table refs; do not edit tokens.'
         ),
     ))
 
@@ -64,10 +72,13 @@ class _Token(BaseModel):
     fingerprint: str = ''
     offset: Annotated[int, Field(ge=0)] = 0
     options: str = ''
+    tab: str | None = None
 
 
 def _encode(token):
     """Use versioned, portable opaque references with a corruption checksum."""
+    if isinstance(token, Token):
+        return encode_position(token)
     payload = token.model_dump(exclude_defaults=True)
     data = json.dumps(payload, sort_keys=True, separators=(',', ':')).encode()
     encoded = base64.urlsafe_b64encode(data).decode().rstrip('=')
@@ -90,6 +101,8 @@ def _unpack(value):
 
 def _decode(value, kind, doc_id):
     """Reject malformed, mismatched and wrong-kind tokens before API access."""
+    if kind in {'table', 'cell'}:
+        return decode_position(value, kind, doc_id)
     try:
         token = _unpack(value)
     except (ValueError, TypeError, ValidationError):
@@ -104,12 +117,16 @@ def _check_revision(token, document):
     """Reject stale references without reusing an old structural path."""
     if token.revision != document['revisionId']:
         _fail('STALE_REFERENCE', 'The reference revision is not current.')
+    if token.tab is not None and token.tab != document.get('_mcp_tab_id'):
+        _fail('STALE_REFERENCE', 'The first document tab changed.')
 
 
 def _fetch(doc_id):
     """Read the first tab through the normal read-only API boundary."""
     from . import docs_edit
-    document = docs_edit._get_document(docs_edit._get_service(), doc_id)
+    document = first_tab(docs_edit._get_document(
+        docs_edit._get_service(), doc_id, include_tabs=True,
+    ))
     _require_revision(document)
     return document
 
@@ -166,10 +183,23 @@ def _tables(document):
     return list(walk(document.get('body', {}).get('content', []), [], []))
 
 
-def _table_token(document, entry, kind='table', **updates):
-    """Bind a table path to the document, first tab and exact revision."""
+def _table_token(document, entry, kind='table', *, layout=None, **updates):
+    """Describe a checked position or an exact-revision page cursor."""
+    if kind in {'table', 'cell'}:
+        cell = updates.get('cell')
+        cell_address = None
+        if cell is not None:
+            geometry, valid = _geometry(entry)
+            value = next(x for x in geometry if x[:2] == tuple(cell))
+            if not valid:
+                _fail('INVALID_ARGUMENT', 'Cell geometry is not verified.')
+            cell_address = address(value[0], value[2])
+        return (layout or Layout(document)).reference(
+            entry, kind=kind, address=cell_address,
+        )
     return _Token(kind=kind, document=document['documentId'],
                   revision=document['revisionId'], path=entry.path,
+                  tab=document.get('_mcp_tab_id'),
                   fingerprint=_digest(entry.item), **updates)
 
 
@@ -178,22 +208,27 @@ def reference_map(document):
     entries = _tables(document)
     if entries:
         _require_revision(document)
-    return {entry.item['startIndex']: _encode(_table_token(document, entry))
+    layout = Layout(document)
+    return {entry.item['startIndex']: _encode(layout.reference(entry))
             for entry in entries}
 
 
 class TableSnapshot(BaseModel):
-    """Describe short-lived references rather than persistent bindings."""
+    """Describe positional refs; pagination still requires this revision."""
 
     revision_id: str
     scope: Literal['first_tab'] = 'first_tab'
-    reference_lifetime: Literal['same_revision_only'] = 'same_revision_only'
+    reference_lifetime: Literal['same_structure_only'] = 'same_structure_only'
+    tab_id: str | None = None
 
 
 class TableSummary(BaseModel):
     """Identify and preview one table without duplicating its content."""
 
     table_ref: str
+    reference_lifetime: Literal['same_structure_only'] = 'same_structure_only'
+    reference_semantics: Literal['section_position'] = 'section_position'
+    section_table_number: int
     heading_id: str | None
     heading_title: str | None
     ancestor_heading_ids: list[str]
@@ -228,6 +263,7 @@ class TableCellRead(BaseModel):
     row_span: int | None
     column_span: int | None
     cell_ref: str | None
+    address: str | None
     covered_by: str | None
     simple_text_target: bool = Field(
         description='Structurally eligible for simple text edits; this tool '
@@ -323,7 +359,7 @@ def _model(document):
     }))
 
 
-def _summary(document, entry, model):
+def _summary(document, entry, model, layout=None):
     """Create a bounded preview and explicit structural warnings."""
     geometry, valid = _geometry(entry)
     merged = any((isinstance(rs, int) and rs > 1)
@@ -350,10 +386,12 @@ def _summary(document, entry, model):
     if entry.parent_cell is not None:
         path, r, c = entry.parent_cell
         parent = next(t for t in _tables(document) if t.path == path)
-        parent_ref = _encode(_table_token(document, parent, 'cell',
-                                          cell=[r, c]))
+        if _geometry(parent)[1]:
+            parent_ref = _encode(_table_token(document, parent, 'cell',
+                                              cell=[r, c], layout=layout))
+    token = (layout or Layout(document)).reference(entry)
     return TableSummary(
-        table_ref=_encode(_table_token(document, entry)),
+        table_ref=_encode(token), section_table_number=token.ordinal + 1,
         heading_id=entry.headings[-1][1] if entry.headings else None,
         heading_title=entry.headings[-1][2][:80] if entry.headings else None,
         ancestor_heading_ids=[h[1] for h in entry.headings[:-1]],
@@ -411,14 +449,18 @@ def tables_list(doc_id, heading_ids=None, limit=50, page_token=None):
     end = offset + len(page)
     next_token = _encode(_Token(
         kind='tables-page', document=doc_id, revision=document['revisionId'],
+        tab=document.get('_mcp_tab_id'),
         offset=end, options=_digest(options),
     )) if end < len(entries) else None
     model = _model(document)
+    layout = Layout(document)
+    summaries = [_summary(document, t, model, layout) for t in page]
     return TablesListResponse(
         document_id=doc_id, snapshot=TableSnapshot(
             revision_id=document['revisionId'],
+            tab_id=document.get('_mcp_tab_id'),
         ), total_count=len(entries), count=len(page),
-        tables=[_summary(document, t, model) for t in page],
+        tables=summaries,
         next_page_token=next_token, selected_headings=selected,
         unknown_heading_ids=unknown,
     )
@@ -431,11 +473,9 @@ def table_read(doc_id, table_ref, limit=100, max_cell_chars=2000,
     if page_token is not None:
         _decode(page_token, 'cells-page', doc_id)
     document = _fetch(doc_id)
-    _check_revision(token, document)
-    entries = _tables(document)
-    entry = next((t for t in entries if t.path == token.path), None)
-    if entry is None or token.fingerprint != _digest(entry.item):
-        _fail('STALE_REFERENCE', 'The table snapshot no longer exists.')
+    layout = Layout(document)
+    entries = layout.entries
+    entry = layout.resolve(token)
     options = [table_ref, limit, max_cell_chars]
     offset = _page(document, 'cells-page', options, page_token, entry)
     geometry, valid = _geometry(entry)
@@ -447,13 +487,18 @@ def table_read(doc_id, table_ref, limit=100, max_cell_chars=2000,
     page = geometry[offset:offset + limit]
     end = offset + len(page)
     model = _model(document)
+    addresses = {(r, p): address(r, c) for r, p, c, *_ in geometry} if (
+        valid
+    ) else {}
     rows = {}
     for r, physical, c, rs, cs, owner, cell in page:
         is_covered = owner is not None and owner != (r, physical)
-        cell_ref = _encode(_table_token(document, entry, 'cell',
-                                       cell=[r, physical])) if valid else None
-        covered_by = (_encode(_table_token(document, entry, 'cell',
-                                           cell=list(owner)))
+        cell_ref = _encode(layout.reference(
+            entry, kind='cell', address=addresses[r, physical],
+        )) if valid else None
+        covered_by = (_encode(layout.reference(
+            entry, kind='cell', address=addresses[owner],
+        ))
                       if is_covered and valid else None)
         content = cell.get('content', [])
         nested = [t for t in entries
@@ -483,12 +528,13 @@ def table_read(doc_id, table_ref, limit=100, max_cell_chars=2000,
             row=r, column=c if valid else None, physical_cell=physical,
             row_span=rs, column_span=cs,
             cell_ref=None if is_covered else cell_ref,
+            address=address(r, c) if valid and not is_covered else None,
             covered_by=covered_by, simple_text_target=not reasons,
             unsupported_edit_reasons=reasons,
             markdown=markdown[:max_cell_chars],
             markdown_char_count=len(markdown),
             markdown_truncated=len(markdown) > max_cell_chars,
-            nested_table_refs=[_encode(_table_token(document, t))
+            nested_table_refs=[_encode(layout.reference(t))
                                for t in nested[:NESTED_REF_LIMIT]],
             nested_table_count=len(nested),
             nested_table_refs_truncated=len(nested) > NESTED_REF_LIMIT,
@@ -500,7 +546,9 @@ def table_read(doc_id, table_ref, limit=100, max_cell_chars=2000,
     return TableReadResponse(
         document_id=doc_id, snapshot=TableSnapshot(
             revision_id=document['revisionId'],
-        ), table=_summary(document, entry, model), total_cells=len(geometry),
+            tab_id=document.get('_mcp_tab_id'),
+        ), table=_summary(document, entry, model, layout),
+        total_cells=len(geometry),
         count=len(page), next_page_token=next_token,
         rows=[TableRowRead(
             row=r, cells=cells,

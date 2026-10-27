@@ -412,6 +412,9 @@ class EditFailedResponse(BaseModel):
         'PARTIAL_WRITE',
         'TARGET_REVISION_REJECTED',
         'STALE_REFERENCE',
+        'TARGET_CHANGED',
+        'INVALID_REFERENCE',
+        'SNAPSHOT_EXPIRED',
     ]
     description: Annotated[str, Field(description='Failure description')]
     suggested_action: Annotated[
