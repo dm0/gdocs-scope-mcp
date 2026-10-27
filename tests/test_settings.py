@@ -17,6 +17,7 @@ def isolated_settings(monkeypatch, tmp_path):
     for name in (
         'GOOGLE_DOCS_MCP_CONFIG', 'GOOGLE_DOCS_MCP_CODE_FONT_FAMILY',
         'GOOGLE_DOCS_MCP_INLINE_CODE_COLOR',
+        'GOOGLE_DOCS_MCP_WRITE_REVISION_MODE',
     ):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv('XDG_CONFIG_HOME', str(tmp_path))
@@ -42,6 +43,7 @@ def test_defaults_need_no_config_file():
     settings = get_settings()
     assert settings.code_font_family == 'Roboto Mono'
     assert settings.inline_code_color == '#188038'
+    assert settings.write_revision_mode == 'required'
 
 
 def test_default_file_is_discovered():
@@ -84,6 +86,8 @@ def test_explicit_missing_or_empty_path_fails(value, monkeypatch):
     {'inline_code_color': '#GG0000'},
     {'code_font_family': '  '},
     {'inline_code_colour': '#112233'},
+    {'write_revision_mode': 'automatic'},
+    {'write_revision_mode': ''},
 ])
 def test_invalid_settings_fail(custom_config, data):
     """Reject invalid RGB syntax, blank fonts and unknown/typo fields."""
@@ -119,6 +123,19 @@ def test_settings_are_cached_until_restart(custom_config):
     assert get_settings() is initial
     get_settings.cache_clear()
     assert get_settings().code_font_family == 'Consolas'
+
+
+def test_revision_mode_configuration(custom_config, monkeypatch):
+    """Select target in JSON, override by environment, and reject typos."""
+    custom_config.write_text('{"write_revision_mode":"target"}')
+    assert get_settings().write_revision_mode == 'target'
+    get_settings.cache_clear()
+    monkeypatch.setenv('GOOGLE_DOCS_MCP_WRITE_REVISION_MODE', 'required')
+    assert get_settings().write_revision_mode == 'required'
+    get_settings.cache_clear()
+    monkeypatch.setenv('GOOGLE_DOCS_MCP_WRITE_REVISION_MODE', 'merge')
+    with pytest.raises(ValidationError):
+        get_settings()
 
 
 @pytest.mark.parametrize('markup', ['Before `word🦷` after',

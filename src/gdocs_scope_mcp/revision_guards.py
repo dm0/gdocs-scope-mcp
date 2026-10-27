@@ -15,6 +15,7 @@ from googleapiclient.errors import HttpError
 from httplib2 import HttpLib2Error
 
 from .models import EditFailedResponse
+from .settings import get_settings
 from .tool_errors import ToolFailureError
 
 MAX_ATTEMPTS = 3
@@ -107,6 +108,7 @@ class Edit:
     prepared_index: int = 0
     prepared_requests: object = None
     expected_revision: str | None = None
+    revision_mode: str = 'required'
 
 
 def remember_snapshot(document):
@@ -191,10 +193,19 @@ def _revision_rejection(error):
         return False
     return 'revision' in message and any(word in message for word in (
         'does not match', 'not the latest', 'not current', 'not valid',
+        'too old', 'too far behind', 'expired', 'not found',
     ))
 
 
-def submit(service, doc_id, requests, revision=None, *, native=False):
+def uses_target_revision():
+    """Respect a strict caller precondition over the configured merge mode."""
+    edit = _active.get()
+    return (edit is not None and edit.revision_mode == 'target'
+            and edit.expected_revision is None)
+
+
+def submit(service, doc_id, requests, revision=None, *, native=False,
+           force_required=False):
     """Send one guarded atomic batch; classify uncertainty without replay."""
     edit = _active.get()
     if native and edit is not None and edit.expected_revision is not None:
@@ -207,14 +218,20 @@ def submit(service, doc_id, requests, revision=None, *, native=False):
     if not native and (not isinstance(revision, str) or not revision):
         fail('REVISION_UNAVAILABLE', 'The read has no usable revision.')
     body = {'requests': requests}
+    target = not native and uses_target_revision() and not force_required
     if not native:
-        body['writeControl'] = {'requiredRevisionId': revision}
+        key = 'targetRevisionId' if target else 'requiredRevisionId'
+        body['writeControl'] = {key: revision}
     try:
         result = service.documents().batchUpdate(
             documentId=doc_id, body=body,
         ).execute()
     except HttpError as error:
         if _revision_rejection(error):
+            if target:
+                fail('TARGET_REVISION_REJECTED', 'Google rejected the target '
+                     'revision. No automatic rebase or resubmission was '
+                     'performed.', edit.committed if edit else 0)
             if edit is not None and edit.committed:
                 fail('PARTIAL_WRITE', 'Earlier stages committed; a later '
                      'stage lost its revision precondition.', edit.committed)
@@ -233,7 +250,7 @@ def submit(service, doc_id, requests, revision=None, *, native=False):
 
 def revision_changed():
     """Allow entity preflight to reject a stale plan before image staging."""
-    if _active.get() is not None:
+    if _active.get() is not None and not uses_target_revision():
         raise RevisionRaceError
 
 
@@ -279,6 +296,7 @@ def guarded_edit(function=None, *, append=False):
         """Own call-scoped dependencies and cleanup across bounded attempts."""
         with ExitStack() as stack:
             edit = Edit(stack=stack, append=append,
+                        revision_mode=get_settings().write_revision_mode,
                         expected_revision=kwargs.pop(
                             'expected_revision_id', None,
                         ))

@@ -1,11 +1,15 @@
 """Exercise table plans against an independent UTF-16 structural buffer."""
 
 from copy import deepcopy
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
 
-from gdocs_scope_mcp import docs_edit
+from gdocs_scope_mcp import (
+    docs_edit,
+    revision_guards as guards,
+)
 from gdocs_scope_mcp.image_uploads import rich_insertion_requests
 from gdocs_scope_mcp.md2requests import (
     inserted_text_from_requests,
@@ -230,6 +234,25 @@ def test_failure_reports_partial_result_without_retries():
     assert failure.value.failure.committed_batches == 1
     assert 'before retrying' in failure.value.failure.suggested_action
     assert len(native.batches) == 1
+
+
+def test_table_stages_stay_required_in_target_mode(monkeypatch):
+    """Keep strict stages instead of guessing transformed cursor positions."""
+    monkeypatch.setattr(guards, 'get_settings', lambda: (
+        SimpleNamespace(write_revision_mode='target')
+    ))
+    native = NativeBuffer()
+
+    @guards.guarded_edit(append=True)
+    def execute():
+        """Exercise real stage submission with an active target-mode call."""
+        guards.remember_snapshot(native.document())
+        plan = markdown_to_requests(MARKDOWN, native.start)
+        plan.execute(native.service, 'test', '0')
+    execute()
+    # NativeBuffer asserts requiredRevisionId for every submitted stage.
+    assert len(native.tables) == 1
+    assert len(native.batches) == 2  # noqa: PLR2004
 
 
 @pytest.mark.parametrize('operation', [

@@ -2,6 +2,7 @@
 
 import json
 from copy import deepcopy
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
@@ -67,6 +68,14 @@ def race_docs(monkeypatch, simple_document):
     monkeypatch.setattr(revision_guards.time, 'sleep', lambda _delay: None)
     state['documents'] = documents
     return state
+
+
+@pytest.fixture
+def target_mode(monkeypatch):
+    """Select merge mode without changing the shared config cache."""
+    monkeypatch.setattr(revision_guards, 'get_settings', lambda: (
+        SimpleNamespace(write_revision_mode='target')
+    ))
 
 
 def change_prefix(document):
@@ -322,3 +331,74 @@ def test_lost_comment_response_does_not_repeat_anchor_or_comment(
     assert caught.value.failure.committed_batches == 1
     mock_docs.batchUpdate.assert_called_once()
     drive.comments().create.assert_called_once()
+
+
+@pytest.mark.usefixtures('target_mode')
+def test_target_mode_submits_original_revision_without_local_replan(race_docs):
+    """Let Google merge an old snapshot; do not substitute a fresh revision."""
+    documents = race_docs['documents']
+    documents.batchUpdate.return_value.execute.return_value = {}
+    documents.batchUpdate.return_value.execute.side_effect = None
+    result = docs_edit.search_replace('test', 'Target phrase', 'new')
+    assert result.ok
+    body = documents.batchUpdate.call_args.kwargs['body']
+    assert body['writeControl'] == {'targetRevisionId': 'revision'}
+    documents.get.assert_called_once()
+    documents.batchUpdate.assert_called_once()
+
+
+@pytest.mark.usefixtures('target_mode')
+def test_target_rejection_is_not_retried(race_docs):
+    """An expired target requires a new caller decision."""
+    documents = race_docs['documents']
+    documents.batchUpdate.return_value.execute.side_effect = api_error(
+        'The target revision ID is too far behind the latest revision.',
+    )
+    with pytest.raises(ToolFailureError) as caught:
+        docs_edit.append('test', 'new', rich=False)
+    assert caught.value.failure.code == 'TARGET_REVISION_REJECTED'
+    documents.get.assert_called_once()
+    documents.batchUpdate.assert_called_once()
+
+
+@pytest.mark.usefixtures('target_mode')
+def test_strict_precondition_overrides_target_mode(race_docs):
+    """A caller's strict precondition cannot be weakened by server config."""
+    with pytest.raises(ToolFailureError) as caught:
+        docs_edit.append('test', 'new', rich=False,
+                         expected_revision_id='revision')
+    assert caught.value.failure.code == 'EDIT_CONFLICT'
+    assert race_docs['writes'][0]['writeControl'] == {
+        'requiredRevisionId': 'revision',
+    }
+    assert len(race_docs['writes']) == 1
+
+
+@pytest.mark.usefixtures('target_mode')
+def test_target_mode_does_not_retry_unknown_outcome(race_docs):
+    """Server merge mode does not make a lost response idempotent."""
+    documents = race_docs['documents']
+    documents.batchUpdate.return_value.execute.side_effect = TimeoutError()
+    with pytest.raises(ToolFailureError) as caught:
+        docs_edit.append('test', 'new', rich=False)
+    assert caught.value.failure.code == 'WRITE_OUTCOME_UNKNOWN'
+    documents.batchUpdate.assert_called_once()
+
+
+@pytest.mark.usefixtures('target_mode')
+def test_target_mode_preserves_revision_through_entity_preflight(race_docs):
+    """Keep the planned revision when preflight sees a newer snapshot."""
+    original = deepcopy(race_docs['document'])
+    latest = deepcopy(original)
+    latest['revisionId'] = 'later'
+    documents = race_docs['documents']
+    documents.get.return_value.execute.side_effect = [original, latest, latest]
+    documents.batchUpdate.return_value.execute.side_effect = None
+    documents.batchUpdate.return_value.execute.return_value = {}
+    result = docs_edit.append('test', '<span data-mcp-entity="person" '
+                              'data-mcp-email="a@b.org">A</span>')
+    assert result.ok
+    assert documents.batchUpdate.call_args.kwargs['body']['writeControl'] == {
+        'targetRevisionId': 'revision',
+    }
+    documents.batchUpdate.assert_called_once()

@@ -409,6 +409,7 @@ class EditFailedResponse(BaseModel):
         'REVISION_UNAVAILABLE',
         'WRITE_OUTCOME_UNKNOWN',
         'PARTIAL_WRITE',
+        'TARGET_REVISION_REJECTED',
     ]
     description: Annotated[str, Field(description='Failure description')]
     suggested_action: Annotated[

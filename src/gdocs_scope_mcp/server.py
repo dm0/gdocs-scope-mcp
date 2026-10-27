@@ -108,15 +108,19 @@ ERRORS:
     before retrying a failed write.
 
 CONCURRENT EDITS:
-    Indexed edits guard the backend read/write window with requiredRevisionId.
-    Up to three attempts re-read, validate original targets and replan after
-    confirmed revision rejection. Changed/deleted/ambiguous targets fail;
-    duplicate occurrence numbers are never silently retargeted. Append means
-    the current end at the successful attempt. Tables use multiple batches;
-    completed stages and external side effects are not replayed. Unknown write
+    Server setting write_revision_mode selects required (default) or target.
+    Required uses requiredRevisionId, up to three validated attempts, and
+    rejects changed/deleted/ambiguous targets. Append uses the current end.
+    Target sends targetRevisionId from the original read and lets Google merge
+    concurrent changes, including overlaps; no local conflict guarantee or
+    automatic retry of rejected target revisions. Google controls append order.
+    expected_revision_id always enforces a strict required revision and
+    disables retries, in either configured mode. Multi-stage table insertion
+    always uses required revisions because later stages require known cursors.
+    Completed stages and external side effects are not replayed. Unknown write
     outcomes require inspection. committed_batches counts confirmed Docs
-    batches. expected_revision_id optionally protects an agent's earlier read
-    with a strict revision precondition; omit it to allow safe rebasing.
+    batches. The default guard covers the backend read/write window;
+    expected_revision_id can also protect an agent's earlier read.
     Native replace-all retains execution-time matching and accepts no such
     precondition. Comment creation/Apps Script are separate from its Docs
     anchor batch and are not atomic with it.
@@ -421,9 +425,10 @@ def docs_search_replace(  # noqa: PLR0917
     """
     Find text and replace.
 
-    Indexed edits use revision guards and at most three validated attempts.
-    A changed/deleted/ambiguous target fails without retargeting a duplicate.
-    expected_revision_id disables rebasing. Unknown writes are not replayed.
+    Uses configured write_revision_mode: required validates targets with up to
+    three attempts; target delegates concurrent/overlapping edits to Google.
+    expected_revision_id forces a strict required revision without retries.
+    Unknown writes and rejected target revisions are not replayed.
 
     Preserves history using batchUpdate.
     Replace-all (occurrence=0) is only supported if regex=False and heading_id
@@ -486,9 +491,11 @@ def docs_insert_after(
     """
     Insert a new paragraph immediately after the paragraph containing `anchor`.
 
-    Revision races replan only an unchanged, unambiguous anchor (three
-    attempts maximum). expected_revision_id disables rebasing. Completed
-    table stages and unknown writes are not replayed; inspect partial results.
+    Configured required mode validates an unchanged, unique anchor with up to
+    three attempts; target lets Google merge overlapping changes without local
+    conflict checks or retries. expected_revision_id forces strict required.
+    Table stages always use required; completed stages/unknown writes are not
+    replayed. Inspect partial results.
 
     The anchor is matched case-insensitively as a substring of the paragraph.
 
@@ -577,9 +584,11 @@ def docs_insert_before(
 
     `anchor`.
 
-    Revision races replan only an unchanged, unambiguous anchor (three
-    attempts maximum). expected_revision_id disables rebasing. Completed
-    table stages and unknown writes are not replayed; inspect partial results.
+    Configured required mode validates an unchanged, unique anchor with up to
+    three attempts; target lets Google merge overlapping changes without local
+    conflict checks or retries. expected_revision_id forces strict required.
+    Table stages always use required; completed stages/unknown writes are not
+    replayed. Inspect partial results.
 
     The anchor is matched case-insensitively as a substring of the paragraph.
 
@@ -658,9 +667,10 @@ def docs_delete_paragraph(
     """
     Delete the paragraph(s) containing `anchor` text.
 
-    Revision guards allow at most three attempts, validating the original
-    target set and content/styles. Changed/deleted/ambiguous targets fail.
-    expected_revision_id disables rebasing. Unknown writes are not replayed.
+    Configured required mode validates original targets/styles with up to three
+    attempts. Target lets Google merge overlapping changes without local
+    conflict checks or retries. expected_revision_id forces strict required.
+    Unknown writes and rejected target revisions are not replayed.
 
     Deletes ALL paragraphs that contain the anchor string (case-insensitive).
     If the anchor matches only one paragraph, only that paragraph is deleted.
@@ -709,9 +719,11 @@ def docs_append(
     """
     Append Markdown paragraphs or literal text at the end of a Google Doc.
 
-    Concurrent appends replan at the current end (three attempts maximum).
-    expected_revision_id disables rebasing. Completed table stages and unknown
-    writes are not replayed; partial failures require document inspection.
+    Configured required mode replans at the current end (up to three attempts).
+    Target lets Google merge concurrent appends and choose their order, without
+    local retries. expected_revision_id forces strict required without retries.
+    Table stages always use required; completed stages and unknown writes are
+    not replayed. Inspect partial failures.
 
     A paragraph break is added before the appended content automatically.
     With rich=True, separate Markdown paragraphs with blank lines. Headings
@@ -783,9 +795,10 @@ def docs_batch_replace(
     """
     Apply multiple find→replace operations atomically in a single batchUpdate.
 
-    Revision guards allow at most three attempts, validating the same original
-    targets and content/styles. Changed/deleted/ambiguous targets fail.
-    expected_revision_id disables rebasing. Unknown writes are not replayed.
+    Configured required mode validates original targets/styles with up to three
+    attempts. Target delegates merging, including overlaps, to Google without
+    local conflict checks or retries. expected_revision_id forces strict
+    required. Unknown writes and rejected target revisions are not replayed.
 
     All replacements are applied in one API call (end-of-document first to
     preserve index validity). Either ALL changes succeed, or none do.
@@ -847,10 +860,12 @@ def docs_add_comment(  # noqa: PLR0917
     """
     Add a comment anchored to specific text in a Google Doc.
 
-    The anchor batch uses revision guards and up to three validated attempts.
-    expected_revision_id disables rebasing. Drive/Apps Script calls follow
-    separately, are not atomic with the anchor, and are never replayed after
-    uncertain outcomes. Partial failures report committed_batches.
+    The anchor follows configured write_revision_mode: required validates and
+    retries (up to three attempts), target lets Google merge without local
+    conflict checks/retries. expected_revision_id forces strict required.
+    Drive/Apps Script calls follow separately and are not atomic with the
+    anchor. Unknown outcomes are not replayed; failures report
+    committed_batches.
 
     NOTE: The current implementation uses the Drive comments API plus a Docs
     named range. In the Docs UI this still shows as "Original content deleted"

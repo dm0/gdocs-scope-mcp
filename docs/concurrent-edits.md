@@ -3,18 +3,62 @@
 Implementation for [issue #32](https://github.com/dm0/gdocs-scope-mcp/issues/32),
 building on the [table identity probes](table-identity.md).
 
+## Policy selection
+
+Set `write_revision_mode` in the normal server JSON configuration:
+
+```json
+{"write_revision_mode": "target"}
+```
+
+Or set `GOOGLE_DOCS_MCP_WRITE_REVISION_MODE=target` in the MCP server's
+environment. Environment overrides JSON; the default is `required`. Invalid
+values fail settings validation. Restart the MCP process to apply changes.
+This is a server policy, not a per-call agent argument. It applies to the
+seven indexed edit tools described below. Native replace-all keeps its
+execution-time matching; dedicated dropdown tools retain their own required
+revision guards.
+
+In `required` mode, the executor below validates the original target and
+replans after confirmed revision rejection. In `target` mode, it sends the
+original plan with `targetRevisionId` from the original native read. Google
+transforms operations against concurrent changes and resolves overlaps. The
+local unchanged-target and conflict-rejection guarantees do not apply in this
+mode. No fresh revision is substituted automatically after a rejected or
+expired target revision; the caller must inspect, reread and decide on a new
+operation. `TARGET_REVISION_REJECTED` distinguishes that outcome from an
+ordinary input failure. Unknown transport/server outcomes remain unsafe to
+retry in both modes.
+
+Concurrent target-mode appends follow Google's transformed ordering, which
+can differ from required mode's current-end replanning. Receipt indices are
+diagnostic coordinates from the original planning snapshot, not transformed
+positions. Target mode does not bypass native smart-entity validation.
+
+Two strict exceptions apply in either configured mode:
+
+- An explicit `expected_revision_id` always requires an exact revision match
+  and disables automatic replanning. It is never weakened into a merge.
+- Multi-stage table insertion always uses required revisions, including body
+  paragraph stages belonging to a table-containing plan. A transformed stage
+  can move the cursor or newly created table; later stages cannot safely use
+  guessed positions. Before the first commit these plans may use the existing
+  bounded, validated required-mode retry; after a commit they report a partial
+  result on interruption. This is an intentional limit, not a silent fallback
+  to guessed table identity.
+
 ## Executor and dependencies
 
 `revision_guards.guarded_edit` owns a call-scoped read/validate/plan/write
 executor. `remember_snapshot` retains the native first read of each attempt;
-`depend_on` declares the operation's selected source ranges; `submit` writes
-with `requiredRevisionId`. Context variables isolate concurrent calls without
+`depend_on` declares the operation's selected source ranges; `submit` chooses
+the required or target revision field. Context variables isolate calls without
 locks or coordination between production MCP processes. Future table planners
 can reuse `submit` and supply narrower table-specific identity/dependencies.
 
-Indexed search/replace, batch replacement, paragraph deletion, before/after
-insertion and comment-anchor creation declare their original targets before
-writing. Dependencies retain the entire affected native paragraph's text,
+In required mode, indexed search/replace, batch replacement, paragraph deletion,
+before/after insertion and comment-anchor creation declare their original
+targets before writing. Dependencies retain the affected native paragraph's text,
 text-run styles, paragraph styles, bullets, non-text elements and heading-ID
 ancestry, plus metadata for referenced lists, objects and dropdown definitions.
 Effective named styles and document style must also remain unchanged. Native
@@ -44,7 +88,7 @@ delete/recreate sequence yielding exactly the same unique native state cannot
 be distinguished from uninterrupted existence. No unconditional persistent
 paragraph identity or automatic recovery of structural identity is claimed.
 
-Append intentionally has a different dependency: **the current document end**.
+Required-mode append has a different dependency: **the current document end**.
 After a rejected append, it replans at the newly read end, preserving both
 appends. It does not preserve an old absolute insertion index or old end style.
 The resulting order follows the successful guarded commits, not call start
@@ -70,6 +114,7 @@ Errors remain MCP `isError=true` with typed recovery guidance:
 | `TARGET_DELETED` | A source unit was removed, or the original target/scope can no longer be resolved. |
 | `TARGET_AMBIGUOUS` | Duplicate native units or unsupported source containment prevent safe resolution. |
 | `REVISION_RETRY_EXHAUSTED` | Three confirmed revision rejections prevented completion. |
+| `TARGET_REVISION_REJECTED` | Google rejected the original target revision; no automatic retry or revision substitution occurred. |
 | `REVISION_UNAVAILABLE` | A native read supplied no usable revision; no unguarded indexed batch is sent. |
 | `WRITE_OUTCOME_UNKNOWN` | An in-flight write/side effect might have committed; automatic replay is unsafe. |
 | `PARTIAL_WRITE` | Earlier stages committed but later work failed; inspect before a new edit. |
@@ -133,7 +178,7 @@ production locks. Each run validates source fingerprints, records identities,
 reads back native content, restores the original document body, and reaps both
 processes.
 
-Verified on 2026-10-27: the full offline suite passed with 1123 tests and
+Initial required-mode verification on 2026-10-27: the full offline suite passed with 1123 tests and
 45 opt-in skips; the combined table/concurrency probe file passed all eight
 tests (six live scenarios and two offline checks). Every live scenario
 reported successful checks, exact original-body restoration and subprocess
@@ -141,6 +186,16 @@ reaping. Both processes in every scenario loaded source fingerprint
 `9e52416ea6f0d2272aaf37ddd44919c9b18c2481fed4b961229b71e93512c31f`.
 Ruff and whitespace validation passed. Expected conflict/partial-write
 failures were observed in stderr alongside successful revision retries.
+
+Both-policy verification on 2026-10-27: 1132 offline tests passed. Ten public
+live scenarios passed across required/target modes: shifted targets, overlapping
+replacements, concurrent appends, interrupted table stages, and strict caller
+revision preconditions. Every scenario restored the exact initial document
+body and reaped both STDIO processes. All ten loaded source fingerprint
+`024ad07081dbec025950d398a3fd353e62267136caa110badf299f5471799a33`.
+Configuration tests cover defaults, JSON/environment precedence and invalid
+values; offline regressions also verify target rejection without replay,
+unknown outcomes, entity preflight, and required-only table stages.
 
 ```bash
 GDOCS_SCOPE_MCP_LIVE_TEST_DOC='your-disposable-document-id' \
@@ -150,9 +205,9 @@ GDOCS_SCOPE_MCP_LIVE_TEST_DOC='your-disposable-document-id' \
 Only use an authorized disposable document without other editors. These tests
 own their appended tail, including both processes' synthetic changes; cleanup
 must not race unrelated human writes. Reports and logs use
-`/tmp/gdocs-scope-mcp-table-probe-public-{shift,overlap,append,table}.*`.
+`/tmp/gdocs-scope-mcp-table-probe-public-{shift,overlap,append,table,strict}-{required,target}.*`.
 
 Google's [batchUpdate/WriteControl contract](https://developers.google.com/workspace/docs/api/reference/rest/v1/documents/batchUpdate)
 documents required-revision rejection, batch atomicity and target-revision
-conflict resolution. We use required revisions; Google's automatic conflict
-resolution is not a substitute for the dependency checks above.
+conflict resolution. Required mode uses our dependency checks; target mode
+explicitly delegates conflict resolution to Google instead.

@@ -83,9 +83,9 @@ def _paused_read(service, doc_id):
 docs_edit._get_document = _paused_read
 
 
-def _paused_table_submit(service, doc_id, requests, revision):
+def _paused_table_submit(service, doc_id, requests, revision, **kwargs):
     """Pause after table creation committed but before its cell lookup."""
-    result = _submit_table(service, doc_id, requests, revision)
+    result = _submit_table(service, doc_id, requests, revision, **kwargs)
     with _gate_lock:
         pause = (_gate['armed'] and _gate['kind'] == 'table'
                  and any('insertTable' in r for r in requests)

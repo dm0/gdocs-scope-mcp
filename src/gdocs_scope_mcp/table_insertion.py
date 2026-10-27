@@ -264,7 +264,8 @@ class TableInsertionPlan:
 
         def submit(requests):
             nonlocal revision
-            response = guarded_submit(service, doc_id, requests, revision)
+            response = guarded_submit(service, doc_id, requests, revision,
+                                      force_required=True)
             self.completed_batches += 1
             revision = response['writeControl']['requiredRevisionId']
 

@@ -196,20 +196,23 @@ class Probe:
 def table_probe(live_test_doc):
     """Open two test-only MCP servers and always close and reap both."""
     @asynccontextmanager
-    async def connect(name):
+    async def connect(name, revision_mode=None):
         repo = Path(__file__).resolve().parents[1]
         launcher = repo / 'tests/probes/table_server.py'
         report = {'servers': [], 'probe_server_sha256': hashlib.sha256(
             launcher.read_bytes(),
         ).hexdigest()}
         root = Path('/tmp/gdocs-scope-mcp-table-probe-' + name)
+        environment = {
+            **os.environ, 'GDOCS_SCOPE_MCP_LIVE_TEST_DOC': live_test_doc,
+        }
+        if revision_mode is not None:
+            environment['GOOGLE_DOCS_MCP_WRITE_REVISION_MODE'] = revision_mode
+            report['write_revision_mode'] = revision_mode
         transports = [StdioTransport(
             command=str(repo / '.venv/bin/fastmcp'),
             args=['run', str(launcher), '--transport', 'stdio'],
-            cwd=str(repo), env={
-                **os.environ,
-                'GDOCS_SCOPE_MCP_LIVE_TEST_DOC': live_test_doc,
-            },
+            cwd=str(repo), env=environment,
             log_file=root.with_suffix(f'.{i}.log'), keep_alive=False,
         ) for i in range(2)]
         try:
@@ -524,11 +527,15 @@ async def raced_edit(probe, tool, arguments, mutation,
     return await asyncio.wait_for(task, timeout=30)
 
 
-@pytest.mark.parametrize('scenario', ['shift', 'overlap', 'append', 'table'])
-def test_live_public_edit_revision_race(live_test_doc, table_probe, scenario):
+@pytest.mark.parametrize('scenario', ['shift', 'overlap', 'append', 'table',
+                                      'strict'])
+@pytest.mark.parametrize('mode', ['required', 'target'])
+def test_live_public_edit_revision_race(live_test_doc, table_probe, scenario,
+                                       mode):
     """Exercise actual guarded public tools, not only raw API probes."""
     async def run():
-        async with table_probe('public-' + scenario) as probe:
+        async with table_probe('public-' + scenario + '-' + mode,
+                               revision_mode=mode) as probe:
             before = await probe.read()
             probe.initial_body = before['body']
             probe.start = before['body']['content'][-1]['endIndex'] - 1
@@ -563,10 +570,12 @@ def test_live_public_edit_revision_race(live_test_doc, table_probe, scenario):
                 arguments.update(find='Guard target 🦷 phrase',
                                  replace='Guard ours replacement😀',
                                  heading_id=heading)
+                if scenario == 'strict':
+                    arguments['expected_revision_id'] = native['revisionId']
 
                 async def mutation():
                     """Either shift indices or overlap the original target."""
-                    if scenario == 'shift':
+                    if scenario in {'shift', 'strict'}:
                         await probe.call(0, 'docs_insert_before', {
                             'doc_id': live_test_doc,
                             'anchor': 'Guard prefix😀',
@@ -591,7 +600,12 @@ def test_live_public_edit_revision_race(live_test_doc, table_probe, scenario):
                 assert len(probe.tables(native)) == 1
                 assert 'Guard collaborator appended🦷' in content
                 assert 'Guard header' not in content
-            elif scenario == 'overlap':
+            elif scenario == 'strict':
+                assert result.is_error
+                assert result.structured_content['code'] == 'EDIT_CONFLICT'
+                assert 'Guard collaborator prefix🦷' in content
+                assert 'Guard ours replacement😀' not in content
+            elif scenario == 'overlap' and mode == 'required':
                 assert result.is_error
                 assert result.structured_content['code'] == 'EDIT_CONFLICT'
                 assert 'Guard collaborator replacement😀' in content
@@ -600,11 +614,13 @@ def test_live_public_edit_revision_race(live_test_doc, table_probe, scenario):
                 assert not result.is_error, result.structured_content
                 assert content.count('Guard ours appended😀') == 1
                 assert content.count('Guard collaborator appended🦷') == 1
-                assert content.index('Guard collaborator appended🦷') < (
-                    content.index('Guard ours appended😀'))
+                if mode == 'required':
+                    assert content.index('Guard collaborator appended🦷') < (
+                        content.index('Guard ours appended😀'))
             else:
                 assert not result.is_error, result.structured_content
-                assert 'Guard collaborator prefix🦷' in content
+                if scenario == 'shift':
+                    assert 'Guard collaborator prefix🦷' in content
                 assert content.count('Guard ours replacement😀') == 1
             probe.report['checks_passed'] = True
     asyncio.run(run())
