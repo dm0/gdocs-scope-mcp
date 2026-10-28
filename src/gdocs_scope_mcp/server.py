@@ -226,7 +226,11 @@ EDITING TOOLS:
     Markdown images and HTML img[src] insert native inline images using public
     HTTP(S) URLs (PNG/JPEG/GIF; Google's size limits apply). HTML width/height
     accept positive pixel numbers; CSS sizes and responsive sources fail before
-    writes. Alt/title are not native metadata. Receipts expose
+    writes. Without either dimension, images fill the available paragraph
+    width in single-column paged body paragraphs/lists; Google preserves aspect
+    ratio. Table cells, pageless/multi-column or unresolved layouts retain
+    Google's default sizing. Explicit width or height takes precedence.
+    Alt/title are not native metadata. Receipts expose
     inserted_image_count and U+FFFC image placeholders in text/counts.
     Local images require upload_local_images=True. This explicitly permits
     temporary My Drive root files and anyone-with-link reader access; sources
@@ -900,7 +904,9 @@ def docs_insert_after(
     use multiple revision-guarded batches; failures may leave partial content.
     Read before retrying. Images require public HTTP(S) PNG/JPEG/GIF URLs;
     alt/title metadata is not preserved. HTML width/height accept pixel
-    numbers.
+    numbers. Without dimensions, images fit paragraph content width in
+    single-column paged body paragraphs/lists. Explicit sizes take precedence;
+    cells and unsupported/unresolved layouts retain Google's default sizing.
     Inline code and blocks default to Roboto Mono, with inline color #188038;
     font/color are configurable on the server. Blocks preserve literal
     whitespace. Declared languages use Pygments (theme default); highlighting
@@ -994,7 +1000,9 @@ def docs_insert_before(
     use multiple revision-guarded batches; failures may leave partial content.
     Read before retrying. Images require public HTTP(S) PNG/JPEG/GIF URLs;
     alt/title metadata is not preserved. HTML width/height accept pixel
-    numbers.
+    numbers. Without dimensions, images fit paragraph content width in
+    single-column paged body paragraphs/lists. Explicit sizes take precedence;
+    cells and unsupported/unresolved layouts retain Google's default sizing.
     Inline code and blocks default to Roboto Mono, with inline color #188038;
     font/color are configurable on the server. Blocks preserve literal
     whitespace. Declared languages use Pygments (theme default); highlighting
@@ -1123,6 +1131,9 @@ def docs_append(
     Markdown images and HTML img[src] create native images from public HTTP(S)
     PNG/JPEG/GIF URLs. HTML width/height accept pixel numbers; alt/title
     metadata is not preserved. CSS/responsive images are unsupported.
+    Without dimensions, images fit paragraph content width in single-column
+    paged body paragraphs/lists. Explicit sizes take precedence; cells and
+    unsupported/unresolved layouts retain Google's default sizing.
     Rectangular Markdown/HTML tables preserve inline formatting, br breaks,
     empty cells and column alignment. Merged/nested tables and block content
     are unsupported. Tables use multiple revision-guarded batches; failures may

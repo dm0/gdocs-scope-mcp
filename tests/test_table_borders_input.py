@@ -38,8 +38,9 @@ def test_border_input_reaches_table_executor(tool, extra, expected,
     calls = []
 
     def execute(_self, _service, _doc_id, _revision, *,
-                table_borders, tab_id=None):
+                table_borders, tab_id=None, size_images=None):
         assert tab_id is None
+        assert callable(size_images)
         calls.append(table_borders)
 
     monkeypatch.setattr(TableInsertionPlan, 'execute', execute)

@@ -235,12 +235,13 @@ class TableInsertionPlan:
 
     def execute(self, service, doc_id: str,
                 required_revision: str | None = None, *,
-                table_borders: bool = True, tab_id=None) -> None:
+                table_borders: bool = True, tab_id=None,
+                size_images=None) -> None:
         """Insert each table, read real cell locations, then populate it."""
         self.completed_batches = 0
         try:
             self._execute(service, doc_id, required_revision, table_borders,
-                          tab_id)
+                          tab_id, size_images=size_images)
         except (RevisionRaceError, ToolFailureError):
             raise
         except Exception as error:
@@ -255,7 +256,7 @@ class TableInsertionPlan:
 
     def _execute(self, service, doc_id: str,
                  required_revision: str | None, table_borders: bool,
-                 tab_id=None) -> None:
+                 tab_id=None, *, size_images=None) -> None:
         """Guard each stage with the revision returned by the prior write."""
         from .document_tabs import scope_requests, select
         from .md2requests import inserted_text_from_requests
@@ -278,6 +279,8 @@ class TableInsertionPlan:
         for group in self.request_groups():
             if not isinstance(group, InsertionTable):
                 requests = self.paragraph_requests(group, cursor)
+                if size_images is not None:
+                    size_images(requests, group)
                 submit(requests)
                 cursor += utf16_length(inserted_text_from_requests(requests))
                 continue
