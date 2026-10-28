@@ -798,6 +798,7 @@ def get_tree(doc_id: str, *, tab_id=None) -> DocumentOutline:
 
     return DocumentOutline(
         sections=flat_items,
+        tabs=doc.get('_mcp_tabs', []),
         title=tree.title,
         revision_id=tree.revision_id,
         document_id=tree.document_id,

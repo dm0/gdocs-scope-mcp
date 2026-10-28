@@ -325,6 +325,10 @@ def docs_get_tree(doc_id: str, *,
 
     tab_id selects a root or nested tab; omitted selects the first tab.
     Discover IDs with docs_tabs_list. Heading IDs are local to that tab.
+    The tabs array lists ALL root and nested tabs with tab_id, title,
+    parent_tab_id, depth and sibling index, including the selected tab.
+    A single entry means this is the document's only tab. The inventory and
+    selected outline come from the same read; sections belong only to tab_id.
 
     Use this tool FIRST when encountering a document to locate target sections
     via their heading IDs, avoiding the need to read a massive document all at

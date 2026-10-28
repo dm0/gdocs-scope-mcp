@@ -5,7 +5,7 @@ from typing import Annotated
 
 from pydantic import BaseModel, Field
 
-from .models import EditFailedResponse
+from .models import EditFailedResponse, TabInfo
 from .tool_errors import ToolFailureError
 
 MAX_TAB_ID_LENGTH = 256
@@ -62,7 +62,8 @@ def select(document, tab_id=None):
     if not tabs:
         if tab_id is not None:
             fail('Requested tab was not found.')
-        return {**document, '_mcp_tab_id': None, '_mcp_tab_title': None}
+        return {**document, '_mcp_tab_id': None, '_mcp_tab_title': None,
+                '_mcp_tabs': []}
     ids = [t['tabProperties']['tabId'] for t, *_ in tabs]
     if len(set(ids)) != len(ids):
         fail(
@@ -97,17 +98,13 @@ def select(document, tab_id=None):
         **chosen['documentTab'],
         '_mcp_tab_id': chosen['tabProperties']['tabId'],
         '_mcp_tab_title': chosen['tabProperties'].get('title', ''),
+        '_mcp_tabs': [TabInfo(
+            tab_id=tab['tabProperties']['tabId'],
+            title=tab['tabProperties'].get('title', ''),
+            parent_tab_id=parent, depth=depth,
+            index=tab['tabProperties'].get('index', index),
+        ).model_dump() for tab, parent, depth, index in tabs],
     }
-
-
-class TabInfo(BaseModel):
-    """Expose a flat hierarchy suitable for explicit agent selection."""
-
-    tab_id: str
-    title: str
-    parent_tab_id: str | None
-    depth: int
-    index: int
 
 
 class TabsResponse(BaseModel):
@@ -122,23 +119,13 @@ class TabsResponse(BaseModel):
 
 def discover(document):
     """Build hierarchy metadata; legacy responses expose no invented tab ID."""
-    select(document)
-    tabs = [
-        TabInfo(
-            tab_id=tab['tabProperties']['tabId'],
-            title=tab['tabProperties'].get('title', ''),
-            parent_tab_id=parent,
-            depth=depth,
-            index=tab['tabProperties'].get('index', index),
-        )
-        for tab, parent, depth, index in walk(document.get('tabs', []))
-    ]
+    tabs = select(document).get('_mcp_tabs', [])
     return TabsResponse(
         document_id=document['documentId'],
         title=document.get('title', ''),
         revision_id=document.get('revisionId'),
         tabs=tabs,
-        default_tab_id=tabs[0].tab_id if tabs else None,
+        default_tab_id=tabs[0]['tab_id'] if tabs else None,
     )
 
 

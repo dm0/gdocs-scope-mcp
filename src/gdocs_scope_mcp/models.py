@@ -288,10 +288,21 @@ class DocumentBase(BaseModel):
     tab_title: str | None = None
 
 
+class TabInfo(BaseModel):
+    """Expose a flat tab hierarchy suitable for explicit agent selection."""
+
+    tab_id: str
+    title: str
+    parent_tab_id: str | None
+    depth: int
+    index: int
+
+
 class DocumentOutline(DocumentBase):
     """Document outline"""
 
     sections: Sequence[DocumentOutlineItem] = []
+    tabs: list[TabInfo] = Field(default_factory=list)
 
 
 class DocumentTree(DocumentBase):

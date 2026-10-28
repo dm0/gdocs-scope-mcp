@@ -12,6 +12,9 @@ remain usable only with the default selector.
 Every production document fetch requests `includeTabsContent=true`. The compact
 discovery tool returns hierarchy metadata, but its underlying fetch currently
 includes body content. It does not promise reduced API transfer or caching.
+`docs_get_tree` also returns this complete compact inventory in `tabs`,
+alongside the selected tab's outline. It reuses the same native snapshot and
+makes no additional Google API request for tab discovery.
 
 Guarded text edits retain the chosen tab across revision retries, including
 when the original call omitted `tab_id`. Ranges, locations, table locations

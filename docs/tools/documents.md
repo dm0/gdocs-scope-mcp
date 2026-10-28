@@ -73,6 +73,14 @@ Return an object with `document_id`, `title`, `revision_id`, and a flat
 section objects. Use the IDs to select section subtrees for reading and
 editing; body paragraphs are omitted.
 
+The response also includes `tab_id`, `tab_title` and `tabs`: the complete
+inventory of root and nested tabs, including the selected one. Each tab has
+`tab_id`, `title`, `parent_tab_id`, `depth` and sibling `index`, in document
+order. One entry means the document has only one tab. Use the returned IDs to
+select another tab without a separate discovery call. The inventory and the
+selected tab's sections come from the same Google API read; other tabs' body
+content is not returned.
+
 ```python
 docs_get_tree(doc_id="...")
 ```

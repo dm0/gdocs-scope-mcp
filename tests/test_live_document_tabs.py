@@ -109,6 +109,8 @@ def test_live_document_tabs(live_test_doc, table_probe):
                         'tab_id': child,
                     },
                 )
+                assert outline['tabs'] == listing['tabs']
+                assert outline['tab_id'] == child
                 heading = next(
                     s['id']
                     for s in outline['sections']

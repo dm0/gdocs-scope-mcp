@@ -66,6 +66,7 @@ def test_reads_outline_and_table_refs_share_tab(mock_docs, tab_id):
     read = docs_edit.read('example', ['parent'], tab_id=tab_id)
     listing = table_read.tables_list('example', tab_id=tab_id)
     assert outline.tab_id == read.tab_id == listing.snapshot.tab_id == actual
+    assert [t.tab_id for t in outline.tabs] == ['first', 'nested', 'second']
     assert read.tab_title == actual
     expected_scope = 'selected_tab' if tab_id else 'first_tab'
     assert listing.snapshot.scope == expected_scope
@@ -74,6 +75,27 @@ def test_reads_outline_and_table_refs_share_tab(mock_docs, tab_id):
     )
     assert table.snapshot.tab_id == actual
     assert docs_edit.get_full_tree('example', tab_id=tab_id).tab_id == actual
+    mock_docs.batchUpdate.assert_not_called()
+
+
+@pytest.mark.parametrize('single_tab', [False, True])
+@pytest.mark.parametrize('selected_tab', [None, 'nested'])
+def test_outline_includes_complete_tab_inventory(
+    tabs, mock_docs, single_tab, selected_tab,
+):
+    """Return all tab IDs/titles from the same snapshot as the outline."""
+    if single_tab:
+        tabs['tabs'] = [tabs['tabs'][0]['childTabs'][0]]
+    expected = discover(tabs).model_dump()['tabs']
+    result = call('docs_get_tree', doc_id='example', tab_id=selected_tab)
+    assert not result.is_error
+    data = result.structured_content
+    assert data['tabs'] == expected
+    assert data['tab_id'] == (selected_tab or expected[0]['tab_id'])
+    assert len(data['tabs']) == (1 if single_tab else 3)
+    assert all('body' not in t and 'documentTab' not in t
+               for t in data['tabs'])
+    mock_docs.get.assert_called_once()
     mock_docs.batchUpdate.assert_not_called()
 
 
