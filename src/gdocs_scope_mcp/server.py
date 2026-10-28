@@ -49,6 +49,7 @@ from . import (
     comments,
     docs_edit,
     entity_edit,
+    suggestions,
     table_format,
     table_patch,
     table_read,
@@ -83,6 +84,8 @@ from .models import (
     ResolveCommentResponse,
 )
 from .settings import code_formatting, get_settings
+from .suggestion_models import SuggestionsReadResponse
+from .suggestions import SuggestionCursor, SuggestionId, SuggestionLimit
 from .table_format import FormatChanges, FormatResponse
 from .table_patch import CellPatches, PatchResponse
 from .table_read import (
@@ -383,6 +386,42 @@ def docs_tabs_list(doc_id: str) -> TabsResponse:
     Tab discovery is read-only; revision IDs remain document-wide.
     """
     return docs_edit.tabs_list(doc_id)
+
+
+@mcp.tool(
+    output_schema=_tool_response_schema(SuggestionsReadResponse),
+    annotations={'readOnlyHint': True, 'destructiveHint': False,
+                 'idempotentHint': True, 'openWorldHint': True},
+)
+def docs_suggestions_read(
+    doc_id: str, *, tab_id: TabId | None = None,
+    heading_id: NonemptyText | None = None,
+    suggestion_id: SuggestionId | None = None,
+    include_closed: bool = False, limit: SuggestionLimit = 50,
+    page_token: SuggestionCursor | None = None,
+) -> SuggestionsReadResponse:
+    """Inspect native proposals separately from accepted-content reads.
+
+    Omitted tab_id selects the first tab; heading_id selects an accepted
+    heading subtree. Ordinary docs_read/docs_get_tree omit proposed insertions
+    and retain proposed deletions without accepting/rejecting anything.
+    This tool lists OPEN/unknown proposals by default. include_closed also
+    returns decided threads; an explicit suggestion_id includes its status
+    regardless of include_closed and pages its replies with a complete head.
+    Summaries and diagnostic native ranges identify proposals, not editable
+    source text or preview coordinates. Unknown locations are returned with
+    scope_match=unknown rather than assigned to a tab/heading by their summary.
+    Closed threads can lose their source ranges. Lists omit posts/reply bodies;
+    summaries and locations are bounded with truncation flags. Use detail to
+    read complete posts. page_token requires unchanged arguments and native
+    thread/document state; restart without it after STALE_REFERENCE.
+    No proposals or comments are created, accepted, rejected or deleted.
+    """
+    return suggestions.read(
+        doc_id, tab_id=tab_id, heading_id=heading_id,
+        suggestion_id=suggestion_id, include_closed=include_closed,
+        limit=limit, page_token=page_token,
+    )
 
 
 @mcp.tool(

@@ -33,6 +33,7 @@ from .entities import (
     chip_html,
     chip_label,
 )
+from .suggestion_models import SuggestionNotice
 from .text_indices import utf16_length
 
 HEADING_LEVELS = {
@@ -282,7 +283,9 @@ class DocumentBase(BaseModel):
     """Store document identity and revision metadata."""
 
     title: Annotated[str, Field(description='Document title')]
-    revision_id: Annotated[str, Field(description='Document revision id')]
+    revision_id: Annotated[
+        str | None, Field(description='Document revision id'),
+    ]
     document_id: Annotated[str, Field(description='Document id')]
     tab_id: str | None = None
     tab_title: str | None = None
@@ -303,6 +306,7 @@ class DocumentOutline(DocumentBase):
 
     sections: Sequence[DocumentOutlineItem] = []
     tabs: list[TabInfo] = Field(default_factory=list)
+    suggestions: SuggestionNotice = Field(default_factory=SuggestionNotice)
 
 
 class DocumentTree(DocumentBase):
@@ -379,6 +383,7 @@ class DocumentSubset(DocumentBase):
         description='Non-overlapping section subtrees in document order. '
         'Whole-tab reads include a preamble entry with heading_id=null.',
     )
+    suggestions: SuggestionNotice = Field(default_factory=SuggestionNotice)
     tab_count: int = Field(
         default=0, ge=0, description='Total root and nested tabs in the '
         'document, including the selected tab. One means the only tab; '
@@ -1438,7 +1443,7 @@ class GoogleDocument(BaseModel, populate_by_name=True):
         dict[str, GoogleDocumentInlineObject],
         Field(alias='inlineObjects', default_factory=dict),
     ]
-    revision_id: Annotated[str, Field(alias='revisionId')]
+    revision_id: Annotated[str | None, Field(alias='revisionId')] = None
     document_id: Annotated[str, Field(alias='documentId')]
     code_markdown: dict[int, str] = Field(default_factory=dict, exclude=True)
     plain_native_code: set[int] = Field(default_factory=set, exclude=True)

@@ -81,8 +81,11 @@ from .revision_guards import (
     require_native_precondition,
     submit,
 )
+from .suggestions import (
+    fetch as read_view,
+    table_references,
+)
 from .table_insertion import TableInsertionPlan
-from .table_read import reference_map
 from .text_indices import utf16_length
 from .tool_errors import ToolFailureError
 
@@ -564,9 +567,9 @@ def read(
     Read Google document or its parts including all nested headings.
     """
     service = _get_service('docs', 'v1')
-    doc = _get_document(service, doc_id, tab_id=tab_id)
-
-    doc['table_refs'] = reference_map(doc)
+    view = read_view(service, doc_id, tab_id)
+    doc = view.document
+    doc['table_refs'], table_warnings = table_references(view)
     google_doc = _parse_document_tree(doc)
 
     if heading_ids is None:
@@ -593,7 +596,11 @@ def read(
         ]
         selected = [item.id for item in roots]
 
+    notice = view.index.notice(view.source, selected,
+                               unavailable=view.unavailable)
+    notice.warnings.extend(table_warnings)
     return DocumentSubset(
+        suggestions=notice,
         tab_count=len(doc.get('_mcp_tabs', [])),
         sections=[
             DocumentReadSection(
@@ -615,12 +622,16 @@ def get_tree(doc_id: str, *, tab_id=None) -> DocumentOutline:
     Fetch a Google Doc and return structured representation.
     """
     service = _get_service('docs', 'v1')
-    doc = _get_document(service, doc_id, tab_id=tab_id)
+    view = read_view(service, doc_id, tab_id)
+    doc = view.document
 
     tree = _parse_document_tree(doc)
     flat_items = list(tree.descendants())
 
     return DocumentOutline(
+        suggestions=view.index.notice(
+            view.source, unavailable=view.unavailable,
+        ),
         sections=flat_items,
         tabs=doc.get('_mcp_tabs', []),
         title=tree.title,
