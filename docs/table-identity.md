@@ -1,5 +1,9 @@
 # Table identity and concurrent writes
 
+This is a historical API research log. Candidate binding strategies below are
+not the current MCP contract. Production tools use [checked positional refs](table-references.md)
+and the [table tool contracts](tools/tables.md).
+
 The implemented reference contract is now based on checked section positions
 and structural hashes, with A1 cell addresses and selective snapshots. See
 [table references](table-references.md). The named-range probes and candidate
