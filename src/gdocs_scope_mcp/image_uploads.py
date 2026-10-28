@@ -19,7 +19,6 @@ from .md2requests import (
     gpars_to_requests,
     html_to_gpars,
     markdown_to_html,
-    markdown_to_requests,
 )
 from .table_insertion import TableInsertionPlan
 
@@ -33,6 +32,7 @@ class PreparedInsertion:
 
     requests: list[dict] | TableInsertionPlan
     cleanup_pending: list[str] = field(default_factory=list)
+    paragraphs: list = field(default_factory=list)
 
 
 def _local_image(uri: str) -> tuple[Path, bytes, str] | None:
@@ -115,9 +115,11 @@ def rich_insertion_requests(
 ) -> Iterator[PreparedInsertion]:
     """Validate the edit, stage local images, and always attempt cleanup."""
     if not upload_local_images:
-        prepared = PreparedInsertion(markdown_to_requests(
-            text, start, newline_before=newline_before,
-        ))
+        paragraphs = html_to_gpars(markdown_to_html(text), start)
+        prepared = PreparedInsertion(
+            gpars_to_requests(paragraphs, newline_before=newline_before),
+            paragraphs=paragraphs,
+        )
         if validate_requests:
             validate_requests(prepared.requests)
         yield prepared
@@ -136,9 +138,11 @@ def rich_insertion_requests(
         image['src'] = sources[path][0]
     # Unsupported lists, other image sources, and bad dimensions must fail
     # before even one upload or public permission is created.
-    planned = PreparedInsertion(gpars_to_requests(
-        html_to_gpars(str(soup), start), newline_before=newline_before,
-    ))
+    paragraphs = html_to_gpars(str(soup), start)
+    planned = PreparedInsertion(
+        gpars_to_requests(paragraphs, newline_before=newline_before),
+        paragraphs=paragraphs,
+    )
     if validate_requests:
         validate_requests(planned.requests)
     if not sources:

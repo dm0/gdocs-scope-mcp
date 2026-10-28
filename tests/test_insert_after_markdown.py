@@ -92,7 +92,7 @@ def test_literal_after_bypasses_both_parsers(
         raise AssertionError('Literal insertion must not parse Markdown')
 
     monkeypatch.setattr(
-        'gdocs_scope_mcp.image_uploads.markdown_to_requests', unexpected_call,
+        'gdocs_scope_mcp.image_uploads.html_to_gpars', unexpected_call,
     )
     result = docs_edit.insert_after(
         'example',

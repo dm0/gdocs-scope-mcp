@@ -121,7 +121,7 @@ def test_literal_append_preserves_input_without_conversion(
         raise AssertionError('Literal append must not parse Markdown')
 
     monkeypatch.setattr(
-        'gdocs_scope_mcp.image_uploads.markdown_to_requests',
+        'gdocs_scope_mcp.image_uploads.html_to_gpars',
         unexpected_conversion,
     )
     result = docs_edit.append('example', text, rich=False)

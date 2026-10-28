@@ -48,6 +48,7 @@ from .document_cache import wrap_service
 from .document_tabs import discover, select
 from .entities import collect_entities
 from .entity_edit import INSERT_ENTITY_KINDS, validate_insertions
+from .image_layout import fit_images
 from .image_uploads import PreparedInsertion, rich_insertion_requests
 from .md2requests import inserted_text_from_requests
 from .models import (
@@ -823,6 +824,7 @@ def _insert_content(
     required_revision: str | None = None,
     table_borders: bool = True,
     tab_id: str | None = None,
+    document: dict | None = None,
 ) -> tuple[str, int, int, list[str]]:
     """Apply a validated insertion within the temporary-image lifecycle."""
     if rich:
@@ -849,10 +851,17 @@ def _insert_content(
                 service, doc_id, required_revision,
                 table_borders=table_borders,
                 tab_id=tab_id,
+                size_images=(lambda requests, paragraphs: fit_images(
+                    requests, paragraphs, document or {}, index,
+                )),
             )
             requests = list(prepared.requests.iter_requests())
         else:
             requests = prepared.requests
+            if rich:
+                fit_images(
+                    requests, prepared.paragraphs, document or {}, index,
+                )
             submit(service, doc_id, requests, required_revision)
     return (inserted, sum('insertInlineImage' in r for r in requests),
             sum(bool(INSERT_ENTITY_KINDS.intersection(r)) for r in requests),
@@ -917,6 +926,7 @@ def insert_after(
         required_revision=doc.get('revisionId'),
         table_borders=table_borders,
         tab_id=doc.get('_mcp_tab_id'),
+        document=doc,
     )
 
     return InsertSucceedResponse(
@@ -996,6 +1006,7 @@ def insert_before(
         required_revision=doc.get('revisionId'),
         table_borders=table_borders,
         tab_id=doc.get('_mcp_tab_id'),
+        document=doc,
     )
 
     return InsertSucceedResponse(
@@ -1137,6 +1148,7 @@ def append(
         required_revision=doc.get('revisionId'),
         table_borders=table_borders,
         tab_id=doc.get('_mcp_tab_id'),
+        document=doc,
     )
 
     return AppendSucceedResponse(
