@@ -87,6 +87,17 @@ def test_named_style_inheritance_and_planned_override(paged):
     assert paragraph_width(paged, 1, heading) == 438
 
 
+def test_document_orientation_is_inherited_and_section_can_override(paged):
+    paged['documentStyle']['flipPageOrientation'] = True
+    assert paragraph_width(paged, 1, image_paragraph()) == 648
+    paged['body']['content'].insert(0, {
+        'endIndex': 1, 'sectionBreak': {'sectionStyle': {
+            'flipPageOrientation': False,
+        }},
+    })
+    assert paragraph_width(paged, 1, image_paragraph()) == 468
+
+
 def test_existing_list_uses_native_level_indents(paged):
     paged['lists'] = {
         'list': {

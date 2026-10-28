@@ -33,7 +33,9 @@ def _layout(document, index):
     if source is None or len(section.get('columnProperties', [])) > 1:
         return None
     page = style.get('pageSize', {})
-    dimension = 'height' if section.get('flipPageOrientation') else 'width'
+    flipped = section.get('flipPageOrientation',
+                          style.get('flipPageOrientation', False))
+    dimension = 'height' if flipped else 'width'
     width = _points(page.get(dimension))
     margins = [
         _points(section.get(side, style.get(side)))
