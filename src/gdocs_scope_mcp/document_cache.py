@@ -50,20 +50,43 @@ class SnapshotCache:
                 if key[:2] == (owner, doc_id):
                     self._remove(key)
 
+    def _entry(self, key, settings):
+        """Expire old entries and retrieve one immutable snapshot."""
+        with self.lock:
+            now = self.clock()
+            for stale, item in list(self.entries.items()):
+                if (
+                    not 0
+                    <= now - item.created
+                    < (settings.document_cache_ttl_seconds)
+                ):
+                    self._remove(stale)
+            return self.entries.get(key)
+
+    def _touch(self, key):
+        with self.lock:
+            if key in self.entries:
+                self.entries.move_to_end(key)
+
+    def _save(self, key, entry, settings):
+        with self.lock:
+            self._remove(key)
+            if len(entry.payload) <= settings.document_cache_max_bytes:
+                while self.entries and (
+                    len(self.entries) >= settings.document_cache_max_entries
+                    or self.size + len(entry.payload)
+                    > settings.document_cache_max_bytes
+                ):
+                    self._remove(next(iter(self.entries)))
+                self.entries[key] = entry
+                self.size += len(entry.payload)
+
     def read(self, owner, doc_id, options, *, fetch, check, settings):
         """Validate access/revision on hits; never return stale on error."""
         key = (owner, doc_id, options)
         started = self.clock()
         with self.document_lock(owner, doc_id):
-            with self.lock:
-                now = self.clock()
-                for stale, item in list(self.entries.items()):
-                    if (
-                        now - item.created
-                        >= settings.document_cache_ttl_seconds
-                    ):
-                        self._remove(stale)
-                entry = self.entries.get(key)
+            entry = self._entry(key, settings)
             if entry is not None:
                 try:
                     revision = check().get('revisionId')
@@ -76,9 +99,7 @@ class SnapshotCache:
                     and self.clock() - entry.created
                     < settings.document_cache_ttl_seconds
                 ):
-                    with self.lock:
-                        if key in self.entries:
-                            self.entries.move_to_end(key)
+                    self._touch(key)
                     self._report('hit', len(entry.payload), started)
                     return json.loads(entry.payload)
                 self.invalidate(owner, doc_id)
@@ -92,18 +113,7 @@ class SnapshotCache:
             if not isinstance(revision, str) or not revision:
                 self.invalidate(owner, doc_id)
             if isinstance(revision, str) and revision:
-                with self.lock:
-                    self._remove(key)
-                    if len(payload) <= settings.document_cache_max_bytes:
-                        while self.entries and (
-                            len(self.entries)
-                            >= settings.document_cache_max_entries
-                            or self.size + len(payload)
-                            > settings.document_cache_max_bytes
-                        ):
-                            self._remove(next(iter(self.entries)))
-                        self.entries[key] = Entry(payload, revision, started)
-                        self.size += len(payload)
+                self._save(key, Entry(payload, revision, started), settings)
             self._report('miss', len(payload), started)
             return document
 
@@ -118,6 +128,15 @@ class SnapshotCache:
 
 
 cache = SnapshotCache()
+
+
+def selected_cache():
+    """Select a backend without initializing disk storage when disabled."""
+    if get_settings().document_cache_storage == 'memory':
+        return cache
+    from .disk_cache import disk_cache  # noqa: PLC0415
+
+    return disk_cache()
 
 
 def wrap_service(service, credentials):
@@ -175,7 +194,7 @@ class CachedDocuments:
                 or not get_settings().document_cache_enabled
             ):
                 return request.execute(*args, **options)
-            return cache.read(
+            return selected_cache().read(
                 self.owner,
                 kwargs['documentId'],
                 tuple(sorted(query.items())),
@@ -195,12 +214,13 @@ class CachedDocuments:
 
         def execute(*args, **options):
             doc_id = kwargs['documentId']
-            with cache.document_lock(self.owner, doc_id):
-                cache.invalidate(self.owner, doc_id)
+            store = selected_cache()
+            with store.document_lock(self.owner, doc_id):
+                store.invalidate(self.owner, doc_id)
                 try:
                     return request.execute(*args, **options)
                 finally:
-                    cache.invalidate(self.owner, doc_id)
+                    store.invalidate(self.owner, doc_id)
 
         return DeferredRequest(request, execute)
 

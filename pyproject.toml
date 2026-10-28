@@ -11,6 +11,8 @@ requires-python = ">=3.10"
 license = {text = "MIT"}
 keywords = ["mcp", "google-docs", "google-drive", "llm", "ai-agents"]
 dependencies = [
+    "filelock>=3.16",
+    "platformdirs>=4",
     "google-api-python-client>=2.100.0",
     "google-auth>=2.23.0",
     "google-auth-oauthlib>=1.1.0",

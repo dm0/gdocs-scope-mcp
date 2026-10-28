@@ -21,7 +21,7 @@ def setup_cache(monkeypatch, simple_document):
     clock = [0.0]
     store = SnapshotCache(clock=lambda: clock[0])
     monkeypatch.setattr(document_cache, 'cache', store)
-    settings = Settings()
+    settings = Settings(document_cache_storage='memory')
     monkeypatch.setattr(document_cache, 'get_settings', lambda: settings)
     state = SimpleNamespace(
         document=simple_document,
