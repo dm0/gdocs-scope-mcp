@@ -358,6 +358,12 @@ TOOL_CASES = [
         },
     ),
     (
+        'docs_suggestions_read',
+        {'doc_id': 'example'},
+        {'document_id': 'example', 'suggestions': [], 'count': 0,
+         'total': 0, 'has_more': False, 'page_kind': 'suggestions'},
+    ),
+    (
         'docs_list',
         {},
         {

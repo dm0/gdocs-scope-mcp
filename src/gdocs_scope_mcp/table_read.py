@@ -131,6 +131,21 @@ def _fetch(doc_id, tab_id=None):
     return document
 
 
+def _read_fetch(doc_id, tab_id=None):
+    """Read accepted cells while keeping write/snapshot fetches native."""
+    from . import docs_edit
+    from .suggestions import fetch, table_references
+    view = fetch(docs_edit._get_service(), doc_id, tab_id)
+    _require_revision(view.document)
+    _, warnings = table_references(view)
+    if warnings:
+        _fail('TARGET_CHANGED', 'Pending structural proposals prevent safe '
+              'table positions in the accepted-content view.',
+              'Read the tab with docs_read and inspect proposals using '
+              'docs_suggestions_read before using table references.')
+    return view.document
+
+
 def _require_revision(document):
     """Do not issue misleading revision-bound references without metadata."""
     if not isinstance(document.get('revisionId'), str) or not document[
@@ -440,7 +455,7 @@ def tables_list(doc_id, heading_ids=None, limit=50, page_token=None, *,
     """Discover tables without returning the surrounding document text."""
     if page_token is not None:
         _decode(page_token, 'tables-page', doc_id)
-    document = _fetch(doc_id, tab_id=tab_id)
+    document = _read_fetch(doc_id, tab_id=tab_id)
     selected, unknown = _headings(document, heading_ids)
     entries = [t for t in _tables(document) if selected is None
                or set(selected).intersection(h[1] for h in t.headings)]
@@ -477,7 +492,7 @@ def table_read(doc_id, table_ref, limit=100, max_cell_chars=2000,
     token = _decode(table_ref, 'table', doc_id)
     if page_token is not None:
         _decode(page_token, 'cells-page', doc_id)
-    document = _fetch(doc_id, tab_id=tab_id)
+    document = _read_fetch(doc_id, tab_id=tab_id)
     layout = Layout(document)
     entries = layout.entries
     entry = layout.resolve(token)

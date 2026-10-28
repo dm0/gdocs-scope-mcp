@@ -3,12 +3,14 @@
 # Native fields and numeric examples are explicit API contracts.
 # ruff: noqa: D103, PLR2004
 
+import asyncio
 from copy import deepcopy
 from unittest.mock import MagicMock
 
 import pytest
+from fastmcp import Client
 
-from gdocs_scope_mcp import docs_edit, suggestions
+from gdocs_scope_mcp import docs_edit, server, suggestions, table_read
 from gdocs_scope_mcp.document_tabs import select
 from gdocs_scope_mcp.suggestion_index import index_document
 from gdocs_scope_mcp.tool_errors import ToolFailureError
@@ -297,11 +299,18 @@ def test_text_only_table_proposals_keep_valid_native_refs(
     cell['content'][0]['paragraph']['elements'][0]['textRun'][
         'suggestedDeletionIds'
     ] = ['cell-text']
+    cell['content'][0]['paragraph']['elements'][0]['textRun']['content'] = (
+        'inline proposal mixture\n'
+    )
     result = docs_edit.read('example')
     assert 'data-mcp-table-ref=' in ''.join(
         s.markdown for s in result.sections
     )
     assert result.suggestions.selected_content_has_pending is True
+    listing = table_read.tables_list('example')
+    cells = table_read.table_read('example', listing.tables[0].table_ref)
+    assert 'inline proposal mixture' not in cells.rows[0].cells[0].markdown
+    assert 'First' in cells.rows[0].cells[0].markdown
 
 
 def test_structural_table_proposals_omit_unsafe_refs(
@@ -317,6 +326,9 @@ def test_structural_table_proposals_omit_unsafe_refs(
     assert '<table' in markdown
     assert 'data-mcp-table-ref=' not in markdown
     assert any('table references' in w for w in result.suggestions.warnings)
+    with pytest.raises(ToolFailureError) as error:
+        table_read.tables_list('example')
+    assert error.value.failure.code == 'TARGET_CHANGED'
 
 
 @pytest.fixture
@@ -408,3 +420,81 @@ def test_missing_id_and_accepted_heading_scope_fail():
     with pytest.raises(ToolFailureError) as error:
         suggestions.read('example', heading_id='missing')
     assert error.value.failure.code == 'HEADING_NOT_FOUND'
+
+
+def test_hidden_proposed_heading_does_not_cut_accepted_scope(projections):
+    inline = projections['inline']
+    mark(inline, 3, 'hidden-heading')
+    inline['body']['content'][3]['paragraph']['paragraphStyle'][
+        'namedStyleType'
+    ] = 'HEADING_1'
+    projections['preview']['body']['content'].pop(3)
+    mark(inline, 4, 'body-change')
+    result = docs_edit.read('example', ['parent'])
+    assert set(result.suggestions.suggestion_ids) == {
+        'hidden-heading',
+        'body-change',
+    }
+
+
+def test_heading_identity_mismatch_is_not_silently_mapped(projections):
+    mark(projections['inline'])
+    projections['inline']['body']['content'][1]['paragraph']['elements'][0][
+        'textRun'
+    ]['content'] = 'A different native heading\n'
+    outline = docs_edit.get_tree('example')
+    assert 'parent' in outline.suggestions.unavailable_heading_ids
+    result = docs_edit.read('example', ['parent'])
+    assert result.code == 'TARGET_CHANGED'
+    whole = docs_edit.read('example')
+    assert whole.sections
+    assert whole.suggestions.detection == 'partial'
+
+
+def test_unlocated_open_thread_is_not_reported_absent(simple_document):
+    simple_document['suggestions'] = [
+        {'suggestionId': 'unlocated', 'status': 'OPEN'}
+    ]
+    notice = index_document(simple_document).notice(simple_document)
+    assert notice.document_has_pending is True
+    assert notice.selected_content_has_pending is None
+
+
+def test_empty_selection_remains_empty_when_detection_is_partial(
+    simple_document,
+):
+    simple_document['suggestedNamedStylesChanges'] = {'style': {}}
+    notice = index_document(simple_document).notice(simple_document, [])
+    assert notice.document_has_pending is True
+    assert notice.selected_content_has_pending is False
+    assert notice.suggestion_ids == []
+
+
+@pytest.mark.parametrize(
+    'arguments',
+    [
+        {'limit': 0},
+        {'limit': 101},
+        {'limit': True},
+        {'suggestion_id': ''},
+        {'heading_id': ''},
+        {'tab_id': ''},
+        {'page_token': 'x' * 8193},
+    ],
+)
+def test_inspection_input_validation_precedes_api(projections, arguments):
+    async def run():
+        async with Client(server.mcp) as client:
+            return await client.call_tool(
+                'docs_suggestions_read',
+                {
+                    'doc_id': 'example',
+                    **arguments,
+                },
+                raise_on_error=False,
+            )
+
+    result = asyncio.run(run())
+    assert result.is_error
+    assert result.structured_content['code'] == 'INVALID_ARGUMENT'
+    assert not projections['calls']

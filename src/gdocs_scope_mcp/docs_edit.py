@@ -81,6 +81,7 @@ from .revision_guards import (
     require_native_precondition,
     submit,
 )
+from .suggestion_index import scope_ranges as suggestion_scope_ranges
 from .suggestions import (
     fetch as read_view,
     table_references,
@@ -596,6 +597,14 @@ def read(
         ]
         selected = [item.id for item in roots]
 
+    if selected and suggestion_scope_ranges(view.source, selected) is None:
+        return EditFailedResponse(
+            code='TARGET_CHANGED',
+            description='Pending heading changes prevent safe mapping of '
+            'this accepted heading selection to native source.',
+            suggested_action='Read the whole tab without heading_ids, or '
+            'review the heading proposals with docs_suggestions_read first.',
+        )
     notice = view.index.notice(view.source, selected,
                                unavailable=view.unavailable)
     notice.warnings.extend(table_warnings)

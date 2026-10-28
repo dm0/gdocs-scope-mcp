@@ -35,19 +35,34 @@ def scope_ranges(document, headings=None):
     end = max((item.get('endIndex', 0) for item in content), default=0)
     if headings is None:
         return [(0, end)]
+    visible = document.get('_mcp_heading_levels')
+    unsafe = document.get('_mcp_unsafe_headings', set())
+    if unsafe.intersection(headings):
+        return None
     ranges = []
     for number, item in enumerate(content):
         style = item.get('paragraph', {}).get('paragraphStyle', {})
         if style.get('headingId') not in headings:
             continue
-        level = STYLE_LEVELS.get(style.get('namedStyleType'), 100)
+        level = (
+            visible.get(style.get('headingId'), 100)
+            if visible is not None
+            else STYLE_LEVELS.get(style.get('namedStyleType'), 100)
+        )
         stop = end
         for following in content[number + 1 :]:
             other = following.get('paragraph', {}).get('paragraphStyle', {})
-            if (
-                'headingId' in other
-                and STYLE_LEVELS.get(other.get('namedStyleType'), 100) <= level
-            ):
+            identity = other.get('headingId')
+            if visible is not None and identity not in visible:
+                continue
+            other_level = (
+                visible.get(identity, 100)
+                if visible is not None
+                else STYLE_LEVELS.get(other.get('namedStyleType'), 100)
+            )
+            if identity and other_level <= level:
+                if identity in unsafe:
+                    return None
                 stop = following['startIndex']
                 break
         ranges.append((item['startIndex'], stop))
@@ -120,10 +135,17 @@ class ProposalIndex:
         ids = sorted(
             sid for sid, match in relations.items() if match is not False
         )
-        uncertain = (unavailable or self.unknown or ranges is None
-                     or any(location.uncertain
-                            for values in self.locations.values()
-                            for location in values))
+        uncertain = (
+            unavailable
+            or self.unknown
+            or ranges is None
+            or bool(document.get('_mcp_unsafe_headings'))
+            or any(
+                location.uncertain
+                for values in self.locations.values()
+                for location in values
+            )
+        )
         selected = any(value is True for value in relations.values())
         if not selected and (
             uncertain or any(value is None for value in relations.values())
@@ -137,6 +159,12 @@ class ProposalIndex:
             selected_content_has_pending=selected,
             suggestion_ids=ids[:NOTICE_ID_LIMIT],
             suggestion_ids_truncated=len(ids) > NOTICE_ID_LIMIT,
+            unavailable_heading_ids=sorted(
+                document.get(
+                    '_mcp_unsafe_headings',
+                    set(),
+                )
+            )[:NOTICE_ID_LIMIT],
             detection='unavailable'
             if unavailable
             else (
@@ -164,6 +192,16 @@ def index_document(native):
         tabs = [select(native)]
     for tab in tabs:
         _scan_tab(tab, result)
+    for thread in native.get('suggestions', []):
+        sid = thread.get('suggestionId')
+        if thread.get('status') == 'OPEN' and sid not in result.locations:
+            result.add(
+                sid,
+                SuggestionLocation(
+                    kind='thread_without_source_metadata',
+                    uncertain=True,
+                ),
+            )
     return result
 
 

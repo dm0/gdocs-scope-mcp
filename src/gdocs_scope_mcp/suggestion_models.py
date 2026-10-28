@@ -14,6 +14,7 @@ class SuggestionNotice(BaseModel):
     suggestion_ids: list[str] = Field(default_factory=list)
     suggestion_ids_truncated: bool = False
     detection: Literal['complete', 'partial', 'unavailable'] = 'complete'
+    unavailable_heading_ids: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
 
 

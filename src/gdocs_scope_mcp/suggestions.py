@@ -13,7 +13,12 @@ from pydantic import Field
 from . import comments
 from .document_tabs import select
 from .models import EditFailedResponse
-from .suggestion_index import ProposalIndex, index_document, scope_ranges
+from .suggestion_index import (
+    STYLE_LEVELS,
+    ProposalIndex,
+    index_document,
+    scope_ranges,
+)
 from .suggestion_models import (
     SuggestionDetails,
     SuggestionPost,
@@ -108,12 +113,47 @@ def fetch(service, doc_id, tab_id=None, *, threads=False):
                 unavailable=True,
                 projected=True,
             )
+        source = _heading_mapping(source, document)
         return ReadView(native, source, document, index, projected=True)
     fail(
         'EDIT_CONFLICT',
         'The document changed between suggestion and '
         'accepted-content reads on three consecutive attempts.',
     )
+
+
+def _heading_mapping(source, document):
+    """Exclude hidden proposed headings from accepted subtree boundaries."""
+
+    def headings(value):
+        result = {}
+        for item in value.get('body', {}).get('content', []):
+            paragraph = item.get('paragraph', {})
+            style = paragraph.get('paragraphStyle', {})
+            identity = style.get('headingId')
+            if identity is None:
+                continue
+            text = ''.join(
+                run.get('textRun', {}).get('content', '')
+                for run in paragraph.get('elements', [])
+                if not run.get('textRun', {}).get('suggestedInsertionIds')
+            )
+            result[identity] = (
+                STYLE_LEVELS.get(style.get('namedStyleType'), 100),
+                text,
+            )
+        return result
+
+    native, projected = headings(source), headings(document)
+    return {
+        **source,
+        '_mcp_heading_levels': {
+            sid: value[0] for sid, value in projected.items()
+        },
+        '_mcp_unsafe_headings': {
+            sid for sid, value in projected.items() if native.get(sid) != value
+        },
+    }
 
 
 def table_references(view):
@@ -173,6 +213,12 @@ def read(
                 'The heading is absent from the accepted-content outline.',
             )
     ranges = scope_ranges(view.source, [heading_id] if heading_id else None)
+    if ranges is None:
+        fail(
+            'TARGET_CHANGED',
+            'Pending heading changes prevent safe mapping '
+            'of this accepted heading scope. Read the whole tab instead.',
+        )
     threads = {
         t['suggestionId']: t for t in view.native.get('suggestions', [])
     }
@@ -212,9 +258,12 @@ def read(
     try:
         offset = comments.page_offset(page_token, expected)
     except ToolFailureError as error:
-        fail(error.failure.code, 'Invalid or stale suggestion cursor. '
-             'Restart docs_suggestions_read without page_token and keep '
-             'document, tab, heading, ID, status and limit filters unchanged.')
+        fail(
+            error.failure.code,
+            'Invalid or stale suggestion cursor. '
+            'Restart docs_suggestions_read without page_token and keep '
+            'document, tab, heading, ID, status and limit filters unchanged.',
+        )
     if suggestion_id is None:
         page = selected[offset : offset + limit]
         total = len(selected)

@@ -315,3 +315,248 @@ def test_live_suggestion_lifecycle(
                     probe.report['temporary_tab_removed'] = True
 
     asyncio.run(run())
+
+
+def test_live_accepted_content_and_scoped_inspection(
+    live_test_doc,
+    table_probe,
+    monkeypatch,
+    tmp_path,
+):
+    """Read accepted content and inspect a replacement proposal separately."""
+    monkeypatch.setenv(
+        'GOOGLE_DOCS_MCP_DOCUMENT_CACHE_DIRECTORY', str(tmp_path)
+    )
+
+    async def run():
+        async with table_probe('suggestion-reading') as probe:
+            before = await probe.call(0, 'probe_tabs_document')
+            tab_id = None
+            try:
+                created = await probe.batch(
+                    [
+                        {
+                            'addDocumentTab': {
+                                'tabProperties': {
+                                    'title': 'mcp-reading-' + uuid.uuid4().hex
+                                },
+                            }
+                        }
+                    ],
+                    before,
+                )
+                tab_id = created['response']['replies'][0]['addDocumentTab'][
+                    'tabProperties'
+                ]['tabId']
+                arguments = {'doc_id': live_test_doc, 'tab_id': tab_id}
+                await probe.call(
+                    0,
+                    'docs_append',
+                    {
+                        **arguments,
+                        'text': (
+                            '### Target\n\nold wording\n\n'
+                            '### Other\n\nuntouched'
+                        ),
+                    },
+                )
+                tree = await probe.call(0, 'docs_get_tree', arguments)
+                headings = {
+                    s['title'].strip(): s['id']
+                    for s in tree['sections']
+                    if s['id']
+                }
+                native = await probe.call(0, 'probe_tabs_document')
+                source = next(
+                    p
+                    for p in tab(native, tab_id)['body']['content']
+                    if paragraph_text(p).strip() == 'old wording'
+                )
+                start = source['startIndex']
+                result = await probe.call(
+                    0,
+                    'probe_suggestions_batch',
+                    {
+                        'revision': native['revisionId'],
+                        'requests': [
+                            {
+                                'insertText': {
+                                    'location': {
+                                        'index': start,
+                                        'tabId': tab_id,
+                                    },
+                                    'text': 'new wording',
+                                }
+                            },
+                            {
+                                'deleteContentRange': {
+                                    'range': {
+                                        'startIndex': start
+                                        + len('new wording'),
+                                        'endIndex': start
+                                        + len('new wordingold wording'),
+                                        'tabId': tab_id,
+                                    }
+                                }
+                            },
+                        ],
+                    },
+                )
+                assert result['accepted'], result
+                assert result['response']['commentUpdateState'] == 'ALL_SAVED'
+                ids = changed_ids(result['response'], 'createdSuggestionIds')
+                assert ids
+                read = await probe.call(
+                    1,
+                    'docs_read',
+                    {
+                        **arguments,
+                        'heading_ids': [headings['Target']],
+                    },
+                )
+                markdown = '\n'.join(s['markdown'] for s in read['sections'])
+                assert 'old wording' in markdown
+                assert 'new wording' not in markdown
+                notice = read['suggestions']
+                assert notice['view'] == 'without_suggestions'
+                assert notice['document_has_pending'] is True
+                assert notice['selected_content_has_pending'] is True
+                assert ids <= set(notice['suggestion_ids'])
+                other = await probe.call(
+                    1,
+                    'docs_read',
+                    {
+                        **arguments,
+                        'heading_ids': [headings['Other']],
+                    },
+                )
+                assert other['suggestions']['document_has_pending'] is True
+                assert (
+                    other['suggestions']['selected_content_has_pending']
+                    is False
+                )
+                listing = await probe.call(
+                    1,
+                    'docs_suggestions_read',
+                    {
+                        **arguments,
+                        'heading_id': headings['Target'],
+                    },
+                )
+                assert ids <= {
+                    s['suggestion_id'] for s in listing['suggestions']
+                }
+                sid = next(iter(ids))
+                detail = await probe.call(
+                    1,
+                    'docs_suggestions_read',
+                    {
+                        **arguments,
+                        'suggestion_id': sid,
+                    },
+                )
+                item = next(
+                    s
+                    for s in detail['suggestions']
+                    if s['suggestion_id'] == sid
+                )
+                assert item['status'] == 'OPEN'
+                assert item['scope_match'] == 'matched'
+                assert item['locations']
+                assert item['head_post']
+                current = await probe.call(0, 'probe_tabs_document')
+                body = tab(current, tab_id)['body']['content']
+                untouched = next(
+                    p for p in body if paragraph_text(p).strip() == 'untouched'
+                )
+                formatted = await probe.call(
+                    0,
+                    'probe_suggestions_batch',
+                    {
+                        'revision': current['revisionId'],
+                        'requests': [
+                            {
+                                'updateTextStyle': {
+                                    'range': {
+                                        'startIndex': untouched['startIndex'],
+                                        'endIndex': untouched['endIndex'] - 1,
+                                        'tabId': tab_id,
+                                    },
+                                    'textStyle': {'bold': True},
+                                    'fields': 'bold',
+                                }
+                            }
+                        ],
+                    },
+                )
+                assert formatted['accepted'], formatted
+                clean = await probe.call(
+                    1,
+                    'docs_read',
+                    {
+                        **arguments,
+                        'heading_ids': [headings['Other']],
+                    },
+                )
+                assert (
+                    clean['suggestions']['selected_content_has_pending']
+                    is True
+                )
+                assert '<b>' not in ''.join(
+                    s['markdown'] for s in clean['sections']
+                )
+                current = await probe.call(0, 'probe_tabs_document')
+                end = (
+                    tab(current, tab_id)['body']['content'][-1]['endIndex'] - 1
+                )
+                heading_text = '\nProposed heading'
+                proposed_heading = await probe.call(
+                    0,
+                    'probe_suggestions_batch',
+                    {
+                        'revision': current['revisionId'],
+                        'requests': [
+                            {
+                                'insertText': {
+                                    'location': {
+                                        'index': end,
+                                        'tabId': tab_id,
+                                    },
+                                    'text': heading_text,
+                                }
+                            },
+                            {
+                                'updateParagraphStyle': {
+                                    'range': {
+                                        'startIndex': end + 1,
+                                        'endIndex': end + len(heading_text),
+                                        'tabId': tab_id,
+                                    },
+                                    'paragraphStyle': {
+                                        'namedStyleType': 'HEADING_1'
+                                    },
+                                    'fields': 'namedStyleType',
+                                }
+                            },
+                        ],
+                    },
+                )
+                assert proposed_heading['accepted'], proposed_heading
+                after_tree = await probe.call(1, 'docs_get_tree', arguments)
+                assert [
+                    (s['id'], s['title']) for s in after_tree['sections']
+                ] == [(s['id'], s['title']) for s in tree['sections']]
+                probe.report['accepted_reading_passed'] = True
+                probe.report['scoped_metadata_passed'] = True
+                probe.report['native_thread_inspection_passed'] = True
+            finally:
+                if tab_id:
+                    current = await probe.call(0, 'probe_tabs_document')
+                    await probe.batch(
+                        [{'deleteTab': {'tabId': tab_id}}], current
+                    )
+                    after = await probe.call(0, 'probe_tabs_document')
+                    assert after['tabs'] == before['tabs']
+                    probe.report['temporary_tab_removed'] = True
+
+    asyncio.run(run())
