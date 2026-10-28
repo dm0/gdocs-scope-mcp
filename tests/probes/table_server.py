@@ -19,6 +19,7 @@ from gdocs_scope_mcp.server import mcp
 from gdocs_scope_mcp.tool_logging import configure_logging
 
 ALLOWED = {
+    'addDocumentTab', 'deleteTab',
     'createNamedRange', 'deleteNamedRange', 'insertText',
     'deleteContentRange', 'insertTableRow', 'deleteTableRow',
     'insertTableColumn', 'deleteTableColumn', 'mergeTableCells',
@@ -41,6 +42,15 @@ def probe_document() -> dict:
     """Read the single environment-selected document with native indices."""
     doc_id = _document_id()
     return docs_edit._get_document(docs_edit._get_service(), doc_id)
+
+
+@mcp.tool
+def probe_tabs_document() -> dict:
+    """Read every tab only in the explicitly authorized test document."""
+    return docs_edit._get_service().documents().get(
+        documentId=_document_id(), includeTabsContent=True,
+        suggestionsViewMode='SUGGESTIONS_INLINE',
+    ).execute()
 
 
 @mcp.tool

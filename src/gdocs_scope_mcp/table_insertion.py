@@ -235,11 +235,12 @@ class TableInsertionPlan:
 
     def execute(self, service, doc_id: str,
                 required_revision: str | None = None, *,
-                table_borders: bool = True) -> None:
+                table_borders: bool = True, tab_id=None) -> None:
         """Insert each table, read real cell locations, then populate it."""
         self.completed_batches = 0
         try:
-            self._execute(service, doc_id, required_revision, table_borders)
+            self._execute(service, doc_id, required_revision, table_borders,
+                          tab_id)
         except (RevisionRaceError, ToolFailureError):
             raise
         except Exception as error:
@@ -253,8 +254,10 @@ class TableInsertionPlan:
             )) from error
 
     def _execute(self, service, doc_id: str,
-                 required_revision: str | None, table_borders: bool) -> None:
+                 required_revision: str | None, table_borders: bool,
+                 tab_id=None) -> None:
         """Guard each stage with the revision returned by the prior write."""
+        from .document_tabs import scope_requests, select
         from .md2requests import inserted_text_from_requests
 
         documents = service.documents()
@@ -264,7 +267,9 @@ class TableInsertionPlan:
 
         def submit(requests):
             nonlocal revision
-            response = guarded_submit(service, doc_id, requests, revision,
+            response = guarded_submit(service, doc_id,
+                                      scope_requests(requests, tab_id),
+                                      revision,
                                       force_required=True)
             self.completed_batches += 1
             revision = response['writeControl']['requiredRevisionId']
@@ -282,8 +287,10 @@ class TableInsertionPlan:
                                 'location': {'index': cursor}},
             }])
             native = documents.get(
-                documentId=doc_id, suggestionsViewMode='SUGGESTIONS_INLINE',
+                documentId=doc_id, includeTabsContent=True,
+                suggestionsViewMode='SUGGESTIONS_INLINE',
             ).execute()
+            native = select(native, tab_id)
             if native['revisionId'] != revision:
                 raise RuntimeError('Document changed before cell lookup')
             table = next(item for item in _structural_elements(native['body'])

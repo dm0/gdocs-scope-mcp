@@ -1,8 +1,8 @@
-# First-tab table discovery
+# Table discovery
 
 Implementation notes for [issue #26](https://github.com/dm0/gdocs-scope-mcp/issues/26).
-General tab discovery/selection is deferred to
-[issue #34](https://github.com/dm0/gdocs-scope-mcp/issues/34).
+Shared tab discovery/selection is described in
+[document tab implementation notes](development/document-tabs.md).
 
 ## References and reading
 
@@ -14,7 +14,7 @@ bounded physical-cell pages and Markdown previews. Both reuse the shared
 renderer and normal OAuth/permission boundary. No read creates a named range,
 binding or any other document write.
 
-Current `gdt2` table/cell refs carry document/first-tab scope, heading ancestry,
+Current `gdt2` table/cell refs carry document/selected-tab scope, heading ancestry,
 the table's direct-section ordinal, structural hashes and nested ordinals.
 They remain valid across content/style changes and native index shifts while
 the section's structural inventory stays unchanged. Identical tables are
@@ -101,6 +101,6 @@ geometry are covered offline; live geometry verification covered native
 unmerged cells and a horizontal merge with explicit placeholders.
 
 Google's [document model](https://developers.google.com/workspace/docs/api/reference/rest/v1/documents)
-defines native row/column spans and revision metadata. The first-tab behavior
+defines native row/column spans and revision metadata. The default first-tab behavior
 of ordinary reads follows
 [documents.get](https://developers.google.com/workspace/docs/api/reference/rest/v1/documents/get).

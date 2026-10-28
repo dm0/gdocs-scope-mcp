@@ -104,6 +104,7 @@ class StructureResponse(BaseModel):
 
     ok: Literal[True] = True
     document_id: str
+    tab_id: str | None = None
     previous_table_ref: str
     table_ref: str | None
     revision_id: str | None
@@ -226,7 +227,7 @@ def plan(document, table_token, operation):
         table['rows']), table['columns']
 
 
-def apply_structure(doc_id, table_ref, base_token, operation):
+def apply_structure(doc_id, table_ref, base_token, operation, *, tab_id=None):
     """Recheck the original footprint and commit one strictly guarded batch."""
     from . import docs_edit
     from .table_read import _fetch
@@ -235,7 +236,7 @@ def apply_structure(doc_id, table_ref, base_token, operation):
     validate_baseline(token, baseline, [], baseline.fields, subset=True)
     for attempt in range(1, MAX_ATTEMPTS + 1):
         validate_baseline(token, baseline, [], baseline.fields, subset=True)
-        document = _fetch(doc_id)
+        document = _fetch(doc_id, tab_id=tab_id)
         entry = Layout(document).resolve(token)
         merging = isinstance(operation, (MergeCells, UnmergeCells))
         changed = []
@@ -271,7 +272,8 @@ def apply_structure(doc_id, table_ref, base_token, operation):
         if merging:
             updated = refreshed_reference(doc_id, token, revision)
         return StructureResponse(
-            document_id=doc_id, previous_table_ref=table_ref,
+            document_id=doc_id, tab_id=document.get('_mcp_tab_id'),
+            previous_table_ref=table_ref,
             table_ref=updated, revision_id=revision, operation=operation.type,
             affected_count=(len(changed) if merging else
                             getattr(operation, 'count', 1)),

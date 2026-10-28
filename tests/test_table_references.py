@@ -226,7 +226,7 @@ def test_cross_document_kind_corruption_and_tab_scope(source, mock_docs):
     mock_docs.get.assert_not_called()
     source['tabs'] = [{'tabProperties': {'tabId': 'new-tab'},
                        'documentTab': {'body': source['body']}}]
-    reject('TARGET_CHANGED', lambda: snapshot(reference))
+    reject('TAB_MISMATCH', lambda: snapshot(reference))
     assert first_tab(source)['_mcp_tab_id'] == 'new-tab'
 
 

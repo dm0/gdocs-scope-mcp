@@ -10,7 +10,7 @@ and local state. No named ranges, local registry or signing key are used.
 ## Positional contract
 
 A table ref describes the Nth top-level table in its direct heading section,
-within the implicit first tab. Scope is the complete ancestor heading ID chain;
+within the selected document tab (the first tab by default). Scope is the complete ancestor heading ID chain;
 heading title changes preserve it, while changing/reparenting the ID hierarchy
 invalidates it. Content before all headings uses an empty chain. Child heading
 sections have separate inventories; selecting a heading subtree for discovery
@@ -41,8 +41,10 @@ explicit contract, not a guarantee that the original native object survived.
 There is no content-search fallback, similarity matching or relocation to a
 different ordinal when a guard fails.
 
-The actual first-tab ID scopes every ref and token; changing the implicit first
-tab rejects it. User-selectable tabs remain #34. Pagination additionally binds
+The actual selected tab ID scopes every ref and token. All table tools accept
+`tab_id`, including nested tabs; omitting it selects the first tab. Reusing a
+reference in another tab fails, even with identical headings/layout/content.
+Changing the implicit first tab also rejects old references. Pagination binds
 the exact document revision and output/filter options, even though table refs
 are revision-independent. `STALE_REFERENCE` means restart pagination;
 `TARGET_CHANGED` means reread discovery after a structural/scope change.

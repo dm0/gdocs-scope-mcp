@@ -80,6 +80,7 @@ class SnapshotResponse(BaseModel):
     """Issue or validate expectations for selected positional cells."""
 
     document_id: str
+    tab_id: str | None = None
     table_ref: str
     revision_id: str
     base_token: str
@@ -148,7 +149,8 @@ def validate_states(document, baseline, available):
             fail('EDIT_CONFLICT', 'Selected content or properties changed.')
 
 
-def snapshot(doc_id, table_ref, cells, fields, base_token=None):
+def snapshot(doc_id, table_ref, cells, fields, base_token=None, *,
+             tab_id=None):
     """Resolve a checked position and validate selected dependencies."""
     from .table_read import _fetch, _model
     table = decode(table_ref, 'table', doc_id)
@@ -163,7 +165,7 @@ def snapshot(doc_id, table_ref, cells, fields, base_token=None):
         fail('INVALID_ARGUMENT', 'Duplicate cell addresses are not allowed.')
     if baseline is not None:
         validate_baseline(table, baseline, cells, requested)
-    document = _fetch(doc_id)
+    document = _fetch(doc_id, tab_id=tab_id)
     available = resolve_cells(document, table, cells,
                               merged=requested == ['merge'])
     if baseline is not None:
@@ -206,7 +208,8 @@ def snapshot(doc_id, table_ref, cells, fields, base_token=None):
                     get_settings().table_snapshot_ttl_seconds),
     })
     return SnapshotResponse(
-        document_id=doc_id, table_ref=table_ref,
+        document_id=doc_id, tab_id=document.get('_mcp_tab_id'),
+        table_ref=table_ref,
         revision_id=document['revisionId'], base_token=encode(issued),
         expires_at=issued.expires, fields=requested, cells=locations,
         validated=baseline is not None,

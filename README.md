@@ -16,6 +16,10 @@ well suited to large Google Docs with structured headings.
 
 ## Features
 
+- **Document tabs:** discover root and nested tabs, select one consistently
+  across reading, text edits, tables and smart chips; references stay scoped
+  to that tab. Existing calls default to the first tab.
+
 - **Navigate large documents by section.** Discover a compact heading tree,
   read selected section subtrees, and scope replacements and insertions to a
   heading and its nested subsections. Keep unrelated content out of the agent's

@@ -114,7 +114,7 @@ def refreshed_reference(doc_id, token, revision):
     """
     from .table_read import _fetch
     try:
-        document = _fetch(doc_id)
+        document = _fetch(doc_id, tab_id=token.tab)
         if not revision or document['revisionId'] != revision or (
             document.get('_mcp_tab_id') != token.tab
         ):

@@ -184,7 +184,7 @@ def test_captured_outline_preserves_heading_identity(
         s.id for s in outline.sections[:-1]
     ]
     mock_docs.get.assert_called_once_with(
-        documentId='example',
+        documentId='example', includeTabsContent=True,
         suggestionsViewMode='SUGGESTIONS_INLINE',
     )
     mock_docs.batchUpdate.assert_not_called()

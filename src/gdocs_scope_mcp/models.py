@@ -284,12 +284,25 @@ class DocumentBase(BaseModel):
     title: Annotated[str, Field(description='Document title')]
     revision_id: Annotated[str, Field(description='Document revision id')]
     document_id: Annotated[str, Field(description='Document id')]
+    tab_id: str | None = None
+    tab_title: str | None = None
+
+
+class TabInfo(BaseModel):
+    """Expose a flat tab hierarchy suitable for explicit agent selection."""
+
+    tab_id: str
+    title: str
+    parent_tab_id: str | None
+    depth: int
+    index: int
 
 
 class DocumentOutline(DocumentBase):
     """Document outline"""
 
     sections: Sequence[DocumentOutlineItem] = []
+    tabs: list[TabInfo] = Field(default_factory=list)
 
 
 class DocumentTree(DocumentBase):
@@ -364,7 +377,13 @@ class DocumentSubset(DocumentBase):
 
     sections: list[DocumentReadSection] = Field(
         description='Non-overlapping section subtrees in document order. '
-        'Whole-document reads include a preamble entry with heading_id=null.',
+        'Whole-tab reads include a preamble entry with heading_id=null.',
+    )
+    tab_count: int = Field(
+        default=0, ge=0, description='Total root and nested tabs in the '
+        'document, including the selected tab. One means the only tab; '
+        'zero means tab metadata is unavailable in a legacy response. '
+        'Call docs_get_tree for the complete tab inventory.',
     )
     unknown_heading_ids: list[str] = Field(
         default_factory=list,
@@ -375,14 +394,15 @@ class DocumentSubset(DocumentBase):
         Field(
             description='Effective root heading IDs in document order, with '
             'duplicates and selected descendants removed; null for a '
-            'whole-document read, [] for an empty selection.'
+            'whole-tab read, [] for an empty selection.'
         ),
     ]
     partial: Annotated[
         bool,
         Field(
-            description='If returned response includes only parts of the '
-            'document'
+            description='Whether heading selection was requested within '
+            'the selected tab. False means the whole selected tab, '
+            'not all document tabs. See tab_count for other tabs.'
         ),
     ] = False
 
@@ -413,6 +433,7 @@ class EditFailedResponse(BaseModel):
         'TARGET_REVISION_REJECTED',
         'STALE_REFERENCE',
         'TARGET_CHANGED',
+        'TAB_MISMATCH',
         'INVALID_REFERENCE',
         'SNAPSHOT_EXPIRED',
     ]
@@ -451,6 +472,7 @@ class DocumentEditReceipt(BaseModel):
     """Identify the document and effective scope of a successful edit."""
 
     document_id: Annotated[str, Field(description='Edited Google Doc ID')]
+    tab_id: str | None = None
     scope: Literal[
         'document', 'heading_subtree', 'document_end', 'comment'
     ] = 'document'

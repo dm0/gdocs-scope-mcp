@@ -6,6 +6,25 @@ Use [document reading](documents.md#docs_read) to obtain inline table references
 or start with `docs_tables_list`. These tools use checked table positions,
 not text anchors. Creation syntax belongs to [rich content](../rich-content.md#tables).
 
+All table tools accept optional `tab_id`; omit it for the first tab. Use
+[docs_tabs_list](documents.md#docs_tabs_list) for root and nested tab IDs.
+Refs, snapshots and page tokens belong to the selected tab: pass the same
+selector throughout an operation. Another tab, a removed tab or an omitted
+selector resolving elsewhere cannot reuse those references.
+
+Every table tool returns the effective `tab_id` at the top level, including
+snapshots and write receipts. Listing/read responses also retain it inside
+`snapshot`. Omission still selects the first tab; it does not infer a tab
+from `table_ref` or remember an earlier selection. This keeps calls for the
+usual single-tab document free of extra required parameters.
+
+`TAB_MISMATCH` means the reference and selected tab differ. The error names
+both IDs and suggests the correct `tab_id`; retrying with that selector can
+reuse the reference when it is still valid. If the currently selected tab
+was intended, obtain its own references instead. This is distinct from a
+structural `TARGET_CHANGED` or revision `STALE_REFERENCE` error. Never edit
+opaque references or tokens to change their tab.
+
 See [table references and expectations](../table-references.md) for the position
 contract, [discovery implementation](../table-discovery.md) for geometry and
 pagination, and [concurrent edits](../concurrent-edits.md) for revision policies.
@@ -13,11 +32,18 @@ pagination, and [concurrent edits](../concurrent-edits.md) for revision policies
 ## docs_tables_list
 
 ```text
-docs_tables_list(doc_id, heading_ids=None, limit=50, page_token=None)
+docs_tables_list(
+    doc_id,
+    heading_ids=None,
+    limit=50,
+    page_token=None,
+    *,
+    tab_id=None,
+)
 ```
 
-Discover first-tab tables without returning surrounding document text. Each
-summary includes `table_ref`, nearest heading ID/title and ancestor IDs,
+Discover tables in the selected tab without returning surrounding document
+text. Each summary includes `table_ref`, nearest heading ID/title and ancestor IDs,
 dimensions, nesting depth, `parent_cell_ref` for nested tables, merge/geometry
 flags, unsupported-edit reasons and a preview of at most 200 Unicode code
 points with `preview_truncated`. Tables are returned in preorder: parent before
@@ -27,14 +53,23 @@ descendant deduplication.
 
 `limit` is 1-100 tables. `count` describes this page; `total_count` covers all
 matching tables. Continue with `next_page_token`, preserving the exact
-`heading_ids` and `limit`. `snapshot` contains the native revision, first-tab
-scope and `reference_lifetime="same_structure_only"`. Page cursors still require
+`heading_ids`, `limit` and `tab_id`. `snapshot` contains the native revision,
+actual `tab_id`, `scope` (`first_tab` when omitted, `selected_tab` when explicit),
+and `reference_lifetime="same_structure_only"`. Page cursors still require
 the exact revision.
 
 ## docs_table_read
 
 ```text
-docs_table_read(doc_id, table_ref, limit=100, max_cell_chars=2000, page_token=None)
+docs_table_read(
+    doc_id,
+    table_ref,
+    limit=100,
+    max_cell_chars=2000,
+    page_token=None,
+    *,
+    tab_id=None,
+)
 ```
 
 Read one table using a reference from document HTML or `docs_tables_list`.
@@ -102,7 +137,15 @@ details = docs_table_read(doc_id="...", table_ref=page["tables"][0]["table_ref"]
 ## docs_table_snapshot
 
 ```text
-docs_table_snapshot(doc_id, table_ref, cells, fields=None, base_token=None)
+docs_table_snapshot(
+    doc_id,
+    table_ref,
+    cells,
+    fields=None,
+    base_token=None,
+    *,
+    tab_id=None,
+)
 ```
 
 Reads and issues expected-state tokens for 1-100 selected uppercase A1 addresses,
@@ -158,7 +201,7 @@ they do not rule out the separately validated merge/unmerge operations below.
 ## docs_table_patch
 
 ```text
-docs_table_patch(doc_id, table_ref, base_token, changes)
+docs_table_patch(doc_id, table_ref, base_token, changes, *, tab_id=None)
 ```
 
 Replace 1-100 cells with typed changes such as
@@ -220,7 +263,7 @@ and identical-structure swap/replacement limits remain unchanged.
 ## docs_table_format
 
 ```text
-docs_table_format(doc_id, table_ref, base_token, changes)
+docs_table_format(doc_id, table_ref, base_token, changes, *, tab_id=None)
 ```
 
 Apply explicit formatting to an unmerged table without replacing its contents.
@@ -292,7 +335,7 @@ syntax is required.
 ## docs_table_structure
 
 ```text
-docs_table_structure(doc_id, table_ref, base_token, operation)
+docs_table_structure(doc_id, table_ref, base_token, operation, *, tab_id=None)
 ```
 
 Insert empty rows/columns, delete consecutive rows/columns or an entire table,

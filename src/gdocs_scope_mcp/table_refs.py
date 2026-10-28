@@ -3,19 +3,13 @@
 # Native table traversal lives in the reader; import lazily to avoid cycles.
 # ruff: noqa: PLC0415
 
+from .document_tabs import require_matching_tab, select
 from .table_tokens import Token, digest, fail
 
 
 def first_tab(document):
-    """Identify only the implicit first tab; do not expose a tab selector."""
-    tabs = document.get('tabs', [])
-    if not tabs:
-        return {**document, '_mcp_tab_id': None}
-    tab = tabs[0]
-    root = {k: document[k] for k in ('documentId', 'title', 'revisionId',
-                                   'documentStyle') if k in document}
-    return {**root, **tab['documentTab'],
-            '_mcp_tab_id': tab['tabProperties']['tabId']}
+    """Retain selected views; choose the first tab only for raw documents."""
+    return select(document)
 
 
 def structure(item):
@@ -83,8 +77,7 @@ class Layout:
 
     def resolve(self, token):
         """Validate section structure before following its table ordinal."""
-        if token.tab != self.document.get('_mcp_tab_id'):
-            fail('TARGET_CHANGED', 'The first document tab changed.')
+        require_matching_tab(token.tab, self.document.get('_mcp_tab_id'))
         key = tuple(token.section)
         peers = self.sections.get(key, [])
         if (self.inventories.get(key) != token.inventory

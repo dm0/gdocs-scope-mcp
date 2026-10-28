@@ -215,9 +215,9 @@ def test_invalid_request_is_not_a_revision_retry(race_docs):
 
 
 def test_native_replace_all_keeps_execution_time_matching(mock_docs):
-    """Native replace-all retains its no-read semantics and atomic request."""
+    """Discover the tab while retaining native execution-time matching."""
     docs_edit.search_replace('test', 'old', 'new', occurrence=0)
-    mock_docs.get.assert_not_called()
+    mock_docs.get.assert_called_once()
     assert 'writeControl' not in mock_docs.batchUpdate.call_args.kwargs['body']
 
 

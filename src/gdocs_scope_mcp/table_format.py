@@ -120,6 +120,7 @@ class FormatResponse(BaseModel):
 
     ok: Literal[True] = True
     document_id: str
+    tab_id: str | None = None
     table_ref: str
     revision_id: str | None
     attempts: int
@@ -310,7 +311,7 @@ def plan(document, entry, changes, available):
     return requests
 
 
-def format_table(doc_id, table_ref, base_token, changes):
+def format_table(doc_id, table_ref, base_token, changes, *, tab_id=None):
     """Recheck properties and commit one strictly guarded style batch."""
     from . import docs_edit
     from .table_read import _fetch
@@ -322,7 +323,7 @@ def format_table(doc_id, table_ref, base_token, changes):
     for attempt in range(1, MAX_ATTEMPTS + 1):
         validate_baseline(table, baseline, selected, baseline.fields,
                           subset=True)
-        document = _fetch(doc_id)
+        document = _fetch(doc_id, tab_id=tab_id)
         available = resolve_cells(document, table, selected)
         entry = Layout(document).resolve(table)
         for address, field in required:
@@ -342,7 +343,8 @@ def format_table(doc_id, table_ref, base_token, changes):
             time.sleep(0.05 * (2 ** (attempt - 1)))
             continue
         return FormatResponse(
-            document_id=doc_id, table_ref=table_ref,
+            document_id=doc_id, tab_id=document.get('_mcp_tab_id'),
+            table_ref=table_ref,
             revision_id=result.get('writeControl', {}).get(
                 'requiredRevisionId',
             ),

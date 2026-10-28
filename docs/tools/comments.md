@@ -13,10 +13,15 @@ docs_add_comment(
     include_anchor_text=True,
     bookmark_jump=False,
     *,
+    tab_id=None,
     expected_revision_id=None,
 )
 ```
-Add a comment anchored to specific text in the document.
+Add a comment anchored to specific text in the selected tab. `tab_id` is
+optional and defaults to the first tab; discover root/nested IDs with
+[docs_tabs_list](documents.md#docs_tabs_list). The named-range anchor and
+optional bookmark target that same tab. Comment-thread reads/replies/resolve/
+delete tools remain document-wide.
 
 | Param | Type | Default | Description |
 |-------|------|---------|-------------|
