@@ -70,6 +70,13 @@ to JSON `null`, `true` and `false`.
 
 ## Reading
 
+`docs_get_tree` and `docs_read` show accepted content without applying pending
+suggestions. Proposed insertions are hidden, proposed deletions retained, and
+suggested formatting omitted. Their `suggestions` metadata reports pending
+changes document-wide and in the returned scope; `null` means unknown. Inspect
+proposals separately with [docs_suggestions_read](suggestions.md). Reading
+never accepts or rejects changes.
+
 ### docs_get_tree
 
 ```text
@@ -133,6 +140,9 @@ docs_read(doc_id="...", heading_ids=["heading-id-from-outline"])
 ```
 
 Native tables, including nested ones, contain `data-mcp-table-ref` attributes
+when their meaning can be verified against native inline structure. Unsafe
+refs are omitted with an explicit `suggestions.warnings` entry; table content
+still renders. Safe refs appear
 in their HTML. Pass these opaque references to [docs_table_read](tables.md#docs_table_read); no duplicate
 table inventory is added to `docs_read`. References belong to the selected tab;
 pass the same `tab_id` to all subsequent table calls.

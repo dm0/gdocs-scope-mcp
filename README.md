@@ -126,6 +126,7 @@ and edit positions.
 | [Document tools](docs/tools/documents.md) | Reading, searching, inserting, replacing and creating documents |
 | [Table tools](docs/tools/tables.md) | Discovery, snapshots, cell patches, formatting and structure |
 | [Comment tools](docs/tools/comments.md) | Native anchored comments, replies, editing and resolution |
+| [Reading suggestions](docs/tools/suggestions.md) | Accepted-content views, pending-change indicators and native proposal inspection |
 | [Rich content](docs/rich-content.md) | Markdown/HTML, lists, images, code and smart chips |
 | [MCP result contracts](docs/protocol.md) | Structured results, errors, annotations, receipts and pagination |
 | [Development](docs/development.md) | Local setup, testing, FastMCP CLI, diagnostics and logging |

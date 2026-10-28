@@ -167,9 +167,19 @@ Google Docs edits use native UTF-16 character indices. Text anchors and checked
 table references keep that arithmetic inside the server, allowing targeted
 edits without replacing unrelated document content.
 
-When the MCP reads content before planning indexed edits, it requests
-`suggestionsViewMode=SUGGESTIONS_INLINE`. This keeps returned indices aligned
-with later `documents.batchUpdate` calls when the document contains suggestions.
+Ordinary `docs_get_tree` and `docs_read` expose the accepted-content view
+corresponding to `PREVIEW_WITHOUT_SUGGESTIONS`. Their `suggestions` metadata
+distinguishes pending changes in the document and selected fragment from
+unknown detection. No proposals are accepted or rejected by reading.
+See [reading suggestions](tools/suggestions.md) for metadata, scope and
+pagination contracts.
+
+Internally, edit planning still requests `SUGGESTIONS_INLINE`, which preserves
+native indices for `documents.batchUpdate`. Preview indices never drive writes.
+When ordinary reading needs both native proposal metadata and a clean
+projection, the revisions must match. Without a returned revision, reads can
+report unavailable detection and omit unverifiable table refs; writes retain
+their revision requirements.
 
 ## Concurrent edits
 
