@@ -109,7 +109,7 @@ requiredRevisionId from that fresh read. Confirmed revision races trigger
 bounded revalidation of the original baseline and complete index replanning.
 Unknown write outcomes are never replayed. The patch requires `content` and
 `text_style` fields and checks every supplied group for changed cells, allowing
-a subset of a larger baseline. See the [patch contract](../README.md#docs_table_patchdoc_id-table_ref-base_token-changes).
+a subset of a larger baseline. See the [patch contract](tools/tables.md#docs_table_patch).
 Separate snapshot/patch calls are not atomic together; validation during the
 patch and its strict revision precondition provide the actual write guard.
 
@@ -122,7 +122,7 @@ style properties remain compatible. Whole-border writes depend on both halves
 of the same physical edge; different edges are independent. All requested
 formatting commits in one strictly guarded batch with the same bounded retry
 and unknown-outcome rules as cell replacement. See the
-[formatting contract](../README.md#docs_table_formatdoc_id-table_ref-base_token-changes)
+[formatting contract](tools/tables.md#docs_table_format)
 for typed properties, units, partial-border limitations and pinning.
 
 ## Structural operations
@@ -150,7 +150,7 @@ to reference an unintended table. Refs describe the committed shape; all old
 snapshots and references in the changed direct section need refreshing.
 The receipt includes dimensions, committed revision and explicit invalidation
 flags rather than silently issuing a new baseline. See the
-[structural contract](../README.md#docs_table_structuredoc_id-table_ref-base_token-operation)
+[structural contract](tools/tables.md#docs_table_structure)
 for inputs, limits and recovery.
 
 ## Portability and integrity

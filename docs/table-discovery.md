@@ -14,19 +14,21 @@ bounded physical-cell pages and Markdown previews. Both reuse the shared
 renderer and normal OAuth/permission boundary. No read creates a named range,
 binding or any other document write.
 
-Versioned opaque tokens carry document/revision scope, the implicit first-tab
-selector and a structural path. Cell tokens also identify physical cell-array
-coordinates. A canonical native-table digest checks the referenced snapshot.
-Paths distinguish identical tables and nested table/cell occurrences; they
-are valid only at that exact revision. No process-local cache or stable text
-matching is involved. Cursors additionally bind output bounds and heading
-filters. Invalid/mismatched tokens fail explicitly; stale references never
-fall back to another table at the old path.
+Current `gdt2` table/cell refs carry document/first-tab scope, heading ancestry,
+the table's direct-section ordinal, structural hashes and nested ordinals.
+They remain valid across content/style changes and native index shifts while
+the section's structural inventory stays unchanged. Identical tables are
+distinguished by position, not persistent native object identity. No
+process-local cache or content matching is involved. Pagination cursors retain
+the exact revision and additionally bind output bounds and heading filters.
+Invalid/mismatched tokens fail explicitly; changed structural guards never
+fall back to another table. See the [current reference contract](table-references.md)
+and [table tool reference](tools/tables.md).
 
 The checksum is unkeyed corruption detection, not a cryptographic signature or
 access credential. Decoding a token grants no extra permission. Every read
-fetches a fresh authorized snapshot. Persistent identities, selective
-expected-state tokens and binding lifecycle are separate work in #27.
+fetches a fresh authorized snapshot. Selective expected-state snapshots are
+implemented without bindings; see [addresses and expected state](table-references.md#addresses-and-expected-state).
 
 Discovery uses the same heading-root selection rules as `docs_read`: selected
 ancestors subsume descendants, mixed unknown IDs are diagnosed, and an entirely
@@ -49,7 +51,9 @@ identity. In particular, the [identity probes](table-identity.md) show that a
 marker can survive in a physical placeholder after text moves to a merge head.
 All cells in merged tables are conservatively excluded from
 `simple_text_target`; complex/nested/non-text cells are also excluded. A true
-flag is structural eligibility only, not an available editing operation.
+flag is structural eligibility, not a blanket guarantee that any edit is
+supported. [Table patching](tools/tables.md#docs_table_patch) checks its own
+more restrictive text/paragraph contract before writing.
 
 Table list pages contain at most 100 summaries, with previews capped at 200
 Unicode code points. Detailed pages contain at most 200 physical cells, each
