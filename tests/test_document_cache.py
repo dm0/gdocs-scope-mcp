@@ -275,3 +275,67 @@ def test_grants_are_stable_and_isolated(setup_cache):
 def test_ttl_below_revision_validity_window(ttl):
     with pytest.raises(ValueError):
         Settings(document_cache_ttl_seconds=ttl)
+
+
+def test_change_between_revision_check_and_full_fetch(setup_cache):
+    state = setup_cache
+    state.read()
+    state.document['revisionId'] = 'full-fetch-revision'
+    calls = []
+
+    def check():
+        calls.append(True)
+        return {'revisionId': 'intermediate-revision'}
+
+    document = state.store.read(
+        'account', 'example', (('documentId', 'example'),
+                               ('includeTabsContent', 'True')),
+        fetch=lambda: deepcopy(state.document), check=check,
+        settings=state.settings,
+    )
+    assert calls
+    assert document['revisionId'] == 'full-fetch-revision'
+    assert state.read()['revisionId'] == 'full-fetch-revision'
+    assert full_reads(state) == 1
+
+
+def test_write_waits_for_read_and_cannot_leave_stale_entry(setup_cache):
+    state = setup_cache
+    started, release = threading.Event(), threading.Event()
+
+    def slow_fetch():
+        started.set()
+        assert release.wait(timeout=5)
+        return deepcopy(state.document)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        reading = pool.submit(
+            state.store.read, 'account', 'example', (), fetch=slow_fetch,
+            check=dict, settings=state.settings,
+        )
+        assert started.wait(timeout=5)
+        writing = pool.submit(
+            state.service.documents().batchUpdate(
+                documentId='example', body={},
+            ).execute,
+        )
+        release.set()
+        reading.result(timeout=5)
+        writing.result(timeout=5)
+    assert not state.store.entries
+
+
+def test_byte_budget_evicts_multiple_entries(setup_cache):
+    state = setup_cache
+    state.read()
+    size = state.store.size
+    settings = state.settings.model_copy(update={
+        'document_cache_max_bytes': size * 2,
+    })
+    for doc_id in ['second', 'third']:
+        state.store.read(
+            'account', doc_id, (), fetch=lambda: state.document,
+            check=dict, settings=settings,
+        )
+    assert state.store.size <= size * 2
+    assert {key[1] for key in state.store.entries} == {'second', 'third'}

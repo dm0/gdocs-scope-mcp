@@ -44,6 +44,7 @@ from googleapiclient.discovery import build
 
 # isort: split
 from .comments import created, fail, saved
+from .document_cache import wrap_service
 from .document_tabs import discover, select
 from .entities import collect_entities
 from .entity_edit import INSERT_ENTITY_KINDS, validate_insertions
@@ -253,7 +254,9 @@ def _load_creds():
 
 def _get_service(api: str = 'docs', version: str = 'v1'):
     """Build a Google API service client."""
-    return build(api, version, credentials=_load_creds())
+    credentials = _load_creds()
+    service = build(api, version, credentials=credentials)
+    return wrap_service(service, credentials) if api == 'docs' else service
 
 
 SUGGESTIONS_VIEW_MODE = 'SUGGESTIONS_INLINE'

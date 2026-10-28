@@ -19,6 +19,10 @@ def isolated_settings(monkeypatch, tmp_path):
         'GOOGLE_DOCS_MCP_INLINE_CODE_COLOR',
         'GOOGLE_DOCS_MCP_WRITE_REVISION_MODE',
         'GOOGLE_DOCS_MCP_TABLE_SNAPSHOT_TTL_SECONDS',
+        'GOOGLE_DOCS_MCP_DOCUMENT_CACHE_ENABLED',
+        'GOOGLE_DOCS_MCP_DOCUMENT_CACHE_TTL_SECONDS',
+        'GOOGLE_DOCS_MCP_DOCUMENT_CACHE_MAX_ENTRIES',
+        'GOOGLE_DOCS_MCP_DOCUMENT_CACHE_MAX_BYTES',
     ):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv('XDG_CONFIG_HOME', str(tmp_path))
@@ -112,6 +116,21 @@ def test_table_snapshot_environment(monkeypatch):
     """Choose snapshot expiry independently of process lifetime."""
     monkeypatch.setenv('GOOGLE_DOCS_MCP_TABLE_SNAPSHOT_TTL_SECONDS', '3600')
     assert get_settings().table_snapshot_ttl_seconds == 3600  # noqa: PLR2004
+
+
+def test_document_cache_configuration(custom_config, monkeypatch):
+    """Override bounded cache settings through the usual configuration."""
+    custom_config.write_text(json.dumps({
+        'document_cache_enabled': True, 'document_cache_ttl_seconds': 600,
+        'document_cache_max_entries': 8, 'document_cache_max_bytes': 1048576,
+    }))
+    monkeypatch.setenv('GOOGLE_DOCS_MCP_DOCUMENT_CACHE_ENABLED', 'false')
+    monkeypatch.setenv('GOOGLE_DOCS_MCP_DOCUMENT_CACHE_TTL_SECONDS', '900')
+    settings = get_settings()
+    assert settings.document_cache_enabled is False
+    assert settings.document_cache_ttl_seconds == 900  # noqa: PLR2004
+    assert settings.document_cache_max_entries == 8  # noqa: PLR2004
+    assert settings.document_cache_max_bytes == 1048576  # noqa: PLR2004
 
 
 def test_malformed_json_fails_before_server_runs(custom_config, monkeypatch):
