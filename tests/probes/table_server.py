@@ -4,9 +4,13 @@ import json
 import os
 import re
 import threading
+import time
+from collections import deque
 from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
 
 from googleapiclient.errors import HttpError
+from googleapiclient.http import HttpRequest
 
 from gdocs_scope_mcp import (
     docs_edit,
@@ -96,6 +100,41 @@ def probe_batch(requests: list[dict], write_control: dict) -> dict:
 
 
 configure_logging()
+
+# Test-only transport measurements; no IDs, request bodies or tokens retained.
+_native_execute = HttpRequest.execute
+_get_measurements = deque(maxlen=128)
+
+
+def _measured_execute(request, *args, **kwargs):
+    """Measure only GETs for the explicitly configured development document."""
+    parts = urlsplit(request.uri)
+    measured = (request.method == 'GET'
+                and parts.netloc == 'docs.googleapis.com'
+                and parts.path == '/v1/documents/' + _document_id())
+    started = time.monotonic()
+    result = _native_execute(request, *args, **kwargs)
+    if measured:
+        _get_measurements.append({
+            'revision_only': parse_qs(parts.query).get('fields')
+            == ['revisionId'],
+            'response_bytes': len(json.dumps(result).encode()),
+            'duration_ms': (time.monotonic() - started) * 1000,
+        })
+    return result
+
+
+HttpRequest.execute = _measured_execute
+
+
+@mcp.tool
+def probe_get_measurements(reset: bool = False) -> dict:
+    """Return bounded GET metrics for cache checks, without document data."""
+    _document_id()
+    result = {'requests': list(_get_measurements)}
+    if reset:
+        _get_measurements.clear()
+    return result
 
 # This gate is test instrumentation, never production coordination. It lets
 # the other STDIO process commit exactly inside an edit's read/write window.

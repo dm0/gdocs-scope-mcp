@@ -11,6 +11,10 @@ An absent default file is allowed; an explicitly selected file must exist.
 ```json
 {
   "write_revision_mode": "required",
+  "document_cache_enabled": true,
+  "document_cache_ttl_seconds": 300,
+  "document_cache_max_entries": 128,
+  "document_cache_max_bytes": 33554432,
   "table_snapshot_ttl_seconds": 86400,
   "code_font_family": "Roboto Mono",
   "inline_code_color": "#188038",
@@ -69,6 +73,10 @@ Environment variables override individual file settings:
 | Environment variable | JSON field | Default |
 |---|---|---|
 | `GOOGLE_DOCS_MCP_WRITE_REVISION_MODE` | `write_revision_mode` | `required` |
+| `GOOGLE_DOCS_MCP_DOCUMENT_CACHE_ENABLED` | `document_cache_enabled` | `true` |
+| `GOOGLE_DOCS_MCP_DOCUMENT_CACHE_TTL_SECONDS` | `document_cache_ttl_seconds` | `300` |
+| `GOOGLE_DOCS_MCP_DOCUMENT_CACHE_MAX_ENTRIES` | `document_cache_max_entries` | `128` |
+| `GOOGLE_DOCS_MCP_DOCUMENT_CACHE_MAX_BYTES` | `document_cache_max_bytes` | `33554432` |
 | `GOOGLE_DOCS_MCP_TABLE_SNAPSHOT_TTL_SECONDS` | `table_snapshot_ttl_seconds` | `86400` |
 | `GOOGLE_DOCS_MCP_CODE_FONT_FAMILY` | `code_font_family` | `Roboto Mono` |
 | `GOOGLE_DOCS_MCP_INLINE_CODE_COLOR` | `inline_code_color` | `#188038` |
@@ -163,6 +171,43 @@ server settings and must remain unchanged while following a pagination token:
 | --- | --- | --- |
 | `GOOGLE_DOCS_USE_DRIVE` | `false` | Set to `true` to include shared-drive items |
 | `GOOGLE_DOCS_DRIVE_ID` | Unset | Select one shared-drive corpus and enable shared-drive support |
+
+## Document snapshot cache
+
+The server caches full native document responses in memory for repeated reads
+within one running MCP process. Before every reuse it requests only
+`revisionId` from Google, validating current access and revision. An unchanged
+document needs one small request; a changed document needs that revision check
+followed by a full download. A cold or expired entry needs only a full download.
+Google credential refresh and Markdown conversion still run; this cache avoids
+repeated document downloads, not all read costs.
+
+Set `document_cache_enabled` to `false` to disable it. The default limits are
+300 seconds, 128 entries and 32 MiB of serialized snapshot payloads. TTL must be
+between 1 and 86399 seconds, below Google's documented 24-hour revision validity
+window. Entry and byte limits must be positive integers. Oversized documents
+are returned normally without being cached; least recently used entries are
+evicted when necessary. No document content is persisted to disk by this cache.
+
+Entries are isolated by OAuth grant, document ID and native request options,
+including suggestion mode and whether all tabs are included. A full all-tabs
+response can serve different local tab selections without caching parsed or
+rendered state. Each use receives independent data, so parsing cannot mutate
+the stored snapshot. Concurrent same-document reads share a full download.
+
+Missing revisions disable reuse, including for readers without edit access.
+Revision-check failures evict affected entries and propagate the error without
+returning cached content. Every attempted local Docs batch invalidates all
+variants for that account/document, including rejected, partial and uncertain
+writes. External edits are detected at the next revision check. Existing
+required/target revision guards remain in effect: the revision check is not a
+lock against edits that happen after it.
+
+Native comment reads and field-masked requests bypass caching. Separate MCP
+processes have separate caches; individual FastMCP CLI calls start fresh
+processes and cannot demonstrate cache reuse. INFO logs report hit/miss,
+serialized snapshot size and cache-operation duration without document IDs or
+content. See the [Google Docs revision contract](https://developers.google.com/workspace/docs/api/reference/rest/v1/documents#Document).
 
 ## Logging
 

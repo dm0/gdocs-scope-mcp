@@ -47,6 +47,10 @@ class Settings(BaseSettings):
         env_prefix='GOOGLE_DOCS_MCP_', extra='forbid', frozen=True,
     )
     write_revision_mode: Literal['required', 'target'] = 'required'
+    document_cache_enabled: bool = True
+    document_cache_ttl_seconds: Annotated[int, Field(ge=1, lt=86400)] = 300
+    document_cache_max_entries: Annotated[int, Field(ge=1)] = 128
+    document_cache_max_bytes: Annotated[int, Field(ge=1)] = 32 * 1024 * 1024
     table_snapshot_ttl_seconds: Annotated[
         int, Field(strict=True, ge=1, le=604800),
     ] = 86400
