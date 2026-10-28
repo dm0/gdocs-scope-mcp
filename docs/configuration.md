@@ -141,11 +141,12 @@ the STDIO server; FastMCP's subprocess environment is filtered.
 | `GOOGLE_DOCS_MCP_TOKEN` | Path to token file (preferred for standalone use) |
 | `GOOGLE_DOCS_MCP_CLIENT_ID` | Optional OAuth client ID override |
 | `GOOGLE_DOCS_MCP_CLIENT_SECRET` | Optional OAuth client secret override |
-| `GOOGLE_DOCS_MCP_APPS_SCRIPT_ID` | Apps Script bridge project ID for `bookmark_jump=true` |
 | `GOOGLE_DOCS_TOKEN_FILE` | Legacy alias |
 | `GOG_KEYRING_PASSWORD` | Auto-export from gog CLI (for personal/OpenClaw use) |
 
-Legacy `GOOGLE_DRIVE_MCP_*` env var aliases still work for backward compatibility.
+Legacy `GOOGLE_DRIVE_MCP_*` env var aliases still work for retained settings.
+The removed Apps Script bridge IDs (`GOOGLE_DOCS_MCP_APPS_SCRIPT_ID` and its
+Drive-prefixed alias) are no longer used; native comments need no bridge.
 
 Token resolution checks the preferred token environment variables, the legacy
 `GOOGLE_DOCS_TOKEN_FILE`, `~/.google-docs-mcp/token.json`, the older

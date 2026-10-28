@@ -119,9 +119,10 @@ Errors remain MCP `isError=true` with typed recovery guidance:
 | `WRITE_OUTCOME_UNKNOWN` | An in-flight write/side effect might have committed; automatic replay is unsafe. |
 | `PARTIAL_WRITE` | Earlier stages committed but later work failed; inspect before a new edit. |
 
-`committed_batches` counts confirmed completed Docs batches, including a
-comment-anchor batch. It excludes an unknown pending batch and does not count
-Drive/Apps Script side effects. Zero therefore does not prove that an unknown
+`committed_batches` counts confirmed completed Docs HTTP batches. It excludes
+an unknown pending batch and separate Drive image-upload effects. For native
+comments, a completed batch does not imply persisted comment data: inspect
+`commentUpdateState` as described below. Zero does not prove that an unknown
 write had no effect.
 
 ## Atomicity and side effects
@@ -145,10 +146,13 @@ identity, or resume at stale indices. A changed revision before cell lookup or
 a rejected later stage returns an explicit partial result. This conservative
 boundary remains until table-specific identity and stage recovery are proven.
 
-Comment-anchor creation is guarded, but posting the Drive comment and optional
-Apps Script bookmark remain separate side effects. Failures after the anchor
-report completed Docs batches. A missing comment response can mean the comment
-was created; inspect comments/bookmarks before issuing another request.
+Native comments use one Docs batch with revision protection. Creation guards
+its text range; ID-addressed thread/post operations use the current document
+revision. HTTP success does not imply comment persistence: every native comment
+batch checks commentUpdateState. Failed/missing confirmation is reported as
+PARTIAL_WRITE or WRITE_OUTCOME_UNKNOWN and is not replayed. Document revisions
+are not per-post content tokens. Inspect native threads before retrying.
+See [comment tools](tools/comments.md#persistence-and-concurrency).
 
 ## Agent read preconditions
 

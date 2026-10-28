@@ -41,9 +41,10 @@ still document-wide, so unrelated-tab writes can require a retry.
 
 Multi-stage table insertion scopes both its writes and its intermediate native
 cell lookup. Smart-chip dependency checks use the destination tab's definitions.
-The comment bookmark bridge chooses a native `DocumentTab` for body search,
-positions and bookmarks; bookmark URLs include the tab selector. Drive comment
-listing, replies, resolution and deletion remain document-wide.
+Native comment creation attaches an insertComment range to the selected tab.
+Comment reading and ID-addressed thread/post mutations remain document-wide;
+read results join document-level threads with per-tab native comment anchors.
+See [native comment implementation](native-comments.md).
 
 ## Verification
 
@@ -66,5 +67,6 @@ native payload. Reports and separate stderr logs are saved under
 `/tmp/gdocs-scope-mcp-table-probe-document-tabs*`; the fixture verifies process
 reaping on success and failure. No normal MCP server is reconfigured.
 
-Live coverage is bounded: Apps Script bookmark creation and every combination
-of structural/formatting operation with tabs are not exhaustively exercised.
+Live coverage is bounded: every combination of structural/formatting operation
+with tabs is not exhaustively exercised. Native comments have a separate
+live lifecycle regression.

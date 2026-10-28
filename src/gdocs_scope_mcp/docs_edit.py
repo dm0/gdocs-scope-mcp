@@ -33,10 +33,6 @@ import os
 import re
 import subprocess
 import tempfile
-import urllib.error
-import urllib.parse
-import urllib.request
-import uuid
 from contextlib import nullcontext, suppress
 from copy import deepcopy
 from dataclasses import dataclass
@@ -47,6 +43,7 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
 # isort: split
+from .comments import created, fail, saved
 from .document_tabs import discover, select
 from .entities import collect_entities
 from .entity_edit import INSERT_ENTITY_KINDS, validate_insertions
@@ -107,13 +104,6 @@ CLIENT_SECRET_ENV_ALIASES = (
     CLIENT_SECRET_ENV_VAR,
     'GOOGLE_DRIVE_MCP_CLIENT_SECRET',
 )
-APPS_SCRIPT_ID_ENV_VAR = 'GOOGLE_DOCS_MCP_APPS_SCRIPT_ID'
-APPS_SCRIPT_ID_ENV_ALIASES = (
-    APPS_SCRIPT_ID_ENV_VAR,
-    'GOOGLE_DRIVE_MCP_APPS_SCRIPT_ID',
-)
-TOKEN_URL = 'https://oauth2.googleapis.com/token'
-SCRIPT_API_BASE = 'https://script.googleapis.com/v1'
 
 # Gog fallback paths (backward compat)
 GOG_CREDENTIALS_PATH = Path('/config/gogcli/credentials.json')
@@ -291,161 +281,6 @@ def tabs_list(doc_id):
         suggestionsViewMode=SUGGESTIONS_VIEW_MODE,
     ).execute()
     return discover(document)
-
-
-def _refresh_access_token_stdlib() -> str:
-    """Refresh an OAuth access token without requiring googleapiclient."""
-    token_data = _load_token()
-    payload = urllib.parse.urlencode(
-        {
-            'client_id': token_data['client_id'],
-            'client_secret': token_data['client_secret'],
-            'refresh_token': token_data['refresh_token'],
-            'grant_type': 'refresh_token',
-        }
-    ).encode('utf-8')
-    req = urllib.request.Request(TOKEN_URL, data=payload, method='POST')
-    with urllib.request.urlopen(req, timeout=60) as resp:
-        return json.loads(resp.read().decode('utf-8'))['access_token']
-
-
-def _apps_script_api_request(
-    access_token: str,
-    method: str,
-    path: str,
-    body: dict | None = None,
-) -> dict:
-    req = urllib.request.Request(f'{SCRIPT_API_BASE}{path}', method=method)
-    req.add_header('Authorization', f'Bearer {access_token}')
-    req.add_header('Content-Type', 'application/json; charset=utf-8')
-    if body is not None:
-        req.data = json.dumps(body).encode('utf-8')
-    try:
-        with urllib.request.urlopen(req, timeout=120) as resp:
-            raw = resp.read().decode('utf-8')
-            return json.loads(raw) if raw else {}
-    except urllib.error.HTTPError as e:
-        raw = e.read().decode('utf-8')
-        try:
-            payload = json.loads(raw)
-            message = payload.get('error', {}).get('message', raw)
-        except json.JSONDecodeError:
-            message = raw
-        raise RuntimeError(
-            f'Apps Script API request failed ({e.code}): {message}'
-        ) from None
-
-
-def _build_bookmark_bridge_files() -> list[dict]:
-    code = r"""
-function createBookmarkAtText(docId, anchorText, occurrence, tabId) {
-  var doc = DocumentApp.openById(docId);
-  var tab = tabId ? doc.getTab(tabId).asDocumentTab() :
-      doc.getTabs()[0].asDocumentTab();
-  var body = tab.getBody();
-  var wanted = occurrence || 1;
-  var found = null;
-
-  for (var i = 0; i < wanted; i++) {
-    found = body.findText(anchorText, found);
-    if (!found) {
-      throw new Error(
-        'Anchor text not found for occurrence ' + wanted + ': ' + anchorText
-      );
-    }
-  }
-
-  var elem = found.getElement();
-  var start = found.getStartOffset();
-  var end = found.getEndOffsetInclusive();
-  var pos = tab.newPosition(elem, start);
-  var bookmark = tab.addBookmark(pos);
-  return {
-    bookmarkId: bookmark.getId(),
-    matchText: elem.asText().getText().substring(start, end + 1)
-  };
-}
-""".strip()
-
-    manifest = {
-        'timeZone': 'Europe/London',
-        'exceptionLogging': 'STACKDRIVER',
-        'runtimeVersion': 'V8',
-        'oauthScopes': ['https://www.googleapis.com/auth/documents'],
-        'executionApi': {'access': 'MYSELF'},
-    }
-
-    return [
-        {'name': 'Code', 'type': 'SERVER_JS', 'source': code},
-        {'name': 'appsscript', 'type': 'JSON', 'source': json.dumps(manifest)},
-    ]
-
-
-def _create_bookmark_via_apps_script(
-    doc_id: str,
-    anchor_text: str,
-    occurrence: int = 1,
-    *,
-    script_id: str | None = None,
-    tab_id: str | None = None,
-) -> dict:
-    script_id = script_id or _first_env(*APPS_SCRIPT_ID_ENV_ALIASES)
-    if not script_id:
-        raise RuntimeError(
-            'bookmark_jump requires a persistent Apps Script bridge. '
-            f'Set {APPS_SCRIPT_ID_ENV_VAR} to the script project ID '
-            '(legacy GOOGLE_DRIVE_MCP_APPS_SCRIPT_ID also works).'
-        )
-
-    access_token = _refresh_access_token_stdlib()
-    _apps_script_api_request(
-        access_token,
-        'PUT',
-        f'/projects/{script_id}/content',
-        {'files': _build_bookmark_bridge_files()},
-    )
-
-    result = _apps_script_api_request(
-        access_token,
-        'POST',
-        f'/scripts/{script_id}:run',
-        {
-            'function': 'createBookmarkAtText',
-            'parameters': ([doc_id, anchor_text, occurrence, tab_id]
-                           if tab_id else [doc_id, anchor_text, occurrence]),
-            'devMode': True,
-        },
-    )
-
-    if 'error' in result:
-        details = result.get('error', {}).get('details', [])
-        detail = details[0] if details else {}
-        message = (
-            detail.get('errorMessage')
-            or result.get('error', {}).get('message')
-            or json.dumps(result['error'])
-        )
-        raise RuntimeError(f'Apps Script bookmark creation failed: {message}')
-
-    payload = result.get('response', {}).get('result', {})
-    bookmark_id = payload.get('bookmarkId')
-    if not bookmark_id:
-        raise RuntimeError(
-            'Apps Script bookmark creation returned no bookmarkId'
-        )
-
-    return {
-        'script_id': script_id,
-        'bookmark_id': bookmark_id,
-        'matched_text': payload.get('matchText', anchor_text),
-    }
-
-
-def _build_bookmark_jump_url(doc_id: str, bookmark_id: str,
-                             tab_id=None) -> str:
-    query = '?' + urllib.parse.urlencode({'tab': tab_id}) if tab_id else ''
-    return (f'https://docs.google.com/document/d/{doc_id}/edit{query}'
-            f'#bookmark={bookmark_id}')
 
 
 # ---------------------------------------------------------------------------
@@ -710,22 +545,6 @@ def _full_text_range_to_doc_indices(
             ),
         ))
     return doc_start, doc_end
-
-
-def _normalize_anchor_excerpt(anchor_text: str, limit: int = 220) -> str:
-    compact = re.sub(r'\s+', ' ', anchor_text.strip())
-    if len(compact) <= limit:
-        return compact
-    return compact[: limit - 1].rstrip() + '…'
-
-
-def _render_comment_with_anchor_text(comment: str, anchor_text: str) -> str:
-    excerpt = _normalize_anchor_excerpt(anchor_text)
-    if not excerpt:
-        return comment
-    if excerpt in comment:
-        return comment
-    return f'{comment}\n\nAnchored text: “{excerpt}”'
 
 
 # ---------------------------------------------------------------------------
@@ -1479,46 +1298,15 @@ def batch_replace(doc_id: str, replacements: list[dict], *,
 
 # Preserve the public positional calling convention.
 @guarded_edit
-def add_comment(  # noqa: PLR0917
+def add_comment(
     doc_id: str,
     comment: str,
     anchor_text: str,
     occurrence: int = 1,
-    include_anchor_text: bool = True,
-    bookmark_jump: bool = False,
-    apps_script_id: str | None = None,
     *, tab_id: str | None = None,
     expected_revision_id: str | None = None,  # noqa: ARG001 - decorator
 ) -> dict:
-    """
-    Add a comment anchored to specific text in a Google Doc.
-
-    Current implementation detail: this creates a Docs named range and then
-    posts a Drive comment anchored to that named range.
-
-    Important limitation: despite the named range, Google Docs still renders
-    these API-created comments as "Original content deleted" in the UI rather
-    than as a proper inline highlight. This function is kept for API-level
-    comment access, but a real Apps Script automation path is being
-    investigated
-    for true inline Docs comments.
-
-    Steps:
-      1. Find anchor_text in the document → get character indices
-      2. CreateNamedRangeRequest via batchUpdate → get named_range_id
-      3. Drive API comments.create with anchor JSON → attached comment
-
-    Args:
-        doc_id:      Google Doc ID
-        comment:     Comment text to post
-        anchor_text: Text in the document to attach the comment to
-        occurrence:  Which occurrence to anchor to (default 1 = first)
-
-    Returns
-    -------
-        {"ok": True, "comment_id": "...", "anchored_to": "...", "at_index": N,
-         "named_range_id": "..."}
-    """
+    """Create one native anchored comment with guarded UTF-16 targeting."""
     docs_service = _get_service('docs', 'v1')
     doc = _get_document(docs_service, doc_id, tab_id=tab_id)
     paragraphs = _extract_paragraphs(doc)
@@ -1564,84 +1352,22 @@ def add_comment(  # noqa: PLR0917
     )
     depend_on(doc, doc_start, doc_end)
 
-    # Create a named range at the anchor position
-    range_name = f'comment-anchor-{uuid.uuid4().hex[:12]}'
-    result = submit(docs_service, doc_id, [
-        {'createNamedRange': {
-            'name': range_name,
-            'range': {'startIndex': doc_start, 'endIndex': doc_end,
-                      'segmentId': ''},
+    response = saved(submit(docs_service, doc_id, [{
+        'insertComment': {'content': comment, 'range': {
+            'startIndex': doc_start, 'endIndex': doc_end,
         }},
-    ])
-
-    named_range_id = (
-        result.get('replies', [{}])[0]
-        .get('createNamedRange', {})
-        .get('namedRangeId')
-    )
-    if not named_range_id:
-        raise RuntimeError(
-            'Failed to create named range — no ID returned by Docs API'
-        )
-
-    # The correct anchor format for Google Docs is the bare named range ID
-    # (e.g. "kix.abc123") as a plain string — NOT a JSON object.
-    # quotedFileContent provides the fallback display text.
-    drive = build('drive', 'v3', credentials=_load_creds())
-    bookmark = None
-    if bookmark_jump:
-        bookmark = _create_bookmark_via_apps_script(
-            doc_id,
-            full_text[ft_start:ft_end],
-            occurrence=occurrence,
-            script_id=apps_script_id,
-            tab_id=doc.get('_mcp_tab_id'),
-        )
-
-    rendered_comment = (
-        _render_comment_with_anchor_text(comment, full_text[ft_start:ft_end])
-        if include_anchor_text
-        else comment
-    )
-    if bookmark is not None:
-        jump_url = _build_bookmark_jump_url(doc_id, bookmark['bookmark_id'],
-                                            doc.get('_mcp_tab_id'))
-        rendered_comment = f'{rendered_comment}\n\nJump: {jump_url}'
-    comment_result = (
-        drive.comments()
-        .create(
-            fileId=doc_id,
-            body={
-                'content': rendered_comment,
-                'anchor': named_range_id,
-                'quotedFileContent': {
-                    'mimeType': 'text/html',
-                    'value': full_text[ft_start:ft_end],
-                },
-            },
-            fields='id,content,anchor',
-        )
-        .execute()
-    )
-
+    }]))
+    thread = created(response, 'insertComment', 'commentThread')
+    head = thread.get('headPost', {})
+    if not isinstance(head.get('postId'), str) or not head['postId']:
+        fail('WRITE_OUTCOME_UNKNOWN', 'Google saved a comment but omitted '
+             'its head post ID. Inspect threads before retrying.', 1)
+    control = response.get('writeControl', {})
     return {
-        'ok': True,
-        'document_id': doc_id,
-        'comment_id': comment_result.get('id'),
-        'anchored_to': full_text[ft_start:ft_end],
-        'at_index': doc_start,
-        'named_range_id': named_range_id,
-        'comment_content': rendered_comment,
-        'bookmark_id': bookmark['bookmark_id']
-        if bookmark is not None
-        else None,
-        'bookmark_url': (
-            _build_bookmark_jump_url(doc_id, bookmark['bookmark_id'],
-                                     doc.get('_mcp_tab_id'))
-            if bookmark is not None
-            else None
-        ),
-        'apps_script_id': bookmark['script_id']
-        if bookmark is not None
-        else None,
+        'ok': True, 'document_id': doc_id, 'comment_id': thread['commentId'],
+        'post_id': head['postId'], 'anchor_id': thread.get('anchorId'),
+        'anchored_to': full_text[ft_start:ft_end], 'at_index': doc_start,
+        'comment_content': head.get('content', comment),
+        'revision_id': control.get('requiredRevisionId') or
+        control.get('targetRevisionId'), 'comment_update_state': 'ALL_SAVED',
     }

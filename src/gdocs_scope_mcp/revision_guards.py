@@ -390,7 +390,7 @@ def guarded_edit(function=None, *, append=False):
         if edit.snapshot is not None:
             tab_id = edit.snapshot.get('_mcp_tab_id')
             if isinstance(result, dict):
-                result['tab_id'] = tab_id
+                result.setdefault('tab_id', tab_id)
             elif hasattr(result, 'tab_id'):
                 result.tab_id = tab_id
         return result

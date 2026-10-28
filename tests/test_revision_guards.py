@@ -16,6 +16,8 @@ from gdocs_scope_mcp.tool_errors import (
     failure_from_exception,
 )
 
+from .native_comment_fixtures import native_batch
+
 
 def api_error(message, status=400):
     """Return a real Google client exception with an explicit reason."""
@@ -61,7 +63,7 @@ def race_docs(monkeypatch, simple_document):
         assert body['writeControl'] == {
             'requiredRevisionId': state['document']['revisionId'],
         }
-        return {'replies': [{'createNamedRange': {'namedRangeId': 'anchor'}}]}
+        return native_batch()
 
     documents.batchUpdate.return_value.execute.side_effect = write
     monkeypatch.setattr(docs_edit, '_get_service', lambda *_args: service)
@@ -126,7 +128,7 @@ def test_independent_paragraph_change_replans_utf16(
     index_key = 'index' if key == 'location' else 'startIndex'
     assert new_op[key][index_key] - old_op[key][index_key] == delta
     if operation == 'comment':
-        drive.comments().create.assert_called_once()
+        drive.comments().create.assert_not_called()
 
 
 @pytest.mark.parametrize('mode', ['text', 'style', 'deleted', 'new_match',
@@ -314,23 +316,14 @@ def test_new_delete_all_match_does_not_expand_target_set(race_docs):
     assert len(race_docs['writes']) == 1
 
 
-def test_lost_comment_response_does_not_repeat_anchor_or_comment(
-    mock_docs, monkeypatch,
-):
-    """The comment side effect may commit after its anchor succeeds."""
-    mock_docs.batchUpdate.return_value.execute.return_value = {
-        'replies': [{'createNamedRange': {'namedRangeId': 'anchor'}}],
-    }
-    drive = MagicMock()
-    drive.comments().create.return_value.execute.side_effect = TimeoutError()
-    monkeypatch.setattr(docs_edit, 'build', lambda *_a, **_k: drive)
-    monkeypatch.setattr(docs_edit, '_load_creds', lambda: None)
+def test_lost_native_comment_response_is_not_replayed(mock_docs):
+    """An unknown native comment write is never replayed."""
+    mock_docs.batchUpdate.return_value.execute.side_effect = TimeoutError()
     with pytest.raises(ToolFailureError) as caught:
         docs_edit.add_comment('test', 'review', 'Target phrase')
     assert caught.value.failure.code == 'WRITE_OUTCOME_UNKNOWN'
-    assert caught.value.failure.committed_batches == 1
+    assert caught.value.failure.committed_batches == 0
     mock_docs.batchUpdate.assert_called_once()
-    drive.comments().create.assert_called_once()
 
 
 @pytest.mark.usefixtures('target_mode')

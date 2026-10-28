@@ -16,6 +16,8 @@ from jsonschema import validate
 from gdocs_scope_mcp import docs_edit, server
 from gdocs_scope_mcp.tool_logging import LOGGER_NAME
 
+from .native_comment_fixtures import comment_thread, wire_native_comments
+
 EXPECTED_SHORT_PREVIEW_LIMIT = 80
 EXPECTED_TEXT_PREVIEW_LIMIT = 200
 EXPECTED_RECEIPT_ITEM_LIMIT = 100
@@ -55,7 +57,7 @@ def test_table_structural_boundaries_fail_through_mcp(
 
 
 @pytest.fixture
-def contract_api(monkeypatch, mock_docs):
+def contract_api(monkeypatch, mock_docs, simple_document):
     """Provide Docs and Drive responses without using real credentials."""
     api = MagicMock()
     api.documents.return_value = mock_docs
@@ -99,6 +101,7 @@ def contract_api(monkeypatch, mock_docs):
     monkeypatch.setattr(server, 'build', lambda *_args, **_kwargs: api)
     monkeypatch.setattr(docs_edit, 'build', lambda *_args, **_kwargs: api)
     monkeypatch.setattr(docs_edit, '_load_creds', object)
+    wire_native_comments(mock_docs, simple_document)
     return api
 
 
@@ -302,13 +305,9 @@ TOOL_CASES = [
         {
             'ok': True,
             'comment_id': 'comment-id',
-            'named_range_id': 'range-id',
-            'bookmark_id': None,
-            'bookmark_url': None,
-            'apps_script_id': None,
-            'comment_content': (
-                'Comment body\n\nAnchored text: “Target phrase”'
-            ),
+            'post_id': 'head-id',
+            'anchor_id': 'anchor-comment-id',
+            'comment_content': 'Comment body',
         },
     ),
     (
@@ -346,8 +345,10 @@ TOOL_CASES = [
                     'id': 'comment-id',
                     'content': 'Comment body',
                     'author': 'Author',
-                    'anchored': True,
-                    'named_range_id': 'range-id',
+                    'anchored': False,
+                    'anchor_id': 'anchor-comment-id', 'tab_id': None,
+                    'ranges': [], 'head_post_id': 'head-id',
+                    'reply_count': 1, 'replies': [],
                     'quoted_text': 'Target phrase',
                     'resolved': False,
                     'deleted': False,
@@ -618,14 +619,14 @@ def test_unsupported_replace_all_returns_structured_mcp_error(
         (403, 'PERMISSION_DENIED'),
         (404, 'RESOURCE_NOT_FOUND'),
         (429, 'RATE_LIMITED'),
-        (503, 'GOOGLE_API_ERROR'),
+        (503, 'WRITE_OUTCOME_UNKNOWN'),
     ],
 )
 def test_google_api_errors_have_safe_recovery_fields(
     contract_api, status, code
 ):
     """Preserve API status without exposing response bodies to the client."""
-    request = contract_api.replies.return_value.create.return_value
+    request = contract_api.documents.return_value.batchUpdate.return_value
     request.execute.side_effect = HttpError(
         Response({'status': status}),
         b'{"error":{"message":"private-api-body"}}',
@@ -639,8 +640,9 @@ def test_google_api_errors_have_safe_recovery_fields(
     assert response.is_error
     data = response.structured_content
     assert data['code'] == code
-    assert str(status) in data['description']
-    assert 'before retrying a write' in data['suggested_action']
+    if status < 500:  # noqa: PLR2004
+        assert str(status) in data['description']
+    assert data['suggested_action']
     assert 'private-api-body' not in json.dumps(data)
     assert json.loads(response.content[0].text) == data
     validate(data, tool.outputSchema)
@@ -685,7 +687,7 @@ def test_expired_credentials_have_authentication_guidance(monkeypatch):
     def expired():
         raise RefreshError('private-token-details')
 
-    monkeypatch.setattr(docs_edit, '_load_creds', expired)
+    monkeypatch.setattr(docs_edit, '_get_service', lambda *_args: expired())
     _, response = call_tool(
         'docs_resolve_comment',
         {'doc_id': 'example', 'comment_id': 'comment-id'},
@@ -708,6 +710,8 @@ def test_catalog_contract_covers_every_registered_tool():
 
     # Entity/table outputs are schema-validated in their dedicated tests.
     assert asyncio.run(names()) == {name for name, _, _ in TOOL_CASES} | {
+        'docs_reopen_comment', 'docs_edit_comment',
+        'docs_delete_comment_reply',
         'docs_get_entity', 'docs_create_dropdown_definition',
         'docs_select_dropdown',
         'docs_tables_list', 'docs_table_read',
@@ -723,7 +727,7 @@ def test_api_errors_remain_mcp_errors(contract_api, name):
         request = contract_api.documents.return_value.create.return_value
         arguments = {'title': 'Created'}
     else:
-        request = contract_api.comments.return_value.delete.return_value
+        request = contract_api.documents.return_value.batchUpdate.return_value
         arguments = {'doc_id': 'example', 'comment_id': 'comment-id'}
     request.execute.side_effect = RuntimeError('Simulated Google API failure')
 
@@ -733,35 +737,18 @@ def test_api_errors_remain_mcp_errors(contract_api, name):
     assert response.structured_content['code'] == 'INTERNAL_ERROR'
 
 
-def test_comment_bookmark_fields_are_preserved(contract_api, monkeypatch):
-    """Optional bookmark navigation survives conversion to a typed response."""
-    monkeypatch.setattr(
-        docs_edit,
-        '_create_bookmark_via_apps_script',
-        lambda *_args, **_kwargs: {
-            'bookmark_id': 'bookmark-id',
-            'script_id': 'script-id',
-        },
-    )
-    _, response = call_tool(
-        'docs_add_comment',
-        {
-            'doc_id': 'example',
-            'anchor_text': 'Target phrase',
-            'comment': 'Comment body',
-            'bookmark_jump': True,
-        },
-    )
-
-    data = response.structured_content
-    assert data['bookmark_id'] == 'bookmark-id'
-    assert data['apps_script_id'] == 'script-id'
-    assert '#bookmark=bookmark-id' in data['bookmark_url']
-    assert data['bookmark_url'] in data['comment_content']
-    contract_api.comments.return_value.create.assert_called_once()
+def test_obsolete_comment_options_are_removed(contract_api):
+    """Native anchoring does not accept a legacy bookmark workaround."""
+    _, response = call_tool('docs_add_comment', {
+        'doc_id': 'example', 'anchor_text': 'Target phrase',
+        'comment': 'Comment body', 'bookmark_jump': True,
+    }, raise_on_error=False)
+    assert response.is_error
+    assert response.structured_content['code'] == 'INVALID_ARGUMENT'
+    contract_api.comments.return_value.create.assert_not_called()
 
 
-@pytest.mark.parametrize('name', ['docs_list', 'docs_read_comments'])
+@pytest.mark.parametrize('name', ['docs_list'])
 def test_empty_lists_keep_named_typed_collections(contract_api, name):
     """An empty collection remains an object with count and a named list."""
     if name == 'docs_list':
@@ -800,87 +787,55 @@ def test_document_list_allows_missing_optional_drive_fields(contract_api):
 
 
 @pytest.mark.parametrize('include_resolved', [False, True])
+@pytest.mark.usefixtures('contract_api')
 def test_comment_filtering_and_defaults_survive_typed_output(
-    contract_api,
-    include_resolved,
+    simple_document, include_resolved,
 ):
-    """Comment counts reflect filtering and missing metadata keeps defaults."""
-    comments = contract_api.comments.return_value
-    comments.list.return_value.execute.return_value = {
-        'comments': [{'id': 'resolved-id', 'resolved': True}],
-    }
-
-    _, response = call_tool(
-        'docs_read_comments',
-        {
-            'doc_id': 'example',
-            'include_resolved': include_resolved,
-        },
-    )
-
+    """Native status filtering preserves missing-post metadata defaults."""
+    simple_document['comments'] = [
+        {'commentId': 'resolved-id', 'status': 'RESOLVED'},
+    ]
+    _, response = call_tool('docs_read_comments', {
+        'doc_id': 'example', 'include_resolved': include_resolved,
+    })
     data = response.structured_content
     assert data['count'] == int(include_resolved)
     if include_resolved:
-        assert data['comments'] == [
-            {
-                'id': 'resolved-id',
-                'content': '',
-                'author': '?',
-                'anchored': False,
-                'named_range_id': None,
-                'quoted_text': '',
-                'resolved': True,
-                'deleted': False,
-                'created': '',
-            }
-        ]
+        item = data['comments'][0]
+        assert item['id'] == 'resolved-id' and item['resolved']
+        assert item['head_post_id'] is None and item['ranges'] == []
+        assert not item['anchored'] and item['author'] == '?'
     else:
         assert data['comments'] == []
 
 
 @pytest.mark.parametrize('reply', ['', 'Closing reply'])
 def test_resolve_uses_reply_action_in_one_request(contract_api, reply):
-    """Resolve through replies.create, with optional content on that action."""
-    contract_api.comments.return_value.update.side_effect = AssertionError(
-        'comments.update cannot resolve a comment',
-    )
-
-    _, response = call_tool(
-        'docs_resolve_comment',
-        {
-            'doc_id': 'example',
-            'comment_id': 'comment-id',
-            'reply': reply,
-        },
-    )
-
-    expected_body = {'action': 'resolve'}
+    """Resolve through one native action post, including optional content."""
+    _, response = call_tool('docs_resolve_comment', {
+        'doc_id': 'example', 'comment_id': 'comment-id', 'reply': reply,
+    })
+    expected_post = {'commentAction': 'RESOLVE'}
     if reply:
-        expected_body['content'] = reply
-    contract_api.replies.return_value.create.assert_called_once_with(
-        fileId='example',
-        commentId='comment-id',
-        body=expected_body,
-        fields='id',
-    )
-    contract_api.replies.return_value.create.return_value.execute.assert_called_once()
-    contract_api.comments.return_value.update.assert_not_called()
+        expected_post['content'] = reply
+    docs = contract_api.documents.return_value
+    docs.batchUpdate.assert_called_once()
+    body = docs.batchUpdate.call_args.kwargs['body']
+    assert body['requests'] == [{'addCommentReply': {
+        'commentId': 'comment-id', 'post': expected_post,
+    }}]
     assert response.is_error is False
-    assert response.structured_content == {
-        'ok': True,
-        'document_id': 'example',
-        'scope': 'comment',
-        'tab_id': None,
-        'heading_id': None,
-        'comment_id': 'comment-id',
-        'resolved': True,
-    }
+    assert response.structured_content['resolved'] is True
+    assert response.structured_content['comment_update_state'] == 'ALL_SAVED'
+    assert response.structured_content['reply_id'] == 'reply-id'
     assert json.loads(response.content[0].text) == response.structured_content
+    contract_api.comments.assert_not_called()
+    contract_api.replies.assert_not_called()
 
 
 def test_resolve_failure_does_not_return_success(contract_api):
     """A failed resolve action stays an MCP error without a success receipt."""
-    request = contract_api.replies.return_value.create.return_value
+    request = contract_api.documents.return_value.batchUpdate.return_value
     request.execute.side_effect = RuntimeError('Simulated resolve failure')
 
     _, response = call_tool(
@@ -1135,7 +1090,7 @@ def test_comment_occurrence_description_is_complete_in_catalog():
     assert '2, 3' in text
 
 
-@pytest.mark.parametrize('name', ['docs_list', 'docs_read_comments'])
+@pytest.mark.parametrize('name', ['docs_list'])
 @pytest.mark.parametrize('has_more', [False, True])
 @pytest.mark.parametrize('empty', [False, True])
 def test_listing_reports_page_continuation(
@@ -1161,7 +1116,7 @@ def test_listing_reports_page_continuation(
     assert data['count'] == (0 if empty else 1)
 
 
-@pytest.mark.parametrize('name', ['docs_list', 'docs_read_comments'])
+@pytest.mark.parametrize('name', ['docs_list'])
 def test_listing_forwards_page_token_to_drive(contract_api, name):
     """Let an agent request the next page without repeating page one."""
     arguments = {'page_token': 'second-page'}
@@ -1179,28 +1134,26 @@ def test_listing_forwards_page_token_to_drive(contract_api, name):
     assert 'nextPageToken' in resource.list.call_args.kwargs['fields']
 
 
-def test_filtered_comment_page_keeps_continuation(contract_api):
-    """Zero visible comments on this page must not imply no later comments."""
-    resource = contract_api.comments.return_value
-    resource.list.return_value.execute.return_value = {
-        'comments': [{'id': 'resolved', 'resolved': True}],
-        'nextPageToken': 'more-comments',
-    }
-
-    _, response = call_tool('docs_read_comments', {'doc_id': 'example'})
-
+@pytest.mark.usefixtures('contract_api')
+def test_native_comment_filtering_precedes_output_pagination(
+    simple_document,
+):
+    """Client-side native pagination filters resolved threads before paging."""
+    simple_document['comments'] = [
+        comment_thread('resolved', resolved=True), comment_thread('visible'),
+    ]
+    _, response = call_tool('docs_read_comments', {
+        'doc_id': 'example', 'limit': 1,
+    })
     data = response.structured_content
-    assert data['comments'] == []
-    assert data['count'] == 0
-    assert data['has_more'] is True
-    assert data['next_page_token'] == 'more-comments'
+    assert [t['id'] for t in data['comments']] == ['visible']
+    assert data['count'] == 1
+    assert not data['has_more']
 
 
 @pytest.mark.parametrize(
     ('name', 'include_resolved', 'shared_drive'),
-    [('docs_list', False, False), ('docs_list', False, True),
-     ('docs_read_comments', False, False),
-     ('docs_read_comments', True, False)],
+    [('docs_list', False, False), ('docs_list', False, True)],
 )
 def test_two_page_listing_preserves_request_options(
     contract_api, monkeypatch, *, name, include_resolved, shared_drive,
@@ -1275,7 +1228,7 @@ def test_two_page_listing_preserves_request_options(
         assert first_request['fileId'] == 'example'
 
 
-@pytest.mark.parametrize('name', ['docs_list', 'docs_read_comments'])
+@pytest.mark.parametrize('name', ['docs_list'])
 def test_invalid_listing_token_has_restart_guidance(contract_api, name):
     """A rejected cursor remains a structured error with recovery guidance."""
     resource = (
