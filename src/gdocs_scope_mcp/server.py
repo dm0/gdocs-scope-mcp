@@ -53,6 +53,7 @@ from . import (
     table_patch,
     table_read,
     table_snapshots,
+    table_structure,
 )
 from .diagnostics import ServerInfo, capture_server_info
 from .entities import (
@@ -89,6 +90,7 @@ from .table_read import (
     TablesListResponse,
 )
 from .table_snapshots import SnapshotResponse
+from .table_structure import StructureOperation, StructureResponse
 from .table_tokens import CellAddress, SnapshotFields, SnapshotToken
 from .tool_inputs import (
     CodeBlockStyle,
@@ -224,6 +226,7 @@ EDITING TOOLS:
     docs_table_snapshot    Issue/validate selective cell-state expectations
     docs_table_patch       Atomically replace selected Markdown cells
     docs_table_format      Atomically change explicit table style properties
+    docs_table_structure   Insert/delete rows, columns or a whole table
     docs_search_replace    Find and replace text (occurrence-targeted or all)
     docs_insert_after      Insert text after a specified paragraph anchor text
     docs_insert_before     Insert text before a specified paragraph anchor text
@@ -462,7 +465,8 @@ def docs_table_snapshot(
     against a fresh read. The position must retain the same table structure;
     row/column/table insertion, deletion or merge requires fresh discovery.
     Snapshots require verified unmerged geometry without nested cell tables.
-    fields selects content, text_style, paragraph_style, cell_style, structure
+    fields selects content, text_style, paragraph_style, cell_style, structure,
+    deletion (full removed-cell state for docs_table_structure)
     or granular formatting fields: cell.background_color/vertical_alignment,
     cell.padding_top/bottom/left/right, cell.border_top/bottom/left/right,
     paragraph.alignment, column.width, row.min_height, table.header_rows.
@@ -570,6 +574,50 @@ def docs_table_format(
     resulting revision. No content edits or snapshot/binding metadata writes.
     """
     return table_format.format_table(doc_id, table_ref, base_token, changes)
+
+
+@mcp.tool(
+    output_schema=_tool_response_schema(StructureResponse),
+    annotations={'readOnlyHint': False, 'destructiveHint': True,
+                 'idempotentHint': False, 'openWorldHint': True},
+)
+def docs_table_structure(
+    doc_id: str, table_ref: ReadReference, base_token: SnapshotToken,
+    operation: StructureOperation,
+) -> StructureResponse:
+    """Change a checked top-level table's structure in one atomic batch.
+
+    One typed operation per call: insert_rows (row, position before/after,
+    count=1), insert_columns (column, position, count=1), delete_rows (row,
+    count=1), delete_columns (column, count=1), or delete_table. Row numbers
+    are 1-based, columns uppercase letters; counts are 1-100. References bind
+    the structure and insertion boundary, not stale native indices. Requires
+    verified unmerged geometry without nested tables; at most 100000 logical
+    cells after insertion. Deleting all rows/columns requires delete_table.
+
+    Obtain docs_table_snapshot first. Insertions need any cell snapshot and
+    do not reserve text/styles. Deletions require fields=["deletion"] covering
+    EVERY removed cell (maximum 100 cells). This protects full native cell
+    content/styles, referenced objects/list/dropdown metadata, named ranges,
+    effective named styles and row/column/table formatting. Other cells may
+    change independently. Merged/nested tables require separate future tools.
+
+    Strict requiredRevisionId even in target mode. Up to three attempts after
+    confirmed revision races, always rechecking the original expectations and
+    fresh indices. Structure changes in the same section return TARGET_CHANGED;
+    changed deleted state returns EDIT_CONFLICT. An unknown write outcome is
+    never replayed. Empty rows/columns inherit Google's native formatting.
+
+    Returns the committed revision, updated table_ref and dimensions (null/0
+    after deletion), attempts, counts and committed_batches=1. Updated refs
+    describe this committed structure; later structural edits can invalidate
+    them. All old cell snapshots and section table references are invalidated;
+    reread/snapshot before another edit. No post-write mutation stage or hidden
+    metadata/bindings are used. Table deletion retains the preceding paragraph.
+    """
+    return table_structure.apply_structure(
+        doc_id, table_ref, base_token, operation,
+    )
 
 
 @mcp.tool(

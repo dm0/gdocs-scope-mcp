@@ -45,6 +45,9 @@ well suited to large Google Docs with structured headings.
   alignment, column widths, minimum row heights and pinned header rows in one
   guarded batch. Property-level expectations allow independent text and style
   edits, including changes to different borders of the same cell.
+- **Change table structure safely.** Insert or delete rows and columns, or
+  explicitly remove a table. Deletion expectations protect removed content;
+  unrelated text edits can proceed through bounded revision retries.
 - **Insert images.** Use Markdown or HTML image references, or explicitly enable
   local image uploads through temporary, link-shared Google Drive files that
   are cleaned up after insertion.
@@ -798,6 +801,80 @@ The receipt returns `applied_count` (requested targets), `updated_properties`,
 `revision_id`, `attempts` and `committed_batches=1`. It makes no claim that
 text changed. Formatting uses this dedicated tool; no additional Markdown
 syntax is required.
+
+#### `docs_table_structure(doc_id, table_ref, base_token, operation)`
+
+Insert empty rows/columns, delete consecutive rows/columns, or delete an entire
+checked table. Each call accepts **one** typed operation, applied in one strict,
+atomic native batch. Counts default to 1 and are limited to 1–100.
+
+| `operation.type` | Required fields | Meaning |
+| --- | --- | --- |
+| `insert_rows` | `row`, `position` | Insert `count` rows `before` or `after` an existing 1-based row |
+| `insert_columns` | `column`, `position` | Insert `count` columns `before` or `after` an existing uppercase column, e.g. `B` |
+| `delete_rows` | `row` | Delete `count` rows starting at that row |
+| `delete_columns` | `column` | Delete `count` columns starting at that column |
+| `delete_table` | None | Remove the whole table, retaining its preceding paragraph |
+
+Insertions require any cell snapshot for the checked table; content and style
+fields do not reserve existing cells. The table reference guards the selected
+row/column and insertion boundary against structural changes. Empty cells use
+Google Docs' native inherited formatting. Insertion permits independent cell
+text edits and changes before the table that shift native indices.
+
+Deletions require `docs_table_snapshot(fields=["deletion"])` for **every cell
+being removed**, at most 100 cells per call. This field hashes full native
+cell state, referenced object/list/dropdown metadata, footnote/positioned-object
+data, intersecting named ranges, effective named styles and row/column/table
+formatting. Shared borders also include the neighbor's opposite edge.
+It is intentionally stronger than a content-only snapshot. Unused snapshot
+cells do not create dependencies, and other cells' contents may change.
+Some formatting dependencies are conservative: a table-wide style change, or
+width/row-style change associated with a removed cell, requires review.
+
+```python
+# Remove row 2 from a two-column table after inspecting its current contents.
+base = docs_table_snapshot(
+    doc_id="...", table_ref=table_ref, cells=["A2", "B2"], fields=["deletion"],
+)
+result = docs_table_structure(
+    doc_id="...", table_ref=table_ref, base_token=base["base_token"],
+    operation={"type": "delete_rows", "row": 2},
+)
+table_ref = result["table_ref"]
+# Take a NEW snapshot before the next operation.
+```
+
+The initial scope is top-level tables with verified unmerged geometry and no
+nested tables in their cells. Insertions may produce at most 100000 logical
+cells. Removing every row or every column is rejected: use `delete_table`
+explicitly, with expectations covering the entire table. For tables larger
+than the deletion limit, remove reviewed subsets first when a row/column fits
+the limit, taking fresh refs and snapshots between calls. Tables whose smallest
+removable row/column exceeds 100 cells cannot be deleted through this initial
+tool. A series of calls is not atomic as a whole.
+
+Every attempt resolves fresh native indices and uses `requiredRevisionId`,
+even under the general `target` mode. Confirmed revision races get at most
+three attempts with the original expectations. Changed deleted state returns
+`EDIT_CONFLICT`; structural changes in the same heading section return
+`TARGET_CHANGED`, including concurrent insertion at the same boundary. No
+content matching or guessing is used to relocate rows/columns. Changes in
+other sections remain compatible while this section's structural guard holds.
+Expired snapshots and unknown outcomes follow the same rules as table patching;
+an ambiguous insertion/deletion is **never automatically replayed**.
+
+Receipts include `previous_table_ref`, updated `table_ref`, committed
+`revision_id`, `rows`, `columns`, `operation`, `affected_count` (rows/columns,
+or 1 table), `deleted_cell_count`, `attempts` and `committed_batches=1`.
+After whole-table deletion, `table_ref` is null and dimensions are zero.
+Updated references describe the structure of this committed batch and are
+calculated before writing, without a second mutation or a racy post-write
+lookup. Subsequent structural changes can invalidate them normally.
+`snapshots_invalidated` and `section_references_invalidated` are always true:
+take a fresh snapshot and rediscover other tables in the same section before
+further edits. There is no multi-stage write or partial-success path within
+one call.
 
 ---
 
