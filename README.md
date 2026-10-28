@@ -16,6 +16,9 @@ well suited to large Google Docs with structured headings.
 
 ## Features
 
+- **Native comments:** attach comments directly to text, read their anchors,
+  reply, edit, resolve/reopen, and delete through the Docs API.
+
 - **Document tabs:** discover root and nested tabs, select one consistently
   across reading, text edits, tables and smart chips; references stay scoped
   to that tab. Existing calls default to the first tab.
@@ -121,7 +124,7 @@ and edit positions.
 | [Configuration](docs/configuration.md) | JSON settings, environment variables, defaults and overrides |
 | [Document tools](docs/tools/documents.md) | Reading, searching, inserting, replacing and creating documents |
 | [Table tools](docs/tools/tables.md) | Discovery, snapshots, cell patches, formatting and structure |
-| [Comment tools](docs/tools/comments.md) | Comment workflows and the optional Apps Script bridge |
+| [Comment tools](docs/tools/comments.md) | Native anchored comments, replies, editing and resolution |
 | [Rich content](docs/rich-content.md) | Markdown/HTML, lists, images, code and smart chips |
 | [MCP result contracts](docs/protocol.md) | Structured results, errors, annotations, receipts and pagination |
 | [Development](docs/development.md) | Local setup, testing, FastMCP CLI, diagnostics and logging |

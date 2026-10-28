@@ -17,15 +17,19 @@ are not JSON-encoded strings, and edit results have no outer `result` wrapper.
 - `docs_list` returns `{count, documents, next_page_token, has_more}`. Document
   fields retain `id`, `name`, `modifiedTime`, and `webViewLink`; the latter two
   are nullable when Drive omits them.
-- `docs_read_comments` returns `{count, comments, next_page_token, has_more}`.
-  Each comment exposes its
-  text, author, anchor metadata, and resolved/deleted state as typed fields.
-- Existing fields such as `with` in batch changes and bookmark metadata in
-  comment creation are preserved. Batch input now uses the typed
+- `docs_read_comments` returns document/revision metadata, `page_kind`, `count`,
+  `comments`, `next_page_token`, and `has_more`. Native thread summaries expose
+  text, author, native anchor ranges/tab and resolution state. Selecting a
+  `comment_id` pages its replies with native post IDs. Comment cursors bind the
+  complete comment/anchor snapshot, rather than only the body revision.
+- Existing fields such as `with` in batch changes are preserved. Native comment
+  migration intentionally removes bookmark/named-range result fields; see
+  [comment migration](tools/comments.md#migration-from-the-previous-comment-implementation). Batch input now uses the typed
   `replacements` array; the old `replacements_json` parameter was removed.
 
 List counts describe returned items, not the total in Drive or the document.
-Each call fetches one page; pass `next_page_token` as `page_token` to continue.
+Drive listings fetch one API page. Native comment pagination bounds MCP output
+from a full native read. Pass `next_page_token` as `page_token` to continue.
 Continue until the token is null, even if a page has zero returned items.
 Clients using the previous JSON-string
 or `result`-wrapped outputs must switch to the direct structured objects.
@@ -65,10 +69,10 @@ not authorization or retry guarantees. The per-operation policy is:
 |-------|-----------|-------------|------------|
 | `docs_get_tree`, `docs_read`, `docs_list`, `docs_read_comments` | true | false | true |
 | `docs_search_replace`, `docs_batch_replace` | false | true | false |
-| `docs_delete_paragraph`, `docs_delete_comment` | false | true | true |
+| `docs_delete_paragraph`, `docs_delete_comment`, `docs_delete_comment_reply`, `docs_edit_comment` | false | true | true |
 | `docs_insert_before`, `docs_insert_after`, `docs_append` | false | false | false |
 | `docs_create`, `docs_add_comment`, `docs_reply_to_comment` | false | false | false |
-| `docs_resolve_comment` | false | false | false |
+| `docs_resolve_comment`, `docs_reopen_comment` | false | false | false |
 | `docs_get_entity` | true | false | true |
 | `docs_create_dropdown_definition`, `docs_select_dropdown` | false | false | false |
 | `docs_tables_list`, `docs_table_read`, `docs_table_snapshot` | true | false | true |

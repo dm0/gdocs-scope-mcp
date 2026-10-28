@@ -34,7 +34,6 @@ uv tool install git+https://github.com/dm0/gdocs-scope-mcp
 3. Enable these APIs (**APIs & Services → Library**):
    - **Google Docs API**
    - **Google Drive API**
-   - **Google Apps Script API** *(for the optional bookmark-jump bridge)*
 4. Go to **APIs & Services → Credentials**
 5. Click **Create Credentials → OAuth 2.0 Client ID**
 6. Application type: **Desktop App**
@@ -147,14 +146,18 @@ The auth setup requests these scopes:
 | Scope | Purpose |
 |-------|---------|
 | `https://www.googleapis.com/auth/documents` | Read and write Google Docs |
-| `https://www.googleapis.com/auth/drive` | Access Drive files and comments |
+| `https://www.googleapis.com/auth/drive` | Access Drive files |
 | `https://www.googleapis.com/auth/drive.readonly` | Read Drive file metadata |
 | `https://www.googleapis.com/auth/drive.file` | Per-file Drive access |
-| `https://www.googleapis.com/auth/script.projects` | Create Apps Script projects for comment-path experiments |
-| `https://www.googleapis.com/auth/script.deployments` | Deploy Apps Script functions |
-| `https://www.googleapis.com/auth/script.processes` | View script execution |
 | `openid`, `email`, `profile` | Identity |
 
 ---
 
-See [configuration](configuration.md#auth-environment-variables) for token and OAuth environment variables, [development](development.md) for a source checkout, and the optional [Apps Script bridge](tools/comments.md#apps-script-bridge) for bookmark-jump comments.
+New authorizations no longer request Apps Script scopes. Existing token files
+remain usable; this change does not revoke previously granted permissions.
+Native comments use the Docs API. Identity-scope cleanup and per-file access
+are separate work.
+
+See [configuration](configuration.md#auth-environment-variables) for token and
+OAuth environment variables, [development](development.md) for a source
+checkout, and [native comment tools](tools/comments.md) for comment workflows.
