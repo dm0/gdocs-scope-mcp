@@ -68,23 +68,29 @@ write-mode switch alone would leave agents without a clear review workflow.
 The live `docs_read` observation confirmed that the proposed insertion was
 rendered without its native suggestion ID.
 
-A proposed implementation sequence is:
+The agreed implementation sequence is tracked in two issues:
 
-1. Preserve suggestion metadata through the converter. Render insertions and
-   deletions as identifiable HTML, and expose summaries with IDs, status,
-   author, affected tabs/ranges and replies. Formatting suggestions need their
-   own representation; they are not ordinary bold/italic runs.
-2. Add optional per-call `write_mode` to eligible edits, with a server default
-   and `edit` as the compatibility default. Keep this separate from
-   `write_revision_mode`, and return affected suggestion IDs in edit receipts.
+1. [Reading support (#42)](https://github.com/dm0/gdocs-scope-mcp/issues/42):
+   ordinary reads show PREVIEW_WITHOUT_SUGGESTIONS, preserving accepted content
+   and formatting. Report whether pending proposals affect the document and
+   selected fragment, including inherited effects and explicit uncertainty.
+   Keep heading discovery consistent with that view. Preserve native inline
+   metadata internally for proposal detection and write indices; never use
+   preview indices for writes. A dedicated `docs_suggestions_read` tool exposes
+   proposal IDs, status, author, summaries, affected tabs/ranges and replies.
+2. [Writing and management (#43)](https://github.com/dm0/gdocs-scope-mcp/issues/43):
+   add `docs_suggest` with typed edit operations and `docs_suggestions_manage`
+   for accept/reject/delete. Existing edit tools continue making direct edits,
+   without a write-mode parameter or global edit/suggest switch. Return
+   affected suggestion IDs in proposal receipts. Initially support text edits
+   and explicitly validated formatting; defer complex content and reply writes.
 3. Validate the complete generated request plan before side effects. Code
    block markers use forbidden named ranges: skip them explicitly for suggest
    mode or reject the incompatible request. Never create them as silent direct
    edits. Table-column width changes need an explicit unsupported-operation
    error; multi-stage table insertion needs separate live validation.
-4. Add accept/reject/delete and reply tools using native IDs. Preserve revision
-   controls and cache invalidation. Inspect save state and read back outcomes;
-   do not replay partial or uncertain writes.
+4. Preserve revision controls and cache invalidation. Inspect save state and
+   read back outcomes; do not replay partial or uncertain writes.
 5. Define editing around existing suggestions, including overlapping ranges
    and formatting proposals. Matching a flattened inline text string is not
    enough to distinguish accepted content from proposed insertions/deletions.
