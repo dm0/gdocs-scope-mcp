@@ -19,6 +19,10 @@ arguments, examples and supported behavior, start with the [document tools](../t
 
 ## API research
 
+[Suggestions API](suggestions-api.md) records native suggest-mode, review and
+revision-control probes, current reader gaps, and a proposed implementation
+sequence. Production suggestion tools are not implemented by that research.
+
 [Table identity and concurrent writes](../table-identity.md) records historical
 API probes and their results, including named-range behavior across structural
 changes. Its candidate native-identity strategy is research only; production

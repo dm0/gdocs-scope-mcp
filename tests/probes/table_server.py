@@ -13,6 +13,7 @@ from googleapiclient.errors import HttpError
 from googleapiclient.http import HttpRequest
 
 from gdocs_scope_mcp import (
+    comments,
     docs_edit,
     table_format,
     table_insertion,
@@ -57,6 +58,56 @@ def probe_tabs_document() -> dict:
         documentId=_document_id(), includeTabsContent=True,
         suggestionsViewMode='SUGGESTIONS_INLINE',
     ).execute()
+
+
+@mcp.tool
+def probe_suggestions_document(
+    view: str = 'SUGGESTIONS_INLINE', threads: bool = False,
+) -> dict:
+    """Read suggestion projections only in the authorized development Doc."""
+    if view not in {'SUGGESTIONS_INLINE', 'PREVIEW_SUGGESTIONS_ACCEPTED',
+                    'PREVIEW_WITHOUT_SUGGESTIONS'}:
+        raise ValueError('Unsupported suggestions projection')
+    service = docs_edit._get_service()
+    if threads:
+        if view != 'SUGGESTIONS_INLINE':
+            raise ValueError('Threads require inline suggestions')
+        return comments.fetch(service, _document_id())
+    return service.documents().get(
+        documentId=_document_id(), includeTabsContent=True,
+        suggestionsViewMode=view,
+    ).execute()
+
+
+@mcp.tool
+def probe_suggestions_batch(
+    requests: list[dict], revision: str,
+    mode: str = 'SUGGEST', target: bool = False,
+) -> dict:
+    """Probe revision-guarded native suggestions without production tools."""
+    allowed = {'insertText', 'deleteContentRange', 'updateTextStyle',
+               'createNamedRange', 'acceptSuggestion', 'rejectSuggestion',
+               'deleteSuggestion', 'addCommentReply'}
+    if (mode not in {'EDIT', 'SUGGEST'} or not requests
+            or any(len(r) != 1 or not set(r) <= allowed for r in requests)):
+        raise ValueError('Only bounded suggestion probe operations allowed')
+    control = {
+        'writeMode': mode,
+        'targetRevisionId' if target else 'requiredRevisionId': revision,
+    }
+    try:
+        result = docs_edit._get_service().documents().batchUpdate(
+            documentId=_document_id(),
+            body={'requests': requests, 'writeControl': control},
+        ).execute()
+    except HttpError as error:
+        if error.resp.status not in {400, 403}:
+            raise
+        return {'accepted': False, 'http_status': error.resp.status,
+                'message': json.loads(error.content).get('error', {}).get(
+                    'message', 'Request rejected',
+                )}
+    return {'accepted': True, 'response': result}
 
 
 @mcp.tool
