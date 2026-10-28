@@ -48,6 +48,11 @@ class Settings(BaseSettings):
     )
     write_revision_mode: Literal['required', 'target'] = 'required'
     document_cache_enabled: bool = True
+    document_cache_storage: Literal['disk', 'memory'] = 'disk'
+    document_cache_directory: Path | None = None
+    document_cache_database_max_bytes: Annotated[
+        int, Field(ge=1048576),
+    ] = 64 * 1024 * 1024
     document_cache_ttl_seconds: Annotated[int, Field(ge=1, lt=86400)] = 300
     document_cache_max_entries: Annotated[int, Field(ge=1)] = 128
     document_cache_max_bytes: Annotated[int, Field(ge=1)] = 32 * 1024 * 1024

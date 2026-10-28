@@ -20,6 +20,9 @@ def isolated_settings(monkeypatch, tmp_path):
         'GOOGLE_DOCS_MCP_WRITE_REVISION_MODE',
         'GOOGLE_DOCS_MCP_TABLE_SNAPSHOT_TTL_SECONDS',
         'GOOGLE_DOCS_MCP_DOCUMENT_CACHE_ENABLED',
+        'GOOGLE_DOCS_MCP_DOCUMENT_CACHE_STORAGE',
+        'GOOGLE_DOCS_MCP_DOCUMENT_CACHE_DIRECTORY',
+        'GOOGLE_DOCS_MCP_DOCUMENT_CACHE_DATABASE_MAX_BYTES',
         'GOOGLE_DOCS_MCP_DOCUMENT_CACHE_TTL_SECONDS',
         'GOOGLE_DOCS_MCP_DOCUMENT_CACHE_MAX_ENTRIES',
         'GOOGLE_DOCS_MCP_DOCUMENT_CACHE_MAX_BYTES',
@@ -97,6 +100,11 @@ def test_explicit_missing_or_empty_path_fails(value, monkeypatch):
     {'table_snapshot_ttl_seconds': 0},
     {'table_snapshot_ttl_seconds': 604801},
     {'table_snapshot_ttl_seconds': True},
+    {'document_cache_storage': 'unknown'},
+    {'document_cache_database_max_bytes': 1048575},
+    {'document_cache_ttl_seconds': 86400},
+    {'document_cache_max_bytes': 0},
+    {'document_cache_max_entries': 0},
 ])
 def test_invalid_settings_fail(custom_config, data):
     """Reject invalid RGB syntax, blank fonts and unknown/typo fields."""
@@ -126,8 +134,18 @@ def test_document_cache_configuration(custom_config, monkeypatch):
     }))
     monkeypatch.setenv('GOOGLE_DOCS_MCP_DOCUMENT_CACHE_ENABLED', 'false')
     monkeypatch.setenv('GOOGLE_DOCS_MCP_DOCUMENT_CACHE_TTL_SECONDS', '900')
+    monkeypatch.setenv('GOOGLE_DOCS_MCP_DOCUMENT_CACHE_STORAGE', 'memory')
+    monkeypatch.setenv(
+        'GOOGLE_DOCS_MCP_DOCUMENT_CACHE_DIRECTORY', '/tmp/cache',
+    )
+    monkeypatch.setenv(
+        'GOOGLE_DOCS_MCP_DOCUMENT_CACHE_DATABASE_MAX_BYTES', '2097152',
+    )
     settings = get_settings()
     assert settings.document_cache_enabled is False
+    assert settings.document_cache_storage == 'memory'
+    assert str(settings.document_cache_directory) == '/tmp/cache'
+    assert settings.document_cache_database_max_bytes == 2097152  # noqa: PLR2004
     assert settings.document_cache_ttl_seconds == 900  # noqa: PLR2004
     assert settings.document_cache_max_entries == 8  # noqa: PLR2004
     assert settings.document_cache_max_bytes == 1048576  # noqa: PLR2004

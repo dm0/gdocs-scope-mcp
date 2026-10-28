@@ -12,6 +12,9 @@ An absent default file is allowed; an explicitly selected file must exist.
 {
   "write_revision_mode": "required",
   "document_cache_enabled": true,
+  "document_cache_storage": "disk",
+  "document_cache_directory": null,
+  "document_cache_database_max_bytes": 67108864,
   "document_cache_ttl_seconds": 300,
   "document_cache_max_entries": 128,
   "document_cache_max_bytes": 33554432,
@@ -74,6 +77,9 @@ Environment variables override individual file settings:
 |---|---|---|
 | `GOOGLE_DOCS_MCP_WRITE_REVISION_MODE` | `write_revision_mode` | `required` |
 | `GOOGLE_DOCS_MCP_DOCUMENT_CACHE_ENABLED` | `document_cache_enabled` | `true` |
+| `GOOGLE_DOCS_MCP_DOCUMENT_CACHE_STORAGE` | `document_cache_storage` | `disk` |
+| `GOOGLE_DOCS_MCP_DOCUMENT_CACHE_DIRECTORY` | `document_cache_directory` | Platform cache directory |
+| `GOOGLE_DOCS_MCP_DOCUMENT_CACHE_DATABASE_MAX_BYTES` | `document_cache_database_max_bytes` | `67108864` |
 | `GOOGLE_DOCS_MCP_DOCUMENT_CACHE_TTL_SECONDS` | `document_cache_ttl_seconds` | `300` |
 | `GOOGLE_DOCS_MCP_DOCUMENT_CACHE_MAX_ENTRIES` | `document_cache_max_entries` | `128` |
 | `GOOGLE_DOCS_MCP_DOCUMENT_CACHE_MAX_BYTES` | `document_cache_max_bytes` | `33554432` |
@@ -174,8 +180,8 @@ server settings and must remain unchanged while following a pagination token:
 
 ## Document snapshot cache
 
-The server caches full native document responses in memory for repeated reads
-within one running MCP process. Before every reuse it requests only
+The server caches full native document responses on disk for repeated reads
+across MCP processes and Codex chats. Before every reuse it requests only
 `revisionId` from Google, validating current access and revision. An unchanged
 document needs one small request; a changed document needs that revision check
 followed by a full download. A cold or expired entry needs only a full download.
@@ -187,7 +193,27 @@ Set `document_cache_enabled` to `false` to disable it. The default limits are
 between 1 and 86399 seconds, below Google's documented 24-hour revision validity
 window. Entry and byte limits must be positive integers. Oversized documents
 are returned normally without being cached; least recently used entries are
-evicted when necessary. No document content is persisted to disk by this cache.
+evicted when necessary.
+
+The disk backend uses `snapshots-v1.sqlite3` in the platform's user cache
+directory (`~/.cache/gdocs-scope-mcp` on Linux, respecting `XDG_CACHE_HOME`).
+Override it with `document_cache_directory`. Document snapshots are stored as
+plain native JSON in a database created with owner-only file permissions.
+OAuth tokens are not stored; grant identity uses a hash of the credentials.
+Use a local filesystem supporting native file locks.
+
+`document_cache_database_max_bytes` limits the SQLite database file itself,
+including database pages, to 64 MiB by default (minimum: 1 MiB). SQLite's page
+limit rounds down to a 4096-byte boundary. Eviction and automatic vacuum reclaim
+space; reducing this limit may discard cached snapshots. Documents that cannot
+fit are returned without being cached. The separate payload limit still
+applies. Small lock files and transient SQLite rollback journals are outside
+the main database file limit. The file limit is enforced on every connection;
+processes sharing a directory should use the same cache settings.
+
+Set `document_cache_storage` to `memory` for process-local storage, or set
+`document_cache_enabled` to `false` to bypass both backends. The database-size
+setting applies only to disk storage.
 
 Entries are isolated by OAuth grant, document ID and native request options,
 including suggestion mode and whether all tabs are included. A full all-tabs
@@ -203,9 +229,15 @@ writes. External edits are detected at the next revision check. Existing
 required/target revision guards remain in effect: the revision check is not a
 lock against edits that happen after it.
 
-Native comment reads and field-masked requests bypass caching. Separate MCP
-processes have separate caches; individual FastMCP CLI calls start fresh
-processes and cannot demonstrate cache reuse. INFO logs report hit/miss,
+Disk entries and invalidations are shared across local MCP processes using the
+same directory. Document locks serialize same-document downloads and local
+writes across those processes; short SQLite transactions do not hold the
+database lock during Google requests. Up to 64 persistent lock files bound
+coordination overhead; unrelated documents can occasionally share a lock stripe.
+The memory backend shares data only within its process.
+
+Native comment reads and field-masked requests bypass caching. INFO logs report
+hit/miss,
 serialized snapshot size and cache-operation duration without document IDs or
 content. See the [Google Docs revision contract](https://developers.google.com/workspace/docs/api/reference/rest/v1/documents#Document).
 

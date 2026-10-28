@@ -10,8 +10,14 @@ import uuid
 from .test_live_table_identity import table_probe  # noqa: F401
 
 
-def test_live_document_cache(live_test_doc, table_probe):
+def test_live_document_cache(
+    live_test_doc, table_probe, monkeypatch, tmp_path,
+):
     """Use a temporary large tab and confirm cleanup in two MCP processes."""
+    monkeypatch.setenv('GOOGLE_DOCS_MCP_DOCUMENT_CACHE_STORAGE', 'disk')
+    monkeypatch.setenv(
+        'GOOGLE_DOCS_MCP_DOCUMENT_CACHE_DIRECTORY', str(tmp_path),
+    )
 
     async def run():
         async with table_probe('document-cache') as probe:
@@ -51,6 +57,15 @@ def test_live_document_cache(live_test_doc, table_probe):
                 probe.report['benchmark'] = {
                     'mcp_call_ms': durations, 'native_gets': requests,
                 }
+                await probe.call(1, 'probe_get_measurements', {'reset': True})
+                await probe.call(1, 'docs_get_tree', arguments)
+                shared = await probe.call(1, 'probe_get_measurements', {
+                    'reset': True,
+                })
+                assert [r['revision_only'] for r in shared['requests']] == [
+                    True,
+                ]
+                probe.report['shared_process_hit'] = shared['requests']
                 # A second process changes the revision behind the first cache.
                 marker = 'Cache external change ' + uuid.uuid4().hex
                 await probe.call(1, 'docs_append', {
@@ -62,7 +77,7 @@ def test_live_document_cache(live_test_doc, table_probe):
                     'reset': True,
                 })
                 assert [r['revision_only'] for r in metrics['requests']] == [
-                    True, False,
+                    False,
                 ]
                 # A local write evicts the snapshot without waiting for TTL.
                 await probe.call(0, 'docs_append', {
