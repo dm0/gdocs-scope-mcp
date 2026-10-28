@@ -387,8 +387,26 @@ Google can reject inaccessible URLs or invalid image contents;
 all insertions and formatting are sent in one atomic batch, with no success
 receipt on rejection.
 
-By default Google chooses the image size from its resolution. HTML `width` and
+When neither dimension is supplied, images fill the available paragraph content
+width in single-column, paged body paragraphs and list items. The server uses
+page orientation, effective section margins, inherited paragraph styles and
+indentation, and the list nesting/formatting applied by the insertion. It sends
+only the width; Google computes the height while preserving the aspect ratio.
+This also applies to local images uploaded through temporary Drive files.
+Sizing happens at insertion time; later layout changes do not resize the image.
+The calculation uses the paragraph width, not remaining space on an occupied
+visual line. First-line indentation is also respected when it narrows that
+width.
+
+Table cells, multi-column sections, headers, footers, footnotes and pageless
+documents are outside automatic sizing scope. If layout cannot be resolved
+reliably, the request omits the size and Google uses its resolution-based
+default. Body images before or after a table can still be sized automatically;
+images inside its cells retain Google's default.
+
+HTML `width` and
 `height` accept positive pixel numbers, optionally suffixed `px` (96 px = 72 pt).
+Supplying either dimension disables automatic sizing for that image.
 One dimension preserves the aspect ratio; two specify a bounding box that
 Google fits while preserving that ratio. CSS image styling and non-pixel sizes
 are rejected; use the attributes instead. `alt` and `title` are accepted but

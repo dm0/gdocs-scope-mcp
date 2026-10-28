@@ -58,7 +58,8 @@ well suited to large Google Docs with structured headings.
   bounded revision retries.
 - **Insert images.** Use Markdown or HTML image references, or explicitly enable
   local image uploads through temporary, link-shared Google Drive files that
-  are cleaned up after insertion.
+  are cleaned up after insertion. Unsized images fit the available paragraph
+  width in supported paged body paragraphs and lists.
 - **Format code for readability.** Use inline code and fenced code blocks with
   syntax highlighting, configurable fonts, themes, line spacing, and optional
   paragraph backgrounds. Agents can discover available themes and override the
