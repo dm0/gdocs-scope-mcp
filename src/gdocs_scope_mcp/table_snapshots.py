@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 from .models import GoogleDocumentTableCell
 from .settings import get_settings
 from .table_deletion_state import deletion_state
+from .table_grid import Grid, merge_state
 from .table_refs import Layout
 from .table_style_state import property_state, property_value
 from .table_tokens import address, decode, digest, encode, fail
@@ -71,6 +72,8 @@ class CellLocation(BaseModel):
     markdown_char_count: int
     markdown_truncated: bool
     formatting: dict[str, Any] = Field(default_factory=dict)
+    row_span: int = 1
+    column_span: int = 1
 
 
 class SnapshotResponse(BaseModel):
@@ -100,10 +103,14 @@ def validate_baseline(table, baseline, cells, fields, *, subset=False):
         fail('INVALID_REFERENCE', 'Snapshot table/cells/fields differ.')
 
 
-def resolve_cells(document, table, selected):
+def resolve_cells(document, table, selected, *, merged=False):
     """Resolve current positions only after checking structural guards."""
     from .table_read import _geometry
     entry = Layout(document).resolve(table)
+    if merged:
+        grid = Grid(entry)
+        return {a: (head.row, head.column, head.native) for a in selected
+                for head in [grid.cell(a)]}
     geometry, valid = _geometry(entry)
     if (not valid or any(rs != 1 or cs != 1 for _, _, _, rs, cs, _, _ in
                          geometry) or any('table' in child
@@ -121,8 +128,10 @@ def resolve_cells(document, table, selected):
 def validate_states(document, baseline, available):
     """Compare only affected cells and the baseline's explicit field groups."""
     entry = (Layout(document).resolve(baseline)
-             if any('.' in f or f == 'deletion' for f in baseline.fields)
+             if any('.' in f or f in {'deletion', 'merge'}
+                    for f in baseline.fields)
              else None)
+    grid = Grid(entry) if 'merge' in baseline.fields else None
     for selected, (row, column, cell) in available.items():
         state = cell_state(document, cell)
         if entry is not None:
@@ -130,6 +139,8 @@ def validate_states(document, baseline, available):
                           for f in baseline.fields if '.' in f})
         if 'deletion' in baseline.fields:
             state['deletion'] = deletion_state(document, entry, row, column)
+        if grid is not None:
+            state['merge'] = merge_state(document, grid, grid.cell(selected))
         expected = baseline.cells[selected]
         if (set(expected) != set(baseline.fields) or
                 any(expected[field] != state[field]
@@ -142,6 +153,9 @@ def snapshot(doc_id, table_ref, cells, fields, base_token=None):
     from .table_read import _fetch, _model
     table = decode(table_ref, 'table', doc_id)
     requested = sorted(set(fields))
+    if 'merge' in requested and requested != ['merge']:
+        fail('INVALID_ARGUMENT', 'Use fields=["merge"] separately from other '
+             'snapshot groups.')
     if len(cells) * len(requested) > 1000:  # noqa: PLR2004
         fail('INVALID_ARGUMENT', 'At most 1000 cell/field pairs per snapshot.')
     baseline = decode(base_token, 'base', doc_id) if base_token else None
@@ -150,12 +164,15 @@ def snapshot(doc_id, table_ref, cells, fields, base_token=None):
     if baseline is not None:
         validate_baseline(table, baseline, cells, requested)
     document = _fetch(doc_id)
-    available = resolve_cells(document, table, cells)
+    available = resolve_cells(document, table, cells,
+                              merged=requested == ['merge'])
     if baseline is not None:
         validate_states(document, baseline, available)
     model = _model(document)
     entry = (Layout(document).resolve(table)
-             if any('.' in f or f == 'deletion' for f in requested) else None)
+             if any('.' in f or f in {'deletion', 'merge'} for f in requested)
+             else None)
+    grid = Grid(entry) if requested == ['merge'] else None
     states, locations = {}, []
     for selected in cells:
         r, c, cell = available[selected]
@@ -168,6 +185,8 @@ def snapshot(doc_id, table_ref, cells, fields, base_token=None):
                           for f in formatting})
         if 'deletion' in requested:
             state['deletion'] = deletion_state(document, entry, r, c)
+        if grid is not None:
+            state['merge'] = merge_state(document, grid, grid.cell(selected))
         states[selected] = {field: state[field] for field in requested}
         markup = GoogleDocumentTableCell.model_validate(
             deepcopy(cell),
@@ -178,6 +197,8 @@ def snapshot(doc_id, table_ref, cells, fields, base_token=None):
             markdown_char_count=len(markup),
             markdown_truncated=len(markup) > 2000,  # noqa: PLR2004
             formatting=formatting,
+            row_span=cell.get('tableCellStyle', {}).get('rowSpan', 1),
+            column_span=cell.get('tableCellStyle', {}).get('columnSpan', 1),
         ))
     issued = table.model_copy(update={
         'kind': 'base', 'fields': requested, 'cells': states,

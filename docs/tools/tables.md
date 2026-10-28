@@ -106,12 +106,18 @@ docs_table_snapshot(doc_id, table_ref, cells, fields=None, base_token=None)
 ```
 
 Reads and issues expected-state tokens for 1-100 selected uppercase A1 addresses,
-for example `cells=["A1", "B2"]`. Snapshots require verified unmerged geometry
-without nested tables in the target's cells. The default field
+for example `cells=["A1", "B2"]`. Snapshots require verified geometry without
+nested tables in the target's cells. Ordinary groups require unmerged geometry.
+The exclusive `fields=["merge"]` mode also accepts merged tables: select real
+logical head addresses, not covered positions. Each response cell includes
+`row_span` and `column_span`. The default field
 groups are `content`, `text_style` and `paragraph_style`; `cell_style`,
 `structure`, `deletion` and the granular formatting fields documented below are
 optional. `deletion` protects full native removed-cell state for structural
 deletion, including referenced metadata and relevant formatting dependencies.
+`merge` protects participating head content/styles, physical placeholders,
+referenced metadata, enclosing content direction and every adjacent border
+segment. It cannot be combined with other field groups in one snapshot.
 Snapshots allow at most 1000 cell/field pairs. Selected granular values appear
 in each cell's `formatting` object using native Google Docs representations.
 Pass a previous `base_token` with the same cell set
@@ -145,6 +151,9 @@ default; set JSON
 to an integer between 1 and 604,800 seconds.
 
 See [positional references, dependency groups and limits](../table-references.md).
+
+Merged-cell warnings and `simple_text_target` describe text-patch eligibility;
+they do not rule out the separately validated merge/unmerge operations below.
 
 ## docs_table_patch
 
@@ -286,9 +295,10 @@ syntax is required.
 docs_table_structure(doc_id, table_ref, base_token, operation)
 ```
 
-Insert empty rows/columns, delete consecutive rows/columns, or delete an entire
-checked table. Each call accepts **one** typed operation, applied in one strict,
-atomic native batch. Counts default to 1 and are limited to 1–100.
+Insert empty rows/columns, delete consecutive rows/columns or an entire table,
+or merge/unmerge cells. Each call accepts **one** typed operation, applied in
+one strict, atomic native batch. Row/column counts default to 1 and are limited
+to 1–100.
 
 | `operation.type` | Required fields | Meaning |
 | --- | --- | --- |
@@ -297,6 +307,8 @@ atomic native batch. Counts default to 1 and are limited to 1–100.
 | `delete_rows` | `row` | Delete `count` rows starting at that row |
 | `delete_columns` | `column` | Delete `count` columns starting at that column |
 | `delete_table` | None | Remove the whole table, retaining its preceding paragraph |
+| `merge_cells` | `start_cell`, `end_cell` | Merge the inclusive logical rectangle into its upper-left head |
+| `unmerge_cells` | `start_cell`, `end_cell` | Split complete merged cells in the inclusive rectangle |
 
 Insertions require any cell snapshot for the checked table; content and style
 fields do not reserve existing cells. The table reference guards the selected
@@ -327,8 +339,8 @@ table_ref = result["table_ref"]
 # Take a NEW snapshot before the next operation.
 ```
 
-The initial scope is top-level tables with verified unmerged geometry and no
-nested tables in their cells. Insertions may produce at most 100000 logical
+Row/column/table operations require top-level tables with verified unmerged
+geometry and no nested tables in their cells. Insertions may produce at most 100000 logical
 cells. Removing every row or every column is rejected: use `delete_table`
 explicitly, with expectations covering the entire table. For tables larger
 than the deletion limit, remove reviewed subsets first when a row/column fits
@@ -336,24 +348,93 @@ the limit, taking fresh refs and snapshots between calls. Tables whose smallest
 removable row/column exceeds 100 cells cannot be deleted through this initial
 tool. A series of calls is not atomic as a whole.
 
+### Merge and unmerge
+
+Both operations support verified logical grids, including tables already
+containing horizontal or vertical merges. A rectangle must include each
+intersecting merged cell's **entire** span. Its logical area is limited to 100
+slots. Obtain `fields=["merge"]` expectations for every participating head,
+including empty cells; covered physical positions are not separate heads.
+For unmerge, only existing merged heads participate: already unmerged cells
+inside the rectangle are ignored and do not need snapshot expectations.
+`docs_table_read` reports spans and `covered_by_cell_ref` to identify them.
+
+```python
+base = docs_table_snapshot(
+    doc_id="...", table_ref=table_ref, cells=["A1", "B1"], fields=["merge"],
+)
+result = docs_table_structure(
+    doc_id="...", table_ref=table_ref, base_token=base["base_token"],
+    operation={"type": "merge_cells", "start_cell": "A1", "end_cell": "B1"},
+)
+# Check reference_refresh_required; rediscover if true. Never repeat a
+# confirmed transformation merely because its new reference is unavailable.
+```
+
+Merge concatenates each head's existing paragraphs in row-major head order
+into the upper-left head. Text-run formatting, paragraph boundaries and soft
+breaks are preserved; an empty cell adds no extra paragraph. There is no
+custom separator or hidden text rewrite. Already merged contents remain an
+intact paragraph sequence when their head joins another merge. Native Google
+Docs rules determine resulting cell/background/border formatting; the tool
+does not promise to restore pre-merge presentation.
+
+Unmerge keeps the **entire current contents** of each merged cell in its own
+upper-left head; the other resulting cells are empty. It does not recover the
+original cell contents or distribution. A selection with no merged cells is
+rejected. After a merge, take a new snapshot of the head before unmerging:
+
+```python
+base = docs_table_snapshot(
+    doc_id="...", table_ref=new_table_ref, cells=["A1"], fields=["merge"],
+)
+result = docs_table_structure(
+    doc_id="...", table_ref=new_table_ref, base_token=base["base_token"],
+    operation={"type": "unmerge_cells", "start_cell": "A1", "end_cell": "B1"},
+)
+```
+
+The initial supported content is normal text paragraphs in top-level tables
+within LTR sections. Multiple paragraphs, supported inline formatting and
+soft breaks are allowed. Nested tables, headings, lists, images/chips/other
+objects, positioned objects, tracked suggestions and named ranges intersecting
+the selection are rejected before writing. Full native state and shared-border
+dependencies are still compared; compatible text edits outside the rectangle
+can succeed after a revision retry. Associated row/column/table formatting
+dependencies are conservative. Text patching and targeted formatting retain
+their existing unmerged-table scope.
+
 Every attempt resolves fresh native indices and uses `requiredRevisionId`,
 even under the general `target` mode. Confirmed revision races get at most
 three attempts with the original expectations. Changed deleted state returns
-`EDIT_CONFLICT`; structural changes in the same heading section return
+`EDIT_CONFLICT`; changed participating merge state also conflicts. Structural
+changes in the same heading section return
 `TARGET_CHANGED`, including concurrent insertion at the same boundary. No
 content matching or guessing is used to relocate rows/columns. Changes in
 other sections remain compatible while this section's structural guard holds.
 Expired snapshots and unknown outcomes follow the same rules as table patching;
-an ambiguous insertion/deletion is **never automatically replayed**.
+an ambiguous structural write is **never automatically replayed**.
 
 Receipts include `previous_table_ref`, updated `table_ref`, committed
 `revision_id`, `rows`, `columns`, `operation`, `affected_count` (rows/columns,
-or 1 table), `deleted_cell_count`, `attempts` and `committed_batches=1`.
+or 1 table; changed head count for merge/unmerge), `deleted_cell_count`,
+`attempts` and `committed_batches=1`. Merge/unmerge also return original
+`affected_cells`, `result_head_cell` (merge only), and `content_policy`
+(`row_major_paragraphs` or `keep_in_heads`). They report zero deleted cells.
 After whole-table deletion, `table_ref` is null and dimensions are zero.
-Updated references describe the structure of this committed batch and are
-calculated before writing, without a second mutation or a racy post-write
-lookup. Subsequent structural changes can invalidate them normally.
+Row/column operations calculate new refs from the planned shape before writing.
+Merge/unmerge use an authoritative post-write read, and issue a ref only when
+its revision matches the confirmed batch revision. If this read fails or
+another write intervenes, the operation remains successful (`ok=true`,
+`committed_batches=1`) with `table_ref=null` and
+`reference_refresh_required=true`. Rediscover and take fresh expectations;
+**do not repeat the committed operation**. Dimensions and committed revision
+still describe this batch. A null ref means deletion only for `delete_table`.
+Subsequent structural changes can invalidate returned refs normally.
 `snapshots_invalidated` and `section_references_invalidated` are always true:
 take a fresh snapshot and rediscover other tables in the same section before
 further edits. There is no multi-stage write or partial-success path within
 one call.
+
+See the [merge implementation notes](../development/table-cell-merging.md)
+for verified native behavior, logical ownership and race tests.

@@ -464,10 +464,16 @@ def docs_table_snapshot(
     Validates the table's heading hierarchy, ordinal and structural inventory
     against a fresh read. The position must retain the same table structure;
     row/column/table insertion, deletion or merge requires fresh discovery.
-    Snapshots require verified unmerged geometry without nested cell tables.
+    Snapshots require verified geometry without nested cell tables. Ordinary
+    groups require unmerged geometry. fields=["merge"] exclusively supports
+    merged tables: select real logical head addresses, never covered slots.
+    It protects full native participating state, physical placeholders,
+    referenced metadata, enclosing direction, styles and adjacent borders.
+    Returns row_span/column_span for each selected cell.
     fields selects content, text_style, paragraph_style, cell_style, structure,
     deletion (full removed-cell state for docs_table_structure)
-    or granular formatting fields: cell.background_color/vertical_alignment,
+    or merge, or granular formatting fields:
+    cell.background_color/vertical_alignment,
     cell.padding_top/bottom/left/right, cell.border_top/bottom/left/right,
     paragraph.alignment, column.width, row.min_height, table.header_rows.
     Formatting fields use their full dotted names, e.g. cell.padding_top.
@@ -589,18 +595,35 @@ def docs_table_structure(
 
     One typed operation per call: insert_rows (row, position before/after,
     count=1), insert_columns (column, position, count=1), delete_rows (row,
-    count=1), delete_columns (column, count=1), or delete_table. Row numbers
+    count=1), delete_columns (column, count=1), delete_table, merge_cells or
+    unmerge_cells (start_cell, end_cell inclusive logical A1 rectangle).
+    Row numbers
     are 1-based, columns uppercase letters; counts are 1-100. References bind
-    the structure and insertion boundary, not stale native indices. Requires
-    verified unmerged geometry without nested tables; at most 100000 logical
-    cells after insertion. Deleting all rows/columns requires delete_table.
+    the structure and insertion boundary, not stale native indices.
+    Row/column/table operations require verified unmerged geometry without
+    nested tables; at most 100000 logical cells after insertion. Deleting all
+    rows/columns requires delete_table.
 
     Obtain docs_table_snapshot first. Insertions need any cell snapshot and
     do not reserve text/styles. Deletions require fields=["deletion"] covering
     EVERY removed cell (maximum 100 cells). This protects full native cell
     content/styles, referenced objects/list/dropdown metadata, named ranges,
     effective named styles and row/column/table formatting. Other cells may
-    change independently. Merged/nested tables require separate future tools.
+    change independently. Row/column/table operations still require unmerged
+    geometry. Nested tables remain unsupported.
+
+    Merge/unmerge require fields=["merge"] snapshots for every participating
+    logical head (up to 100 logical slots), including empty cells. Unmerge
+    checks only merged heads; already unmerged cells in its rectangle remain
+    independent. Rectangles
+    must contain entire existing merged cells. LTR sections and normal text
+    paragraphs only; lists, headings, chips/objects, named ranges intersecting
+    the selection and tracked suggestions fail before writing. Merge retains
+    native paragraph order by head row/column in the upper-left head; empty
+    cells add no paragraph. Existing text styles and soft breaks are retained;
+    native head/merged-cell formatting rules apply. Unmerge keeps each merged
+    cell's whole contents in its own head, creating empty other cells. It does
+    not reconstruct the pre-merge contents. Unmerge with no merged cells fails.
 
     Strict requiredRevisionId even in target mode. Up to three attempts after
     confirmed revision races, always rechecking the original expectations and
@@ -614,6 +637,12 @@ def docs_table_structure(
     them. All old cell snapshots and section table references are invalidated;
     reread/snapshot before another edit. No post-write mutation stage or hidden
     metadata/bindings are used. Table deletion retains the preceding paragraph.
+    Merge/unmerge return affected_cells, result_head_cell and content_policy.
+    Their updated ref uses an authoritative read only at the confirmed write
+    revision. If that read fails or a collaborator writes first, ok remains
+    true with committed_batches=1, table_ref=null and
+    reference_refresh_required=true: rediscover/snapshot; do not repeat the
+    committed operation. A null ref means deletion only for delete_table.
     """
     return table_structure.apply_structure(
         doc_id, table_ref, base_token, operation,
