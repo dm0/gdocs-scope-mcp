@@ -47,6 +47,7 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
 # isort: split
+from .document_tabs import discover, select
 from .entities import collect_entities
 from .entity_edit import INSERT_ENTITY_KINDS, validate_insertions
 from .image_uploads import PreparedInsertion, rich_insertion_requests
@@ -76,12 +77,13 @@ from .revision_guards import (
     depend_on,
     guarded_edit,
     insertion_context,
+    pinned_tab,
     remember_snapshot,
+    require_native_precondition,
     submit,
 )
 from .table_insertion import TableInsertionPlan
 from .table_read import reference_map
-from .table_refs import first_tab
 from .text_indices import utf16_length
 from .tool_errors import ToolFailureError
 
@@ -267,21 +269,28 @@ def _get_service(api: str = 'docs', version: str = 'v1'):
 SUGGESTIONS_VIEW_MODE = 'SUGGESTIONS_INLINE'
 
 
-def _get_document(service, doc_id: str, *, include_tabs=False) -> dict:
+def _get_document(service, doc_id: str, *, tab_id=None) -> dict:
     """
     Fetch a document with inline suggestions so returned indices stay usable
 
     for later batchUpdate calls.
     """
-    arguments = {'documentId': doc_id,
-                 'suggestionsViewMode': SUGGESTIONS_VIEW_MODE}
-    if include_tabs:
-        arguments['includeTabsContent'] = True
-    return remember_snapshot(
-        service.documents()
-        .get(**arguments)
-        .execute()
-    )
+    document = service.documents().get(
+        documentId=doc_id, includeTabsContent=True,
+        suggestionsViewMode=SUGGESTIONS_VIEW_MODE,
+    ).execute()
+    return remember_snapshot(select(
+        document, tab_id if tab_id is not None else pinned_tab(),
+    ))
+
+
+def tabs_list(doc_id):
+    """Discover root and nested tabs without modifying the document."""
+    document = _get_service('docs', 'v1').documents().get(
+        documentId=doc_id, includeTabsContent=True,
+        suggestionsViewMode=SUGGESTIONS_VIEW_MODE,
+    ).execute()
+    return discover(document)
 
 
 def _refresh_access_token_stdlib() -> str:
@@ -329,9 +338,11 @@ def _apps_script_api_request(
 
 def _build_bookmark_bridge_files() -> list[dict]:
     code = r"""
-function createBookmarkAtText(docId, anchorText, occurrence) {
+function createBookmarkAtText(docId, anchorText, occurrence, tabId) {
   var doc = DocumentApp.openById(docId);
-  var body = doc.getBody();
+  var tab = tabId ? doc.getTab(tabId).asDocumentTab() :
+      doc.getTabs()[0].asDocumentTab();
+  var body = tab.getBody();
   var wanted = occurrence || 1;
   var found = null;
 
@@ -347,8 +358,8 @@ function createBookmarkAtText(docId, anchorText, occurrence) {
   var elem = found.getElement();
   var start = found.getStartOffset();
   var end = found.getEndOffsetInclusive();
-  var pos = doc.newPosition(elem, start);
-  var bookmark = doc.addBookmark(pos);
+  var pos = tab.newPosition(elem, start);
+  var bookmark = tab.addBookmark(pos);
   return {
     bookmarkId: bookmark.getId(),
     matchText: elem.asText().getText().substring(start, end + 1)
@@ -376,6 +387,7 @@ def _create_bookmark_via_apps_script(
     occurrence: int = 1,
     *,
     script_id: str | None = None,
+    tab_id: str | None = None,
 ) -> dict:
     script_id = script_id or _first_env(*APPS_SCRIPT_ID_ENV_ALIASES)
     if not script_id:
@@ -399,7 +411,8 @@ def _create_bookmark_via_apps_script(
         f'/scripts/{script_id}:run',
         {
             'function': 'createBookmarkAtText',
-            'parameters': [doc_id, anchor_text, occurrence],
+            'parameters': ([doc_id, anchor_text, occurrence, tab_id]
+                           if tab_id else [doc_id, anchor_text, occurrence]),
             'devMode': True,
         },
     )
@@ -428,8 +441,11 @@ def _create_bookmark_via_apps_script(
     }
 
 
-def _build_bookmark_jump_url(doc_id: str, bookmark_id: str) -> str:
-    return f'https://docs.google.com/document/d/{doc_id}/edit#bookmark={bookmark_id}'
+def _build_bookmark_jump_url(doc_id: str, bookmark_id: str,
+                             tab_id=None) -> str:
+    query = '?' + urllib.parse.urlencode({'tab': tab_id}) if tab_id else ''
+    return (f'https://docs.google.com/document/d/{doc_id}/edit{query}'
+            f'#bookmark={bookmark_id}')
 
 
 # ---------------------------------------------------------------------------
@@ -628,6 +644,7 @@ def _parse_document_tree(doc: dict) -> DocumentTree:
         title=google_doc.title,
         revision_id=google_doc.revision_id,
         document_id=google_doc.document_id,
+        tab_id=doc.get('_mcp_tab_id'), tab_title=doc.get('_mcp_tab_title'),
     )
 
 
@@ -718,12 +735,13 @@ def _render_comment_with_anchor_text(comment: str, anchor_text: str) -> str:
 
 def read(
     doc_id: str, heading_ids: list[str] | None = None,
+    *, tab_id: str | None = None,
 ) -> DocumentSubset | EditFailedResponse:
     """
     Read Google document or its parts including all nested headings.
     """
     service = _get_service('docs', 'v1')
-    doc = first_tab(_get_document(service, doc_id, include_tabs=True))
+    doc = _get_document(service, doc_id, tab_id=tab_id)
 
     doc['table_refs'] = reference_map(doc)
     google_doc = _parse_document_tree(doc)
@@ -764,15 +782,16 @@ def read(
         title=google_doc.title,
         revision_id=google_doc.revision_id,
         document_id=google_doc.document_id,
+        tab_id=doc.get('_mcp_tab_id'), tab_title=doc.get('_mcp_tab_title'),
     )
 
 
-def get_tree(doc_id: str) -> DocumentOutline:
+def get_tree(doc_id: str, *, tab_id=None) -> DocumentOutline:
     """
     Fetch a Google Doc and return structured representation.
     """
     service = _get_service('docs', 'v1')
-    doc = _get_document(service, doc_id)
+    doc = _get_document(service, doc_id, tab_id=tab_id)
 
     tree = _parse_document_tree(doc)
     flat_items = list(tree.descendants())
@@ -782,15 +801,16 @@ def get_tree(doc_id: str) -> DocumentOutline:
         title=tree.title,
         revision_id=tree.revision_id,
         document_id=tree.document_id,
+        tab_id=doc.get('_mcp_tab_id'), tab_title=doc.get('_mcp_tab_title'),
     )
 
 
-def get_full_tree(doc_id: str) -> DocumentTree:
+def get_full_tree(doc_id: str, *, tab_id=None) -> DocumentTree:
     """
     Fetch a Google Doc and return structured representation.
     """
     service = _get_service('docs', 'v1')
-    doc = _get_document(service, doc_id)
+    doc = _get_document(service, doc_id, tab_id=tab_id)
 
     return _parse_document_tree(doc)
 
@@ -804,7 +824,8 @@ def search_replace(  # noqa: PLR0911, PLR0917
     occurrence: int = 1,
     heading_id: str | None = None,
     regex: bool = False,
-    *, expected_revision_id: str | None = None,  # noqa: ARG001 - decorator
+    *, tab_id: str | None = None,
+    expected_revision_id: str | None = None,  # noqa: ARG001 - decorator
 ) -> ReplaceSucceedResponse | EditFailedResponse:
     """
     Find text in a document and replace a specific occurrence.
@@ -841,6 +862,8 @@ def search_replace(  # noqa: PLR0911, PLR0917
 
     # Replace-all: use the native replaceAllText API (fast, atomic)
     if occurrence == 0 and not regex and heading_id is None:
+        require_native_precondition()
+        _get_document(service, doc_id, tab_id=tab_id)
         result = submit(service, doc_id, [{
             'replaceAllText': {
                 'containsText': {'text': find, 'matchCase': True},
@@ -860,7 +883,7 @@ def search_replace(  # noqa: PLR0911, PLR0917
         )
 
     # Targeted occurrence: find index manually
-    doc = _get_document(service, doc_id)
+    doc = _get_document(service, doc_id, tab_id=tab_id)
     tree = _parse_document_tree(doc)
     haystack = (
         tree if heading_id is None else tree.headings.get(heading_id, None)
@@ -975,6 +998,7 @@ def _insert_content(
     newline_before: bool = True, upload_local_images: bool = False,
     required_revision: str | None = None,
     table_borders: bool = True,
+    tab_id: str | None = None,
 ) -> tuple[str, int, int, list[str]]:
     """Apply a validated insertion within the temporary-image lifecycle."""
     if rich:
@@ -983,7 +1007,7 @@ def _insert_content(
             upload_local_images=upload_local_images,
             drive_factory=lambda: _get_service('drive', 'v3'),
             validate_requests=lambda requests: validate_insertions(
-                service, doc_id, requests, required_revision,
+                service, doc_id, requests, required_revision, tab_id=tab_id,
             ),
         )
     else:
@@ -994,12 +1018,13 @@ def _insert_content(
     with insertion_context(context, index) as prepared:
         if rich:
             validate_insertions(service, doc_id, prepared.requests,
-                                required_revision)
+                                required_revision, tab_id=tab_id)
         inserted = inserted_text_from_requests(prepared.requests)
         if isinstance(prepared.requests, TableInsertionPlan):
             prepared.requests.execute(
                 service, doc_id, required_revision,
                 table_borders=table_borders,
+                tab_id=tab_id,
             )
             requests = list(prepared.requests.iter_requests())
         else:
@@ -1019,6 +1044,7 @@ def insert_after(
     rich: bool = True,
     *, upload_local_images: bool = False, table_borders: bool = True,
     expected_revision_id: str | None = None,  # noqa: ARG001 - decorator
+    tab_id: str | None = None,
 ) -> InsertSucceedResponse | EditFailedResponse:
     """
     Insert Markdown paragraphs after the paragraph containing `anchor`.
@@ -1028,7 +1054,7 @@ def insert_after(
     The search can be scoped to the specified heading (and nested subheadings).
     """
     service = _get_service('docs', 'v1')
-    doc = _get_document(service, doc_id)
+    doc = _get_document(service, doc_id, tab_id=tab_id)
     tree = _parse_document_tree(doc)
 
     haystack = (
@@ -1066,6 +1092,7 @@ def insert_after(
         upload_local_images=upload_local_images,
         required_revision=doc.get('revisionId'),
         table_borders=table_borders,
+        tab_id=doc.get('_mcp_tab_id'),
     )
 
     return InsertSucceedResponse(
@@ -1097,6 +1124,7 @@ def insert_before(
     rich: bool = True,
     *, upload_local_images: bool = False, table_borders: bool = True,
     expected_revision_id: str | None = None,  # noqa: ARG001 - decorator
+    tab_id: str | None = None,
 ) -> InsertSucceedResponse | EditFailedResponse:
     """
     Insert Markdown paragraphs before the paragraph containing `anchor`.
@@ -1106,7 +1134,7 @@ def insert_before(
     The search can be scoped to the specified heading (and nested subheadings).
     """
     service = _get_service('docs', 'v1')
-    doc = _get_document(service, doc_id)
+    doc = _get_document(service, doc_id, tab_id=tab_id)
     tree = _parse_document_tree(doc)
 
     haystack = (
@@ -1143,6 +1171,7 @@ def insert_before(
         upload_local_images=upload_local_images,
         required_revision=doc.get('revisionId'),
         table_borders=table_borders,
+        tab_id=doc.get('_mcp_tab_id'),
     )
 
     return InsertSucceedResponse(
@@ -1167,6 +1196,7 @@ def insert_before(
 
 @guarded_edit
 def delete_paragraph(doc_id: str, anchor: str, *,
+                     tab_id: str | None = None,
                      expected_revision_id: str | None = None,  # noqa: ARG001
                      ) -> dict:
     """
@@ -1178,7 +1208,7 @@ def delete_paragraph(doc_id: str, anchor: str, *,
     an already-empty final paragraph is not counted.
     """
     service = _get_service('docs', 'v1')
-    doc = _get_document(service, doc_id)
+    doc = _get_document(service, doc_id, tab_id=tab_id)
     paragraphs = _extract_paragraphs(doc)
 
     targets = [p for p in paragraphs if anchor.lower() in p.text.lower()]
@@ -1250,13 +1280,14 @@ def append(
     doc_id: str, text: str, rich: bool = True, *,
     upload_local_images: bool = False,
     table_borders: bool = True,
+    tab_id: str | None = None,
     expected_revision_id: str | None = None,  # noqa: ARG001 - decorator
 ) -> AppendSucceedResponse:
     """
     Append Markdown or literal text and return a compact typed receipt.
     """
     service = _get_service('docs', 'v1')
-    doc = _get_document(service, doc_id)
+    doc = _get_document(service, doc_id, tab_id=tab_id)
 
     # Find the last content index (end of the body, before the body's closing)
     body_content = doc.get('body', {}).get('content', [])
@@ -1281,6 +1312,7 @@ def append(
         upload_local_images=upload_local_images,
         required_revision=doc.get('revisionId'),
         table_borders=table_borders,
+        tab_id=doc.get('_mcp_tab_id'),
     )
 
     return AppendSucceedResponse(
@@ -1298,6 +1330,7 @@ def append(
 
 @guarded_edit
 def batch_replace(doc_id: str, replacements: list[dict], *,
+                  tab_id: str | None = None,
                   expected_revision_id: str | None = None,  # noqa: ARG001
                   ) -> dict:
     """
@@ -1317,7 +1350,7 @@ def batch_replace(doc_id: str, replacements: list[dict], *,
         {"ok": True, "applied": N, "changes": [...]}
     """
     service = _get_service('docs', 'v1')
-    doc = _get_document(service, doc_id)
+    doc = _get_document(service, doc_id, tab_id=tab_id)
     paragraphs = _extract_paragraphs(doc)
     full_text, text_map = _build_full_text_map(paragraphs)
 
@@ -1452,7 +1485,8 @@ def add_comment(  # noqa: PLR0917
     include_anchor_text: bool = True,
     bookmark_jump: bool = False,
     apps_script_id: str | None = None,
-    *, expected_revision_id: str | None = None,  # noqa: ARG001 - decorator
+    *, tab_id: str | None = None,
+    expected_revision_id: str | None = None,  # noqa: ARG001 - decorator
 ) -> dict:
     """
     Add a comment anchored to specific text in a Google Doc.
@@ -1484,7 +1518,7 @@ def add_comment(  # noqa: PLR0917
          "named_range_id": "..."}
     """
     docs_service = _get_service('docs', 'v1')
-    doc = _get_document(docs_service, doc_id)
+    doc = _get_document(docs_service, doc_id, tab_id=tab_id)
     paragraphs = _extract_paragraphs(doc)
     full_text, text_map = _build_full_text_map(paragraphs)
 
@@ -1559,6 +1593,7 @@ def add_comment(  # noqa: PLR0917
             full_text[ft_start:ft_end],
             occurrence=occurrence,
             script_id=apps_script_id,
+            tab_id=doc.get('_mcp_tab_id'),
         )
 
     rendered_comment = (
@@ -1567,7 +1602,8 @@ def add_comment(  # noqa: PLR0917
         else comment
     )
     if bookmark is not None:
-        jump_url = _build_bookmark_jump_url(doc_id, bookmark['bookmark_id'])
+        jump_url = _build_bookmark_jump_url(doc_id, bookmark['bookmark_id'],
+                                            doc.get('_mcp_tab_id'))
         rendered_comment = f'{rendered_comment}\n\nJump: {jump_url}'
     comment_result = (
         drive.comments()
@@ -1598,7 +1634,8 @@ def add_comment(  # noqa: PLR0917
         if bookmark is not None
         else None,
         'bookmark_url': (
-            _build_bookmark_jump_url(doc_id, bookmark['bookmark_id'])
+            _build_bookmark_jump_url(doc_id, bookmark['bookmark_id'],
+                                     doc.get('_mcp_tab_id'))
             if bookmark is not None
             else None
         ),

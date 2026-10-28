@@ -226,7 +226,7 @@ def plan(document, table_token, operation):
         table['rows']), table['columns']
 
 
-def apply_structure(doc_id, table_ref, base_token, operation):
+def apply_structure(doc_id, table_ref, base_token, operation, *, tab_id=None):
     """Recheck the original footprint and commit one strictly guarded batch."""
     from . import docs_edit
     from .table_read import _fetch
@@ -235,7 +235,7 @@ def apply_structure(doc_id, table_ref, base_token, operation):
     validate_baseline(token, baseline, [], baseline.fields, subset=True)
     for attempt in range(1, MAX_ATTEMPTS + 1):
         validate_baseline(token, baseline, [], baseline.fields, subset=True)
-        document = _fetch(doc_id)
+        document = _fetch(doc_id, tab_id=tab_id)
         entry = Layout(document).resolve(token)
         merging = isinstance(operation, (MergeCells, UnmergeCells))
         changed = []

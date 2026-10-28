@@ -2,6 +2,33 @@
 
 [README](../../README.md) · [Content syntax](../rich-content.md) · [Result contracts](../protocol.md)
 
+## Document tabs
+
+All document read/edit tools accept optional `tab_id`. Omit it or pass null
+for the first top-level tab. Explicit IDs can select nested tabs. Missing IDs
+fail without falling back. Heading IDs, text matches, table references, chip
+definitions and named ranges are resolved only in the selected tab.
+Read/outline responses include `tab_id` and `tab_title`; scoped edit receipts
+include `tab_id`. Revision IDs remain document-wide. Even native replace-all
+is restricted to the selected tab. Drive document listing/creation and
+comment-thread operations remain document-wide.
+
+### docs_tabs_list
+
+```text
+docs_tabs_list(doc_id)
+```
+
+Return `document_id`, `title`, `revision_id`, `default_tab_id`, and a flat
+`tabs` array. Each entry has `tab_id`, `title`, `parent_tab_id`, `depth` and
+sibling `index`. Entries follow document order, parents before children.
+Discovery performs no writes. Use these IDs in subsequent tool calls:
+
+```python
+docs_tabs_list(doc_id="...")
+docs_read(doc_id="...", tab_id="tab-id-from-discovery")
+```
+
 ## Shared insertion options
 
 The three insertion tools accept the same rich-content options:
@@ -37,7 +64,7 @@ to JSON `null`, `true` and `false`.
 ### docs_get_tree
 
 ```text
-docs_get_tree(doc_id)
+docs_get_tree(doc_id, *, tab_id=None)
 ```
 
 Return an object with `document_id`, `title`, `revision_id`, and a flat
@@ -53,7 +80,7 @@ docs_get_tree(doc_id="...")
 ### docs_read
 
 ```text
-docs_read(doc_id, heading_ids=None)
+docs_read(doc_id, heading_ids=None, *, tab_id=None)
 ```
 
 Return document content as `sections: [{heading_id, markdown}]`, alongside
@@ -83,9 +110,8 @@ docs_read(doc_id="...", heading_ids=["heading-id-from-outline"])
 
 Native tables, including nested ones, contain `data-mcp-table-ref` attributes
 in their HTML. Pass these opaque references to [docs_table_read](tables.md#docs_table_read); no duplicate
-table inventory is added to `docs_read`. The first document tab is the scope of
-these references. Tab selection is deferred to
-[issue #34](https://github.com/dm0/gdocs-scope-mcp/issues/34).
+table inventory is added to `docs_read`. References belong to the selected tab;
+pass the same `tab_id` to all subsequent table calls.
 
 ### docs_list
 
@@ -147,6 +173,7 @@ docs_search_replace(
     heading_id=None,
     regex=False,
     *,
+    tab_id=None,
     expected_revision_id=None,
 )
 ```
@@ -196,6 +223,7 @@ docs_insert_after(
     heading_id=None,
     rich=True,
     *,
+    tab_id=None,
     upload_local_images=False,
     table_borders=True,
     code_block_style=None,
@@ -235,6 +263,7 @@ docs_insert_before(
     heading_id=None,
     rich=True,
     *,
+    tab_id=None,
     upload_local_images=False,
     table_borders=True,
     code_block_style=None,
@@ -263,7 +292,13 @@ Returns the same receipt fields as `docs_insert_after`, with
 ### docs_delete_paragraph
 
 ```text
-docs_delete_paragraph(doc_id, anchor, *, expected_revision_id=None)
+docs_delete_paragraph(
+    doc_id,
+    anchor,
+    *,
+    tab_id=None,
+    expected_revision_id=None,
+)
 ```
 Delete all paragraphs containing `anchor` text (case-insensitive).
 
@@ -288,6 +323,7 @@ docs_append(
     text,
     rich=True,
     *,
+    tab_id=None,
     upload_local_images=False,
     table_borders=True,
     code_block_style=None,
@@ -320,7 +356,13 @@ plain-text preview of up to 200 Unicode code points), `inserted_char_count`
 ### docs_batch_replace
 
 ```text
-docs_batch_replace(doc_id, replacements, *, expected_revision_id=None)
+docs_batch_replace(
+    doc_id,
+    replacements,
+    *,
+    tab_id=None,
+    expected_revision_id=None,
+)
 ```
 Apply multiple find→replace operations **atomically** in a single API call. Either all changes succeed or none do.
 

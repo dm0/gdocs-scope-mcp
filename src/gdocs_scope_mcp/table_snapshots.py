@@ -148,7 +148,8 @@ def validate_states(document, baseline, available):
             fail('EDIT_CONFLICT', 'Selected content or properties changed.')
 
 
-def snapshot(doc_id, table_ref, cells, fields, base_token=None):
+def snapshot(doc_id, table_ref, cells, fields, base_token=None, *,
+             tab_id=None):
     """Resolve a checked position and validate selected dependencies."""
     from .table_read import _fetch, _model
     table = decode(table_ref, 'table', doc_id)
@@ -163,7 +164,7 @@ def snapshot(doc_id, table_ref, cells, fields, base_token=None):
         fail('INVALID_ARGUMENT', 'Duplicate cell addresses are not allowed.')
     if baseline is not None:
         validate_baseline(table, baseline, cells, requested)
-    document = _fetch(doc_id)
+    document = _fetch(doc_id, tab_id=tab_id)
     available = resolve_cells(document, table, cells,
                               merged=requested == ['merge'])
     if baseline is not None:

@@ -12,7 +12,8 @@ arguments, examples and supported behavior, start with the [document tools](../t
 | --- | --- | --- |
 | [Concurrent edits](../concurrent-edits.md) | Revision policies, dependencies, retries, atomicity and unknown write outcomes | [Tests and reproduction](../concurrent-edits.md#verification) |
 | [Table references](../table-references.md) | Checked positions, structural inventories, selective expectations and structural operations | [Tests and reproduction](../table-references.md#verification) |
-| [Table discovery](../table-discovery.md) | First-tab traversal, physical/logical geometry, pagination and bounds | [Tests and reproduction](../table-discovery.md#validation) |
+| [Document tabs](document-tabs.md) | Shared tab selection, write scoping and live isolation checks | [Verification](document-tabs.md#verification) |
+| [Table discovery](../table-discovery.md) | Selected-tab traversal, physical/logical geometry, pagination and bounds | [Tests and reproduction](../table-discovery.md#validation) |
 | [Cell merge/unmerge](table-cell-merging.md) | Logical heads, complete rectangles, content rules and safe reference readback | [Tests and reproduction](table-cell-merging.md#verification) |
 
 ## API research

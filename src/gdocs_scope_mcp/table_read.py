@@ -45,7 +45,7 @@ def _fail(code, description, action=None):
         suggested_action=action or (
             'Read the document or call docs_tables_list and use the returned '
             'reference/page token with unchanged arguments. References are '
-            'first-tab scoped; page tokens require the same revision. '
+            'tab-scoped; page tokens require the same revision. '
             'Structural changes require fresh table refs; do not edit tokens.'
         ),
     ))
@@ -66,7 +66,7 @@ class _Token(BaseModel):
     kind: Literal['table', 'cell', 'tables-page', 'cells-page']
     document: str
     revision: str
-    scope: Literal['first_tab'] = 'first_tab'
+    scope: Literal['first_tab', 'selected_tab'] = 'first_tab'
     path: list[Annotated[int, Field(ge=0)]] = Field(default_factory=list)
     cell: list[Annotated[int, Field(ge=0)]] | None = None
     fingerprint: str = ''
@@ -117,15 +117,16 @@ def _check_revision(token, document):
     """Reject stale references without reusing an old structural path."""
     if token.revision != document['revisionId']:
         _fail('STALE_REFERENCE', 'The reference revision is not current.')
-    if token.tab is not None and token.tab != document.get('_mcp_tab_id'):
-        _fail('STALE_REFERENCE', 'The first document tab changed.')
+    if token.tab != document.get('_mcp_tab_id'):
+        _fail('STALE_REFERENCE',
+              'The reference belongs to a different document tab.')
 
 
-def _fetch(doc_id):
-    """Read the first tab through the normal read-only API boundary."""
+def _fetch(doc_id, tab_id=None):
+    """Read the selected tab through the normal read-only API boundary."""
     from . import docs_edit
     document = first_tab(docs_edit._get_document(
-        docs_edit._get_service(), doc_id, include_tabs=True,
+        docs_edit._get_service(), doc_id, tab_id=tab_id,
     ))
     _require_revision(document)
     return document
@@ -217,7 +218,7 @@ class TableSnapshot(BaseModel):
     """Describe positional refs; pagination still requires this revision."""
 
     revision_id: str
-    scope: Literal['first_tab'] = 'first_tab'
+    scope: Literal['first_tab', 'selected_tab'] = 'first_tab'
     reference_lifetime: Literal['same_structure_only'] = 'same_structure_only'
     tab_id: str | None = None
 
@@ -244,7 +245,7 @@ class TableSummary(BaseModel):
 
 
 class TablesListResponse(ListingPage):
-    """Return a revision-bound page of first-tab table summaries."""
+    """Return a revision-bound page of selected-tab table summaries."""
 
     document_id: str
     snapshot: TableSnapshot
@@ -433,11 +434,12 @@ def _page(document, kind, options, page_token, entry=None):
     return token.offset
 
 
-def tables_list(doc_id, heading_ids=None, limit=50, page_token=None):
+def tables_list(doc_id, heading_ids=None, limit=50, page_token=None, *,
+                tab_id=None):
     """Discover tables without returning the surrounding document text."""
     if page_token is not None:
         _decode(page_token, 'tables-page', doc_id)
-    document = _fetch(doc_id)
+    document = _fetch(doc_id, tab_id=tab_id)
     selected, unknown = _headings(document, heading_ids)
     entries = [t for t in _tables(document) if selected is None
                or set(selected).intersection(h[1] for h in t.headings)]
@@ -459,6 +461,7 @@ def tables_list(doc_id, heading_ids=None, limit=50, page_token=None):
         document_id=doc_id, snapshot=TableSnapshot(
             revision_id=document['revisionId'],
             tab_id=document.get('_mcp_tab_id'),
+            scope='selected_tab' if tab_id is not None else 'first_tab',
         ), total_count=len(entries), count=len(page),
         tables=summaries,
         next_page_token=next_token, selected_headings=selected,
@@ -467,12 +470,12 @@ def tables_list(doc_id, heading_ids=None, limit=50, page_token=None):
 
 
 def table_read(doc_id, table_ref, limit=100, max_cell_chars=2000,
-               page_token=None):
+               page_token=None, *, tab_id=None):
     """Read bounded cell pages without creating persistent bindings."""
     token = _decode(table_ref, 'table', doc_id)
     if page_token is not None:
         _decode(page_token, 'cells-page', doc_id)
-    document = _fetch(doc_id)
+    document = _fetch(doc_id, tab_id=tab_id)
     layout = Layout(document)
     entries = layout.entries
     entry = layout.resolve(token)
@@ -547,6 +550,7 @@ def table_read(doc_id, table_ref, limit=100, max_cell_chars=2000,
         document_id=doc_id, snapshot=TableSnapshot(
             revision_id=document['revisionId'],
             tab_id=document.get('_mcp_tab_id'),
+            scope='selected_tab' if tab_id is not None else 'first_tab',
         ), table=_summary(document, entry, model, layout),
         total_cells=len(geometry),
         count=len(page), next_page_token=next_token,

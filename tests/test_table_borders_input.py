@@ -37,7 +37,9 @@ def test_border_input_reaches_table_executor(tool, extra, expected,
     """Forward default/explicit values through both image-planning paths."""
     calls = []
 
-    def execute(_self, _service, _doc_id, _revision, *, table_borders):
+    def execute(_self, _service, _doc_id, _revision, *,
+                table_borders, tab_id=None):
+        assert tab_id is None
         calls.append(table_borders)
 
     monkeypatch.setattr(TableInsertionPlan, 'execute', execute)

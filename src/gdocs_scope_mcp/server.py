@@ -56,6 +56,7 @@ from . import (
     table_structure,
 )
 from .diagnostics import ServerInfo, capture_server_info
+from .document_tabs import TabId, TabsResponse
 from .entities import (
     DropdownOptions,
     EntityDetails,
@@ -132,6 +133,15 @@ ERRORS:
     suggested_action}. Follow suggested_action; verify document/comment state
     before retrying a failed write.
 
+DOCUMENT TABS:
+    docs_tabs_list returns root/nested IDs and hierarchy. Pass tab_id to read,
+    outline, text edit, table and entity tools; omitted/null selects the first
+    root tab. Explicit missing IDs fail without fallback. Heading IDs, matches,
+    named ranges and chip definitions are local to the selected tab. Table
+    refs, snapshots and page tokens cannot be reused in another tab. Revision
+    IDs remain document-wide. Even native replace-all affects one tab only.
+    Drive file and comment-thread operations remain document-wide.
+
 CONCURRENT EDITS:
     Server setting write_revision_mode selects required (default) or target.
     Required uses requiredRevisionId, up to three validated attempts, and
@@ -179,7 +189,7 @@ EDITING TOOLS:
     Dates also preserve data-mcp-date-format, data-mcp-time-format,
     data-mcp-time-zone and data-mcp-locale; new dates default to ISO format.
     Labels are resolved by Google, not editable text runs. Dropdown definitions
-    must already exist in the destination first tab. Use docs_get_entity for
+    must already exist in the selected destination tab. Use docs_get_entity for
     native metadata/options, docs_create_dropdown_definition for new templates,
     and docs_select_dropdown to change only one existing instance.
     Receipts expose inserted_entity_count and one U+FFFC per smart chip.
@@ -221,7 +231,8 @@ EDITING TOOLS:
 
     docs_get_tree          Read hierarchical document tree (headings)
     docs_read              Read document contents (paragraphs + plain)
-    docs_tables_list       Discover first-tab tables and compact previews
+    docs_tabs_list         Discover top-level and nested document tabs
+    docs_tables_list       Discover selected-tab tables and previews
     docs_table_read        Read table/cell pages and geometry
     docs_table_snapshot    Issue/validate selective cell-state expectations
     docs_table_patch       Atomically replace selected Markdown cells
@@ -302,7 +313,8 @@ def server_info() -> ServerInfo:
         'openWorldHint': True,
     },
 )
-def docs_get_tree(doc_id: str) -> DocumentOutline:
+def docs_get_tree(doc_id: str, *,
+                  tab_id: TabId | None = None) -> DocumentOutline:
     """
     Fetch a Google Doc's structural outline as a JSON object.
 
@@ -311,6 +323,9 @@ def docs_get_tree(doc_id: str) -> DocumentOutline:
     is represented by ancestor_ids, not nested section objects. Body
     paragraphs are omitted.
 
+    tab_id selects a root or nested tab; omitted selects the first tab.
+    Discover IDs with docs_tabs_list. Heading IDs are local to that tab.
+
     Use this tool FIRST when encountering a document to locate target sections
     via their heading IDs, avoiding the need to read a massive document all at
     once.
@@ -318,7 +333,22 @@ def docs_get_tree(doc_id: str) -> DocumentOutline:
     Args:
         doc_id: Google Doc ID (from the URL: /document/d/{DOC_ID}/edit)
     """
-    return docs_edit.get_tree(doc_id)
+    return docs_edit.get_tree(doc_id, tab_id=tab_id)
+
+
+@mcp.tool(
+    output_schema=_tool_response_schema(TabsResponse),
+    annotations={'readOnlyHint': True, 'destructiveHint': False,
+                 'idempotentHint': True, 'openWorldHint': True},
+)
+def docs_tabs_list(doc_id: str) -> TabsResponse:
+    """List root and nested tabs with IDs, titles, parents and order.
+
+    Pass tab_id to document read/edit, table and entity tools. Omitted tab_id
+    means the first document tab. Explicit missing IDs never fall back.
+    Tab discovery is read-only; revision IDs remain document-wide.
+    """
+    return docs_edit.tabs_list(doc_id)
 
 
 @mcp.tool(
@@ -331,7 +361,8 @@ def docs_get_tree(doc_id: str) -> DocumentOutline:
     },
 )
 def docs_read(
-    doc_id: str, heading_ids: list[str] | None = None
+    doc_id: str, heading_ids: list[str] | None = None, *,
+    tab_id: TabId | None = None,
 ) -> DocumentSubset | EditFailedResponse:
     """
     Read a Google document's content converted to Markdown.
@@ -340,7 +371,8 @@ def docs_read(
     spans with data-mcp-entity and data-mcp-id, rather than ordinary labels or
     links. Pass a span to a rich insertion tool to create a native instance.
     Use docs_get_entity for complete properties, source ranges and dropdown
-    options. Reads/insertion default to the first document tab.
+    options. tab_id selects a root or nested tab; omit for the first tab.
+    Discover IDs with docs_tabs_list; returned tab_id identifies this view.
 
     Table HTML includes data-mcp-table-ref, including nested tables. Pass a
     reference to docs_table_read for bounded structured cells and A1 addresses.
@@ -377,7 +409,7 @@ def docs_read(
     """
     if isinstance(heading_ids, str):
         heading_ids = [heading_ids]
-    return docs_edit.read(doc_id, heading_ids)
+    return docs_edit.read(doc_id, heading_ids, tab_id=tab_id)
 
 
 @mcp.tool(
@@ -388,14 +420,16 @@ def docs_read(
 def docs_tables_list(
     doc_id: str, heading_ids: list[str] | None = None,
     limit: TableLimit = 50, page_token: ReadReference | None = None,
+    *, tab_id: TabId | None = None,
 ) -> TablesListResponse:
-    """Discover native tables in the first document tab without full text.
+    """Discover native tables in the selected tab without returning full text.
 
     Returns compact summaries: opaque table_ref, nearest heading context,
     dimensions, nesting/parent-cell reference, merged geometry warnings and
     a preview of at most 200 Unicode code points. Tables are in preorder,
     including nested tables. heading_ids follows docs_read subtree semantics:
-    null=whole first tab, []=none; unknown IDs are reported, all-unknown fails.
+    null=whole selected tab, []=none; unknown IDs are reported.
+    All-unknown heading selections fail.
 
     limit is 1-100 tables (default 50). count is page size, total_count covers
     matching tables. Follow next_page_token with exactly the same arguments.
@@ -404,9 +438,10 @@ def docs_tables_list(
     require fresh discovery (TARGET_CHANGED). Swapping structurally identical
     tables retains position meaning, not original object identity. Page tokens
     require the same revision (STALE_REFERENCE). No named ranges or writes.
-    Tab selection is a separate feature.
+    tab_id selects a top-level or nested tab; omit it for the first tab.
     """
-    return table_read.tables_list(doc_id, heading_ids, limit, page_token)
+    return table_read.tables_list(doc_id, heading_ids, limit, page_token,
+                                  tab_id=tab_id)
 
 
 @mcp.tool(
@@ -418,6 +453,7 @@ def docs_table_read(
     doc_id: str, table_ref: ReadReference, limit: CellLimit = 100,
     max_cell_chars: CellPreviewLimit = 2000,
     page_token: ReadReference | None = None,
+    *, tab_id: TabId | None = None,
 ) -> TableReadResponse:
     """Inspect a table reference from docs_read or docs_tables_list.
 
@@ -442,10 +478,10 @@ def docs_table_read(
     changes to the section table structure inventory require fresh discovery.
     Table refs identify section positions, including structurally identical
     replacements/swaps. Use docs_table_snapshot with A1 addresses to check
-    selected content/properties. This first-tab read writes nothing.
+    selected content/properties. This selected-tab read writes nothing.
     """
     return table_read.table_read(doc_id, table_ref, limit, max_cell_chars,
-                                 page_token)
+                                 page_token, tab_id=tab_id)
 
 
 @mcp.tool(
@@ -457,6 +493,7 @@ def docs_table_snapshot(
     doc_id: str, table_ref: ReadReference, cells: TableCells,
     fields: SnapshotFields | None = None,
     base_token: SnapshotToken | None = None,
+    *, tab_id: TabId | None = None,
 ) -> SnapshotResponse:
     """Issue or validate selected-cell expected-state snapshots.
 
@@ -500,6 +537,7 @@ def docs_table_snapshot(
     return table_snapshots.snapshot(
         doc_id, table_ref, cells,
         fields or ['content', 'text_style', 'paragraph_style'], base_token,
+        tab_id=tab_id,
     )
 
 
@@ -511,6 +549,7 @@ def docs_table_snapshot(
 def docs_table_patch(
     doc_id: str, table_ref: ReadReference, base_token: SnapshotToken,
     changes: CellPatches,
+    *, tab_id: TabId | None = None,
 ) -> PatchResponse:
     """Replace selected Markdown cells in one strictly guarded atomic batch.
 
@@ -539,7 +578,8 @@ def docs_table_patch(
     An all-empty-to-empty patch makes no write (committed_batches=0).
     Section-position semantics and identical-table swap limits still apply.
     """
-    return table_patch.patch(doc_id, table_ref, base_token, changes)
+    return table_patch.patch(doc_id, table_ref, base_token, changes,
+                             tab_id=tab_id)
 
 
 @mcp.tool(
@@ -550,6 +590,7 @@ def docs_table_patch(
 def docs_table_format(
     doc_id: str, table_ref: ReadReference, base_token: SnapshotToken,
     changes: FormatChanges,
+    *, tab_id: TabId | None = None,
 ) -> FormatResponse:
     """Apply explicit style changes in one strictly guarded atomic batch.
 
@@ -579,7 +620,8 @@ def docs_table_format(
     Receipts identify updated properties, applied target count, attempts and
     resulting revision. No content edits or snapshot/binding metadata writes.
     """
-    return table_format.format_table(doc_id, table_ref, base_token, changes)
+    return table_format.format_table(doc_id, table_ref, base_token, changes,
+                                     tab_id=tab_id)
 
 
 @mcp.tool(
@@ -590,6 +632,7 @@ def docs_table_format(
 def docs_table_structure(
     doc_id: str, table_ref: ReadReference, base_token: SnapshotToken,
     operation: StructureOperation,
+    *, tab_id: TabId | None = None,
 ) -> StructureResponse:
     """Change a checked top-level table's structure in one atomic batch.
 
@@ -645,7 +688,7 @@ def docs_table_structure(
     committed operation. A null ref means deletion only for delete_table.
     """
     return table_structure.apply_structure(
-        doc_id, table_ref, base_token, operation,
+        doc_id, table_ref, base_token, operation, tab_id=tab_id,
     )
 
 
@@ -655,7 +698,7 @@ def docs_table_structure(
                  'idempotentHint': True, 'openWorldHint': True},
 )
 def docs_get_entity(
-    doc_id: str, entity_id: NonemptyText, tab_id: str | None = None,
+    doc_id: str, entity_id: NonemptyText, tab_id: TabId | None = None,
 ) -> EntityDetails | EditFailedResponse:
     """Inspect a native smart chip identified by docs_read's data-mcp-id.
 
@@ -674,7 +717,7 @@ def docs_get_entity(
 )
 def docs_create_dropdown_definition(
     doc_id: str, title: NonemptyText, options: DropdownOptions,
-    tab_id: str | None = None,
+    tab_id: TabId | None = None,
 ) -> EntityEditResponse | EditFailedResponse:
     """Create a reusable native dropdown definition with 2-50 typed options.
 
@@ -697,7 +740,7 @@ def docs_create_dropdown_definition(
 )
 def docs_select_dropdown(
     doc_id: str, entity_id: NonemptyText, option_id: NonemptyText,
-    tab_id: str | None = None, expected_option_id: str | None = None,
+    tab_id: TabId | None = None, expected_option_id: str | None = None,
 ) -> EntityEditResponse | EditFailedResponse:
     """Select an existing option on one native dropdown instance by ID.
 
@@ -729,7 +772,8 @@ def docs_search_replace(  # noqa: PLR0917
     occurrence: ReplacementOccurrence = 1,
     heading_id: str | None = None,
     regex: bool = False,
-    *, expected_revision_id: ExpectedRevision | None = None,
+    *, tab_id: TabId | None = None,
+    expected_revision_id: ExpectedRevision | None = None,
 ) -> ReplaceSucceedResponse | EditFailedResponse:
     """
     Find text and replace.
@@ -773,7 +817,7 @@ def docs_search_replace(  # noqa: PLR0917
     """
     return docs_edit.search_replace(
         doc_id, find, replace, occurrence, heading_id, regex,
-        expected_revision_id=expected_revision_id,
+        expected_revision_id=expected_revision_id, tab_id=tab_id,
     )
 
 
@@ -792,7 +836,8 @@ def docs_insert_after(
     text: str,
     heading_id: str | None = None,
     rich: bool = True,
-    *, upload_local_images: bool = False, table_borders: TableBorders = True,
+    *, tab_id: TabId | None = None,
+    upload_local_images: bool = False, table_borders: TableBorders = True,
     code_block_style: CodeBlockStyle | None = None,
     code_block_theme_background: CodeBlockThemeBackground | None = None,
     expected_revision_id: ExpectedRevision | None = None,
@@ -864,7 +909,7 @@ def docs_insert_after(
             doc_id, anchor, text, heading_id=heading_id, rich=rich,
             upload_local_images=upload_local_images,
             table_borders=table_borders,
-            expected_revision_id=expected_revision_id,
+            expected_revision_id=expected_revision_id, tab_id=tab_id,
         )
 
 
@@ -883,7 +928,8 @@ def docs_insert_before(
     text: str,
     heading_id: str | None = None,
     rich: bool = True,
-    *, upload_local_images: bool = False, table_borders: TableBorders = True,
+    *, tab_id: TabId | None = None,
+    upload_local_images: bool = False, table_borders: TableBorders = True,
     code_block_style: CodeBlockStyle | None = None,
     code_block_theme_background: CodeBlockThemeBackground | None = None,
     expected_revision_id: ExpectedRevision | None = None,
@@ -956,7 +1002,7 @@ def docs_insert_before(
             doc_id, anchor, text, heading_id=heading_id, rich=rich,
             upload_local_images=upload_local_images,
             table_borders=table_borders,
-            expected_revision_id=expected_revision_id,
+            expected_revision_id=expected_revision_id, tab_id=tab_id,
         )
 
 
@@ -971,7 +1017,8 @@ def docs_insert_before(
 )
 def docs_delete_paragraph(
     doc_id: str, anchor: NonemptyText,
-    *, expected_revision_id: ExpectedRevision | None = None,
+    *, tab_id: TabId | None = None,
+    expected_revision_id: ExpectedRevision | None = None,
 ) -> DeleteParagraphResponse:
     """
     Delete the paragraph(s) containing `anchor` text.
@@ -1004,6 +1051,7 @@ def docs_delete_paragraph(
     return DeleteParagraphResponse.model_validate(
         docs_edit.delete_paragraph(
             doc_id, anchor, expected_revision_id=expected_revision_id,
+            tab_id=tab_id,
         ),
     )
 
@@ -1019,6 +1067,7 @@ def docs_delete_paragraph(
 )
 def docs_append(
     doc_id: str, text: str, rich: bool = True, *,
+    tab_id: TabId | None = None,
     upload_local_images: bool = False,
     table_borders: TableBorders = True,
     code_block_style: CodeBlockStyle | None = None,
@@ -1084,7 +1133,7 @@ def docs_append(
         return docs_edit.append(
             doc_id, text, rich=rich, upload_local_images=upload_local_images,
             table_borders=table_borders,
-            expected_revision_id=expected_revision_id,
+            expected_revision_id=expected_revision_id, tab_id=tab_id,
         )
 
 
@@ -1099,7 +1148,8 @@ def docs_append(
 )
 def docs_batch_replace(
     doc_id: str, replacements: Replacements,
-    *, expected_revision_id: ExpectedRevision | None = None,
+    *, tab_id: TabId | None = None,
+    expected_revision_id: ExpectedRevision | None = None,
 ) -> BatchReplaceResponse:
     """
     Apply multiple find→replace operations atomically in a single batchUpdate.
@@ -1142,7 +1192,7 @@ def docs_batch_replace(
     return BatchReplaceResponse.model_validate(
         docs_edit.batch_replace(
             doc_id, [replacement.model_dump() for replacement in replacements],
-            expected_revision_id=expected_revision_id,
+            expected_revision_id=expected_revision_id, tab_id=tab_id,
         ),
     )
 
@@ -1164,7 +1214,8 @@ def docs_add_comment(  # noqa: PLR0917
     occurrence: PositiveInteger = 1,
     include_anchor_text: bool = True,
     bookmark_jump: bool = False,
-    *, expected_revision_id: ExpectedRevision | None = None,
+    *, tab_id: TabId | None = None,
+    expected_revision_id: ExpectedRevision | None = None,
 ) -> AddCommentResponse:
     """
     Add a comment anchored to specific text in a Google Doc.
@@ -1224,7 +1275,7 @@ def docs_add_comment(  # noqa: PLR0917
         occurrence,
         include_anchor_text=include_anchor_text,
         bookmark_jump=bookmark_jump,
-        expected_revision_id=expected_revision_id,
+        expected_revision_id=expected_revision_id, tab_id=tab_id,
     )
     return AddCommentResponse.model_validate(result)
 

@@ -5,6 +5,7 @@
 
 import uuid
 
+from .document_tabs import select
 from .entities import EntityDetails, EntityEditResponse, collect_entities
 from .models import EditFailedResponse
 from .revision_guards import revision_changed, uses_target_revision
@@ -31,24 +32,8 @@ def _tab_document(service, doc_id: str, tab_id: str | None = None):
         suggestionsViewMode='SUGGESTIONS_INLINE',
     ).execute()
 
-    def flatten(tabs):
-        """Walk parent and child tabs in API document order."""
-        for tab in tabs:
-            yield tab
-            yield from flatten(tab.get('childTabs', []))
-
-    tabs = list(flatten(document.get('tabs', [])))
-    if not tabs:
-        if tab_id is not None:
-            _fail('Requested tab was not found.', 'RESOURCE_NOT_FOUND')
-        return document, document, None
-    selected = next((tab for tab in tabs
-                     if tab['tabProperties']['tabId'] == tab_id), None
-                    ) if tab_id is not None else tabs[0]
-    if selected is None:
-        _fail('Requested tab was not found.', 'RESOURCE_NOT_FOUND')
-    return (document, selected['documentTab'],
-            selected['tabProperties']['tabId'])
+    selected = select(document, tab_id)
+    return document, selected, selected['_mcp_tab_id']
 
 
 def _service():
@@ -80,14 +65,15 @@ def _option(definitions, definition_id, option_id):
         _fail('Selected option does not belong to the dropdown definition.')
 
 
-def validate_insertions(service, doc_id, requests, required_revision=None):
+def validate_insertions(service, doc_id, requests, required_revision=None, *,
+                        tab_id=None):
     """Validate all entity dependencies before image uploads or any writes."""
     planned = (list(requests.iter_requests())
                if isinstance(requests, TableInsertionPlan) else requests)
     entities = [r for r in planned if INSERT_ENTITY_KINDS.intersection(r)]
     if not entities:
         return
-    document, tab, _ = _tab_document(service, doc_id)
+    document, tab, _ = _tab_document(service, doc_id, tab_id)
     if (required_revision and document['revisionId'] != required_revision
             and not uses_target_revision()):
         revision_changed()

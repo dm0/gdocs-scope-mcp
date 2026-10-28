@@ -50,7 +50,7 @@ replayed, and successful transformations never silently acquire a new baseline.
 
 Native merged-cell representation is read back rather than guessed. A new
 ref is issued only if the post-write snapshot has exactly the batch's confirmed
-revision and intended first tab. Otherwise the successful receipt still reports
+revision and intended selected tab. Otherwise the successful receipt still reports
 one committed batch, but sets `reference_refresh_required=true` and leaves its
 ref null. The agent must rediscover/snapshot, not repeat the transformation.
 This is a supplementary read, not a second write stage or a partial failure.

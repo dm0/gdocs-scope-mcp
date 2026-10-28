@@ -319,7 +319,7 @@ def test_unscoped_replace_all_uses_native_api(mock_docs):
 
     assert result.ok is True
     assert result.occurrences_changed == 3
-    mock_docs.get.assert_not_called()
+    mock_docs.get.assert_called_once()
     mock_docs.batchUpdate.assert_called_once_with(
         documentId='example',
         body={

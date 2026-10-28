@@ -284,6 +284,8 @@ class DocumentBase(BaseModel):
     title: Annotated[str, Field(description='Document title')]
     revision_id: Annotated[str, Field(description='Document revision id')]
     document_id: Annotated[str, Field(description='Document id')]
+    tab_id: str | None = None
+    tab_title: str | None = None
 
 
 class DocumentOutline(DocumentBase):
@@ -451,6 +453,7 @@ class DocumentEditReceipt(BaseModel):
     """Identify the document and effective scope of a successful edit."""
 
     document_id: Annotated[str, Field(description='Edited Google Doc ID')]
+    tab_id: str | None = None
     scope: Literal[
         'document', 'heading_subtree', 'document_end', 'comment'
     ] = 'document'

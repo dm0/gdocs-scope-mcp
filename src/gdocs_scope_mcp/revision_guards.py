@@ -14,6 +14,7 @@ from http.client import HTTPException
 from googleapiclient.errors import HttpError
 from httplib2 import HttpLib2Error
 
+from .document_tabs import scope_requests
 from .models import EditFailedResponse
 from .settings import get_settings
 from .tool_errors import ToolFailureError
@@ -115,6 +116,10 @@ def remember_snapshot(document):
     """Record the initial read for each planning attempt, not later lookups."""
     edit = _active.get()
     if edit is not None and edit.snapshot is None:
+        if (edit.baseline is not None and
+                document.get('_mcp_tab_id') !=
+                edit.baseline.get('_mcp_tab_id')):
+            fail('TARGET_CHANGED', 'The selected tab changed during the edit.')
         if (edit.expected_revision is not None
                 and document.get('revisionId') != edit.expected_revision):
             fail('EDIT_CONFLICT', 'The caller-provided document revision '
@@ -126,6 +131,20 @@ def remember_snapshot(document):
             for token, _, _ in edit.targets:
                 _check_identity(edit, _units(document), token)
     return document
+
+
+def pinned_tab():
+    """Keep a default selection pinned across retries and multi-stage reads."""
+    edit = _active.get()
+    return (edit.baseline or {}).get('_mcp_tab_id') if edit else None
+
+
+def require_native_precondition():
+    """Reject unsupported strict replace-all before its tab discovery read."""
+    edit = _active.get()
+    if edit is not None and edit.expected_revision is not None:
+        fail('INVALID_ARGUMENT', 'Native replace-all does not accept '
+             'expected_revision_id.')
 
 
 def depend_on(document, start, end):
@@ -217,7 +236,8 @@ def submit(service, doc_id, requests, revision=None, *, native=False,
         revision = revision or (edit.snapshot or {}).get('revisionId')
     if not native and (not isinstance(revision, str) or not revision):
         fail('REVISION_UNAVAILABLE', 'The read has no usable revision.')
-    body = {'requests': requests}
+    actual_tab = (edit.snapshot or {}).get('_mcp_tab_id') if edit else None
+    body = {'requests': scope_requests(requests, actual_tab)}
     target = not native and uses_target_revision() and not force_required
     if not native:
         key = 'targetRevisionId' if target else 'requiredRevisionId'
@@ -367,5 +387,11 @@ def guarded_edit(function=None, *, append=False):
             result.temporary_image_cleanup_pending = (
                 edit.prepared.cleanup_pending
             )
+        if edit.snapshot is not None:
+            tab_id = edit.snapshot.get('_mcp_tab_id')
+            if isinstance(result, dict):
+                result['tab_id'] = tab_id
+            elif hasattr(result, 'tab_id'):
+                result.tab_id = tab_id
         return result
     return execute

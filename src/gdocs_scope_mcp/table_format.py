@@ -310,7 +310,7 @@ def plan(document, entry, changes, available):
     return requests
 
 
-def format_table(doc_id, table_ref, base_token, changes):
+def format_table(doc_id, table_ref, base_token, changes, *, tab_id=None):
     """Recheck properties and commit one strictly guarded style batch."""
     from . import docs_edit
     from .table_read import _fetch
@@ -322,7 +322,7 @@ def format_table(doc_id, table_ref, base_token, changes):
     for attempt in range(1, MAX_ATTEMPTS + 1):
         validate_baseline(table, baseline, selected, baseline.fields,
                           subset=True)
-        document = _fetch(doc_id)
+        document = _fetch(doc_id, tab_id=tab_id)
         available = resolve_cells(document, table, selected)
         entry = Layout(document).resolve(table)
         for address, field in required:

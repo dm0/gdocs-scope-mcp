@@ -222,6 +222,7 @@ def test_empty_anchor_cannot_delete_document_with_empty_final_paragraph(
 
 TOOL_CASES = [
     ('server_info', {}, {'package_version': version('gdocs-scope-mcp')}),
+    ('docs_tabs_list', {'doc_id': 'example'}, {'default_tab_id': None}),
     ('docs_get_tree', {'doc_id': 'example'}, {'document_id': 'example'}),
     ('docs_read', {'doc_id': 'example'}, {'partial': False}),
     (
@@ -869,6 +870,7 @@ def test_resolve_uses_reply_action_in_one_request(contract_api, reply):
         'ok': True,
         'document_id': 'example',
         'scope': 'comment',
+        'tab_id': None,
         'heading_id': None,
         'comment_id': 'comment-id',
         'resolved': True,
@@ -1299,6 +1301,7 @@ def test_invalid_listing_token_has_restart_guidance(contract_api, name):
     ('name', 'read_only'),
     [
         ('docs_get_tree', True), ('docs_read', True),
+        ('docs_tabs_list', True),
         ('docs_tables_list', True), ('docs_table_read', True),
         ('docs_table_snapshot', True),
         ('docs_table_patch', False),
@@ -1464,7 +1467,7 @@ def test_native_replace_all_preserves_changed_count(mock_docs):
     assert data['occurrences_changed'] == data['applied'] == changed_count
     assert data['occurrences_found'] is None
     assert data['occurrences_found_complete'] is False
-    mock_docs.get.assert_not_called()
+    mock_docs.get.assert_called_once()
 
 
 @pytest.mark.parametrize('count', [100, 101])
