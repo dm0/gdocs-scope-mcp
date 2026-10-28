@@ -5,7 +5,6 @@
 
 import asyncio
 from copy import deepcopy
-from unittest.mock import MagicMock
 
 import pytest
 from fastmcp import Client
@@ -16,6 +15,7 @@ from gdocs_scope_mcp.entity_edit import validate_insertions
 from gdocs_scope_mcp.table_patch import CellPatch, patch
 from gdocs_scope_mcp.tool_errors import ToolFailureError
 
+from .native_comment_fixtures import native_batch
 from .test_revision_guards import api_error
 from .test_table_discovery import call, table_source  # noqa: F401
 
@@ -318,6 +318,8 @@ def test_catalog_optional_tab_selectors():
                     'docs_reply_to_comment',
                     'docs_resolve_comment',
                     'docs_delete_comment',
+                    'docs_reopen_comment', 'docs_edit_comment',
+                    'docs_delete_comment_reply',
                 }:
                     continue
                 assert 'tab_id' in tool.inputSchema['properties'], tool.name
@@ -452,25 +454,15 @@ def test_default_selection_pinned_during_retry(tabs, mock_docs, remove):
 
 
 @pytest.mark.usefixtures('tabs')
-def test_comment_anchor_and_bookmark_choose_same_tab(mock_docs,
-                                                    monkeypatch):
-    """Named ranges, Apps Script and jump URLs agree on the intended tab."""
-    mock_docs.batchUpdate.return_value.execute.return_value = {
-        'replies': [{'createNamedRange': {'namedRangeId': 'anchor'}}],
-    }
-    drive = MagicMock()
-    drive.comments().create().execute.return_value = {'id': 'comment'}
-    monkeypatch.setattr(docs_edit, 'build', lambda *_args, **_kwargs: drive)
-    monkeypatch.setattr(docs_edit, '_load_creds', lambda: None)
-    bridge = MagicMock(return_value={'bookmark_id': 'bookmark',
-                                    'script_id': 'script'})
-    monkeypatch.setattr(docs_edit, '_create_bookmark_via_apps_script', bridge)
+def test_native_comment_anchor_chooses_selected_tab(mock_docs):
+    """Create a native range in the selected tab without auxiliary writes."""
+    mock_docs.batchUpdate.return_value.execute.return_value = native_batch()
     result = docs_edit.add_comment('example', 'comment', 'Tail',
-                                   tab_id='nested', bookmark_jump=True)
+                                   tab_id='nested')
     request = mock_docs.batchUpdate.call_args.kwargs['body']['requests'][0]
-    assert request['createNamedRange']['range']['tabId'] == 'nested'
-    assert bridge.call_args.kwargs['tab_id'] == 'nested'
-    assert '?tab=nested#bookmark=bookmark' in result['bookmark_url']
+    assert request['insertComment']['range']['tabId'] == 'nested'
+    assert result['tab_id'] == 'nested'
+    assert 'named_range_id' not in result and 'bookmark_url' not in result
 
 
 def test_chip_preflight_uses_destination_definitions(tabs, mock_docs):

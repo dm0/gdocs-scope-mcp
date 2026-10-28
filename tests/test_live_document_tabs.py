@@ -31,6 +31,7 @@ def test_live_document_tabs(live_test_doc, table_probe):
                 },
             )
             parent = None
+            comment_id = None
             try:
                 created = await probe.batch(
                     [
@@ -274,6 +275,27 @@ def test_live_document_tabs(live_test_doc, table_probe):
                     },
                 )
                 assert entity['tab_id'] == child
+                created_comment = await probe.call(0, 'docs_add_comment', {
+                    'doc_id': live_test_doc, 'tab_id': child,
+                    'anchor_text': 'child final',
+                    'comment': 'Nested tab review',
+                })
+                comment_id = created_comment['comment_id']
+                native_comments = await probe.call(0, 'docs_read_comments', {
+                    'doc_id': live_test_doc, 'comment_id': comment_id,
+                })
+                native_thread = native_comments['comments'][0]
+                assert native_thread['tab_id'] == child
+                assert native_thread['anchored'] and native_thread['ranges']
+                nested_reply = await probe.call(0, 'docs_reply_to_comment', {
+                    'doc_id': live_test_doc, 'comment_id': comment_id,
+                    'reply': 'Nested thread reply',
+                })
+                assert nested_reply['tab_id'] == child
+                await probe.call(0, 'docs_delete_comment', {
+                    'doc_id': live_test_doc, 'comment_id': comment_id,
+                })
+                comment_id = None
                 default = await probe.call(
                     1,
                     'docs_read',
@@ -285,6 +307,10 @@ def test_live_document_tabs(live_test_doc, table_probe):
                 assert default['sections'] == original_read['sections']
                 probe.report['checks_passed'] = True
             finally:
+                if comment_id:
+                    await probe.call(0, 'docs_delete_comment', {
+                        'doc_id': live_test_doc, 'comment_id': comment_id,
+                    })
                 if parent:
                     current = await probe.call(0, 'probe_tabs_document')
                     await probe.batch(

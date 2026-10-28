@@ -22,7 +22,6 @@ Get credentials.json:
 Required APIs to enable in your project:
     - Google Docs API
     - Google Drive API
-    - Google Apps Script API
 """
 
 import argparse
@@ -42,12 +41,8 @@ SCOPES = [
     'https://www.googleapis.com/auth/documents',
     'https://www.googleapis.com/auth/drive',
     'https://www.googleapis.com/auth/drive.readonly',
-    # Comments
+    # Existing Drive file permissions (access-mode changes are separate).
     'https://www.googleapis.com/auth/drive.file',
-    # Apps Script (required for inline-anchored comments)
-    'https://www.googleapis.com/auth/script.projects',
-    'https://www.googleapis.com/auth/script.deployments',
-    'https://www.googleapis.com/auth/script.processes',
     # Identity
     'openid',
     'email',

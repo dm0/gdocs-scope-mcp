@@ -19,6 +19,8 @@ from gdocs_scope_mcp.server import mcp
 from gdocs_scope_mcp.tool_logging import configure_logging
 
 ALLOWED = {
+    'insertComment', 'addCommentReply', 'updateCommentPost', 'deleteComment',
+    'deleteCommentReply',
     'addDocumentTab', 'deleteTab',
     'createNamedRange', 'deleteNamedRange', 'insertText',
     'deleteContentRange', 'insertTableRow', 'deleteTableRow',

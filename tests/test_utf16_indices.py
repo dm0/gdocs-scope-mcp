@@ -165,13 +165,16 @@ def test_non_bmp_edits_across_source_runs_preserve_neighbours(
         (['😀', '😀', '\n'], '😀😀', (1, 5)),
     ],
 )
-def test_comment_named_range_uses_utf16_source_runs(
+def test_native_comment_uses_utf16_source_runs(
     set_document_runs, mock_docs, monkeypatch, *, runs, anchor, expected_range,
 ):
     """Anchor comments to whole characters across source-run boundaries."""
     set_document_runs(runs)
     mock_docs.batchUpdate.return_value.execute.return_value = {
-        'replies': [{'createNamedRange': {'namedRangeId': 'range-id'}}],
+        'commentUpdateState': 'ALL_SAVED',
+        'replies': [{'insertComment': {'commentThread': {
+            'commentId': 'comment-id', 'headPost': {'postId': 'head-id'},
+        }}}],
     }
     drive = MagicMock()
     drive.comments.return_value.create.return_value.execute.return_value = {
@@ -183,9 +186,8 @@ def test_comment_named_range_uses_utf16_source_runs(
     result = docs_edit.add_comment('example', 'Comment', anchor)
 
     request = mock_docs.batchUpdate.call_args.kwargs['body']['requests'][0]
-    assert request['createNamedRange']['range'] == {
+    assert request['insertComment']['range'] == {
         'startIndex': expected_range[0], 'endIndex': expected_range[1],
-        'segmentId': '',
     }
     assert result['anchored_to'] == anchor
     assert result['at_index'] == expected_range[0]

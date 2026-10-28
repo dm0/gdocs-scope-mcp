@@ -12,8 +12,8 @@ Tools:
   Editing:  docs_get, docs_search_replace, docs_insert_after,
             docs_insert_before, docs_delete_paragraph, docs_append,
             docs_batch_replace
-  Comments: docs_add_comment, docs_read_comments, docs_reply_to_comment,
-            docs_resolve_comment, docs_delete_comment
+  Comments: native anchored threads, replies, post editing, resolve/reopen
+            and deletion
   Manage:   docs_list, docs_create
 
 Auth (in priority order):
@@ -36,7 +36,6 @@ Transport: stdio (Claude Desktop / OpenClaw MCP config)
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 import sys
@@ -47,6 +46,7 @@ from googleapiclient.discovery import build
 from pydantic import BaseModel, Field, TypeAdapter
 
 from . import (
+    comments,
     docs_edit,
     entity_edit,
     table_format,
@@ -67,14 +67,17 @@ from .models import (
     AppendSucceedResponse,
     BatchReplaceResponse,
     CreateDocumentResponse,
+    DeleteCommentReplyResponse,
     DeleteCommentResponse,
     DeleteParagraphResponse,
     DocumentOutline,
     DocumentSubset,
+    EditCommentResponse,
     EditFailedResponse,
     InsertSucceedResponse,
     ListDocumentsResponse,
     ReadCommentsResponse,
+    ReopenCommentResponse,
     ReplaceSucceedResponse,
     ReplyCommentResponse,
     ResolveCommentResponse,
@@ -96,6 +99,9 @@ from .table_tokens import CellAddress, SnapshotFields, SnapshotToken
 from .tool_inputs import (
     CodeBlockStyle,
     CodeBlockThemeBackground,
+    CommentActionText,
+    CommentLimit,
+    CommentText,
     ExpectedRevision,
     NonemptyText,
     PositiveInteger,
@@ -167,8 +173,8 @@ CONCURRENT EDITS:
     batches. The default guard covers the backend read/write window;
     expected_revision_id can also protect an agent's earlier read.
     Native replace-all retains execution-time matching and accepts no such
-    precondition. Comment creation/Apps Script are separate from its Docs
-    anchor batch and are not atomic with it.
+    precondition. Native comment batches independently confirm ALL_SAVED;
+    failed or unknown comment persistence is never automatically replayed.
 
 DIAGNOSTICS:
     server_info            Read process identity and startup source fingerprint
@@ -260,7 +266,10 @@ COMMENT TOOLS:
   docs_read_comments     List all comments with anchor/resolve status
   docs_reply_to_comment  Reply to an existing comment
   docs_resolve_comment   Resolve (close) a comment, optionally with reply
-  docs_delete_comment    Delete a comment
+  docs_delete_comment    Delete a native comment thread
+  docs_reopen_comment    Reopen a native thread
+  docs_edit_comment      Edit a head post or reply
+  docs_delete_comment_reply Delete an ordinary reply
 
 DOCUMENT MANAGEMENT:
   docs_list              List recent docs (optional search query)
@@ -1230,75 +1239,30 @@ def docs_batch_replace(
         'openWorldHint': True,
     },
 )
-# Preserve the public positional calling convention.
-def docs_add_comment(  # noqa: PLR0917
-    doc_id: str,
-    comment: str,
-    anchor_text: NonemptyText,
-    occurrence: PositiveInteger = 1,
-    include_anchor_text: bool = True,
-    bookmark_jump: bool = False,
-    *, tab_id: TabId | None = None,
+def docs_add_comment(
+    doc_id: str, comment: CommentText, anchor_text: NonemptyText,
+    occurrence: PositiveInteger = 1, *, tab_id: TabId | None = None,
     expected_revision_id: ExpectedRevision | None = None,
 ) -> AddCommentResponse:
     """
-    Add a comment anchored to specific text in a Google Doc.
+    Create a native comment anchored to exact text in the selected tab.
 
-    The anchor follows configured write_revision_mode: required validates and
-    retries (up to three attempts), target lets Google merge without local
-    conflict checks/retries. expected_revision_id forces strict required.
-    Drive/Apps Script calls follow separately and are not atomic with the
-    anchor. Unknown outcomes are not replayed; failures report
-    committed_batches.
-
-    NOTE: The current implementation uses the Drive comments API plus a Docs
-    named range. In the Docs UI this still shows as "Original content deleted"
-    rather than a proper inline comment highlight. The comments ARE readable
-    via
-    docs_read_comments and the Docs 💬 panel.
-
-    The next path to investigate is Apps Script automation. The OAuth token
-    must
-    include the script.* scopes, and the Google account must also have the Apps
-    Script API enabled at https://script.google.com/home/usersettings before
-    remote Apps Script project creation/execution will work.
-
-    By default the tool also appends the matched anchor text into the comment
-    body so the user can understand what was targeted even though the Docs UI
-    does not render a proper inline highlight with the current API path.
-
-    When bookmark_jump=True, the tool also uses a persistent Apps Script bridge
-    (configured via GOOGLE_DOCS_MCP_APPS_SCRIPT_ID) to create a bookmark at the
-    target text, then appends a #bookmark jump URL into the comment body.
+    occurrence selects a 1-based match; use 2, 3, etc. for repeated text.
+    Matching uses native UTF-16 source positions across text runs, not rendered
+    Markdown offsets. comment is plain text, at most 2048 UTF-8 bytes. Native
+    anchoring supplies the quote; no quote is appended to your comment body.
+    Uses configured required/target revision policy; expected_revision_id
+    forces strict required. Confirmed revision races may be replanned; unknown
+    write outcomes and unsuccessful commentUpdateState are never replayed.
+    Returns native comment_id, post_id, anchor_id and confirmed ALL_SAVED.
+    No named range, bookmark, Apps Script bridge or script scopes are needed.
 
     Args:
-        doc_id:      Google Doc ID (from the URL: /document/d/{DOC_ID}/edit)
-        comment:     The comment text to post
-        anchor_text: Exact text in the document to attach the comment to.
-                     Use a short, unique phrase (a few words) for reliable
-                     matching.
-        occurrence: Which occurrence of anchor_text to use (default 1 = first).
-            Use 2, 3, etc. if the text appears multiple times.
-        include_anchor_text: If True (default), append the matched anchor text
-                     excerpt into the comment body for human readability.
-        bookmark_jump: If True, create an Apps Script bookmark and append a
-                     jump URL into the comment body. Requires the Apps Script
-                     bridge env var setup documented in the README.
-
-    Returns
-    -------
-        A structured object with ok, comment_id, anchored_to (matched text),
-        at_index, named_range_id, comment_content, and optional bookmark_id,
-        bookmark_url, and apps_script_id (null when bookmarks are disabled).
-        Includes document_id, scope=document, and heading_id=null.
+        occurrence: Which occurrence to anchor (default 1 = first).
+            Use 2, 3, etc. when the same text appears more than once.
     """
     result = docs_edit.add_comment(
-        doc_id,
-        comment,
-        anchor_text,
-        occurrence,
-        include_anchor_text=include_anchor_text,
-        bookmark_jump=bookmark_jump,
+        doc_id, comment, anchor_text, occurrence,
         expected_revision_id=expected_revision_id, tab_id=tab_id,
     )
     return AddCommentResponse.model_validate(result)
@@ -1314,39 +1278,22 @@ def docs_add_comment(  # noqa: PLR0917
     },
 )
 def docs_reply_to_comment(
-    doc_id: str, comment_id: str, reply: str
+    doc_id: str, comment_id: NonemptyText, reply: CommentText, *,
+    expected_revision_id: ExpectedRevision | None = None,
 ) -> ReplyCommentResponse:
     """
-    Reply to an existing comment on a Google Doc.
+    Reply to a native comment ID from docs_read_comments, in any tab.
 
-    Args:
-        doc_id:     Google Doc ID
-        comment_id: ID of the comment to reply to (from docs_read_comments)
-        reply:      Reply text to post
-
-    Returns
-    -------
-        A structured object with ok, reply_id, comment_id, and content.
-        Includes document_id, scope=comment, and heading_id=null.
+    Plain text must be nonempty and at most 2048 UTF-8 bytes. Uses the normal
+    revision policy; expected_revision_id forces required without retries.
+    Reports success only after commentUpdateState=ALL_SAVED. reply_id is the
+    native post ID; inspect replies with docs_read_comments(comment_id=...).
+    Unknown outcomes are never automatically replayed.
     """
-    creds = docs_edit._load_creds()
-    drive = build('drive', 'v3', credentials=creds)
-    result = (
-        drive.replies()
-        .create(
-            fileId=doc_id,
-            commentId=comment_id,
-            body={'content': reply},
-            fields='id,content,createdTime',
-        )
-        .execute()
-    )
-    return ReplyCommentResponse(
-        document_id=doc_id,
-        reply_id=result.get('id'),
-        comment_id=comment_id,
-        content=result.get('content'),
-    )
+    return ReplyCommentResponse.model_validate(comments.mutate(
+        doc_id, comment_id, 'reply', reply,
+        expected_revision_id=expected_revision_id,
+    ))
 
 
 @mcp.tool(
@@ -1359,37 +1306,21 @@ def docs_reply_to_comment(
     },
 )
 def docs_resolve_comment(
-    doc_id: str, comment_id: str, reply: str = ''
+    doc_id: str, comment_id: NonemptyText, reply: CommentActionText = '', *,
+    expected_revision_id: ExpectedRevision | None = None,
 ) -> ResolveCommentResponse:
     """
-    Resolve a comment by creating a reply with the resolve action.
+    Resolve a native thread with one RESOLVE action post.
 
-    An optional closing message is included in that same reply. Without a
-    message, only the resolve action is sent; no text content is required.
-
-    Args:
-        doc_id:     Google Doc ID
-        comment_id: ID of the comment to resolve (from docs_read_comments)
-        reply: Optional closing text to include in the resolving reply.
-
-    Returns
-    -------
-        A structured object with ok, comment_id, and resolved=True.
-        Includes document_id, scope=comment, and heading_id=null.
+    Optional closing text (at most 2048 UTF-8 bytes) is included in that same
+    post; empty reply sends only the action. IDs work document-wide across
+    tabs. Uses the normal revision policy and checks commentUpdateState.
+    Unknown or failed persistence is never automatically replayed.
     """
-    creds = docs_edit._load_creds()
-    drive = build('drive', 'v3', credentials=creds)
-
-    body = {'action': 'resolve'}
-    if reply:
-        body['content'] = reply
-    drive.replies().create(
-        fileId=doc_id,
-        commentId=comment_id,
-        body=body,
-        fields='id',
-    ).execute()
-    return ResolveCommentResponse(document_id=doc_id, comment_id=comment_id)
+    return ResolveCommentResponse.model_validate(comments.mutate(
+        doc_id, comment_id, 'resolve', reply,
+        expected_revision_id=expected_revision_id,
+    ))
 
 
 @mcp.tool(
@@ -1401,23 +1332,21 @@ def docs_resolve_comment(
         'openWorldHint': True,
     },
 )
-def docs_delete_comment(doc_id: str, comment_id: str) -> DeleteCommentResponse:
+def docs_delete_comment(
+    doc_id: str, comment_id: NonemptyText, *,
+    expected_revision_id: ExpectedRevision | None = None,
+) -> DeleteCommentResponse:
     """
-    Delete a comment from a Google Doc.
+    Delete a native thread; Google requires the head post's author.
 
-    Args:
-        doc_id:     Google Doc ID
-        comment_id: ID of the comment to delete
-
-    Returns
-    -------
-        A structured object with ok and comment_id.
-        Includes document_id, scope=comment, and heading_id=null.
+    The ID is document-wide, including threads on nested tabs. Uses the
+    normal revision policy and requires ALL_SAVED. Deleting a missing thread
+    returns RESOURCE_NOT_FOUND. Inspect state after an unknown outcome.
     """
-    creds = docs_edit._load_creds()
-    drive = build('drive', 'v3', credentials=creds)
-    drive.comments().delete(fileId=doc_id, commentId=comment_id).execute()
-    return DeleteCommentResponse(document_id=doc_id, comment_id=comment_id)
+    return DeleteCommentResponse.model_validate(comments.mutate(
+        doc_id, comment_id, 'delete',
+        expected_revision_id=expected_revision_id,
+    ))
 
 
 @mcp.tool(
@@ -1431,81 +1360,99 @@ def docs_delete_comment(doc_id: str, comment_id: str) -> DeleteCommentResponse:
 )
 def docs_read_comments(
     doc_id: str, include_resolved: bool = False,
-    page_token: NonemptyText | None = None,
+    page_token: NonemptyText | None = None, *, limit: CommentLimit = 100,
+    comment_id: NonemptyText | None = None,
 ) -> ReadCommentsResponse:
     """
-    Read a page of up to 100 comments on a Google Doc.
+    Read native comment summaries across ALL document tabs, without writes.
 
-    Returns each comment with its content, author, anchor status, and whether
-    it's resolved or deleted. Useful for auditing what comments exist and
-    whether they are properly anchored to text.
+    Default mode returns up to limit thread summaries (1-100) with native ID,
+    head_post_id, text, author, quote, anchor_id, tab_id and diagnostic ranges,
+    resolved/deleted flags and reply_count. Reply bodies are omitted here.
+    include_resolved also includes deleted heads. Existing visible native
+    threads remain usable; legacy Drive cursors must be discarded.
 
-    Args:
-        doc_id:           Google Doc ID
-        include_resolved: Include resolved/deleted comments (default False)
-        page_token: Opaque token from the previous response. Omit for page one;
-            preserve doc_id and include_resolved when requesting later pages.
-
-    Returns
-    -------
-        A structured object with count, comments, next_page_token and has_more.
-        Each comment has id,
-        content, author, anchored, named_range_id, quoted_text, resolved,
-        deleted, and created. Count includes only returned items after
-        filtering, not a document-wide total. Follow next_page_token until
-        null, even on empty filtered pages; each call fetches only one page.
+    Supply comment_id to inspect one thread, including resolved threads, and
+    page its replies by limit. Its head/anchor metadata is repeated in the
+    single comments entry; replies expose post_id, content, author and actions.
+    page_kind identifies threads/replies. count is returned thread entries,
+    including one in reply mode. Follow next_page_token with identical args.
+    Tokens bind complete comment/anchor state, not only the body revision;
+    changes return STALE_REFERENCE. Each page fetches current native metadata
+    using COMMENTS_VIEW_MODE_INCLUDED and SUGGESTIONS_INLINE. The API has no
+    server-side comment pagination; pagination bounds MCP output only.
+    Comments require permission to view them; no Drive/Apps Script fallback.
     """
-    creds = docs_edit._load_creds()
-    drive = build('drive', 'v3', credentials=creds)
+    return comments.read(doc_id, include_resolved, page_token, limit=limit,
+                         comment_id=comment_id)
 
-    resp = (
-        drive.comments()
-        .list(
-            fileId=doc_id,
-            fields='nextPageToken,comments(id,content,anchor,resolved,deleted,'
-            'author,createdTime,quotedFileContent)',
-            pageSize=100,
-            pageToken=page_token,
-        )
-        .execute()
-    )
 
-    results = []
-    for c in resp.get('comments', []):
-        if not include_resolved and (c.get('deleted') or c.get('resolved')):
-            continue
-        anchor = c.get('anchor') or ''
-        named_range_id = None
-        if anchor:
-            try:
-                a = json.loads(anchor)
-                for part in a.get('a', []):
-                    if part.get('t') == 'r':
-                        named_range_id = part.get('v')
-            # This boundary intentionally handles all errors without
-            # propagating.
-            except Exception:  # noqa: BLE001
-                pass
-        results.append(
-            {
-                'id': c['id'],
-                'content': c.get('content', ''),
-                'author': c.get('author', {}).get('displayName', '?'),
-                'anchored': bool(anchor),
-                'named_range_id': named_range_id,
-                'quoted_text': (c.get('quotedFileContent') or {}).get(
-                    'value', ''
-                ),
-                'resolved': c.get('resolved', False),
-                'deleted': c.get('deleted', False),
-                'created': c.get('createdTime', ''),
-            }
-        )
+@mcp.tool(
+    output_schema=_tool_response_schema(ReopenCommentResponse),
+    annotations={'readOnlyHint': False, 'destructiveHint': False,
+                 'idempotentHint': False, 'openWorldHint': True},
+)
+def docs_reopen_comment(
+    doc_id: str, comment_id: NonemptyText, reply: CommentActionText = '', *,
+    expected_revision_id: ExpectedRevision | None = None,
+) -> ReopenCommentResponse:
+    """
+    Reopen a native thread with one REOPEN post and optional plain text.
 
-    return ReadCommentsResponse(
-        count=len(results), comments=results,
-        next_page_token=resp.get('nextPageToken') or None,
-    )
+    Uses document-wide comment IDs and the normal revision policy. Success
+    requires ALL_SAVED. Unknown outcomes are never automatically replayed.
+    """
+    return ReopenCommentResponse.model_validate(comments.mutate(
+        doc_id, comment_id, 'reopen', reply,
+        expected_revision_id=expected_revision_id,
+    ))
+
+
+@mcp.tool(
+    output_schema=_tool_response_schema(EditCommentResponse),
+    annotations={'readOnlyHint': False, 'destructiveHint': True,
+                 'idempotentHint': True, 'openWorldHint': True},
+)
+def docs_edit_comment(
+    doc_id: str, comment_id: NonemptyText, content: CommentText, *,
+    post_id: NonemptyText | None = None,
+    expected_revision_id: ExpectedRevision | None = None,
+) -> EditCommentResponse:
+    """
+    Edit a native head post, or a reply selected with post_id.
+
+    Omit post_id for the thread's head post. Get reply IDs by reading
+    docs_read_comments(comment_id=...). Google permits only the post's author
+    to edit it. content is plain text, 1-2048 UTF-8 bytes. Uses the normal
+    revision policy; success requires ALL_SAVED. Document revisions protect
+    the body snapshot; they are not per-post optimistic concurrency tokens.
+    """
+    return EditCommentResponse.model_validate(comments.mutate(
+        doc_id, comment_id, 'edit', content, post_id,
+        expected_revision_id=expected_revision_id,
+    ))
+
+
+@mcp.tool(
+    output_schema=_tool_response_schema(DeleteCommentReplyResponse),
+    annotations={'readOnlyHint': False, 'destructiveHint': True,
+                 'idempotentHint': True, 'openWorldHint': True},
+)
+def docs_delete_comment_reply(
+    doc_id: str, comment_id: NonemptyText, reply_id: NonemptyText, *,
+    expected_revision_id: ExpectedRevision | None = None,
+) -> DeleteCommentReplyResponse:
+    """
+    Delete one ordinary native reply by its post/reply ID.
+
+    Google permits only its author to delete it. Head posts, action posts
+    and assignment posts are not eligible; use docs_delete_comment for a
+    whole thread. Uses the normal revision policy and requires ALL_SAVED.
+    """
+    return DeleteCommentReplyResponse.model_validate(comments.mutate(
+        doc_id, comment_id, 'delete_reply', post_id=reply_id,
+        expected_revision_id=expected_revision_id,
+    ))
 
 
 @mcp.tool(

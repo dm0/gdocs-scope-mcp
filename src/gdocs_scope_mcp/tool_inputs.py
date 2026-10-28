@@ -16,6 +16,27 @@ from typing_extensions import Self
 from .settings import Settings
 
 NonemptyText = Annotated[str, Field(strict=True, min_length=1)]
+
+
+def _comment_utf8(value: str) -> str:
+    """Enforce Google's byte limit, including multibyte text and surrogates."""
+    try:
+        size = len(value.encode('utf-8'))
+    except UnicodeEncodeError as error:
+        raise ValueError('Comment text must contain valid Unicode') from error
+    if size > 2048:  # noqa: PLR2004
+        raise ValueError('Comment text must not exceed 2048 UTF-8 bytes')
+    return value
+
+
+CommentText = Annotated[
+    str, Field(strict=True, min_length=1, max_length=2048),
+    AfterValidator(_comment_utf8),
+]
+CommentActionText = Annotated[
+    str, Field(strict=True, max_length=2048), AfterValidator(_comment_utf8),
+]
+CommentLimit = Annotated[int, Field(strict=True, ge=1, le=100)]
 ReplacementOccurrence = Annotated[int, Field(strict=True, ge=0)]
 PositiveInteger = Annotated[int, Field(strict=True, ge=1)]
 CodeBlockStyle = Annotated[
