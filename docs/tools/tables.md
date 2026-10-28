@@ -12,6 +12,19 @@ Refs, snapshots and page tokens belong to the selected tab: pass the same
 selector throughout an operation. Another tab, a removed tab or an omitted
 selector resolving elsewhere cannot reuse those references.
 
+Every table tool returns the effective `tab_id` at the top level, including
+snapshots and write receipts. Listing/read responses also retain it inside
+`snapshot`. Omission still selects the first tab; it does not infer a tab
+from `table_ref` or remember an earlier selection. This keeps calls for the
+usual single-tab document free of extra required parameters.
+
+`TAB_MISMATCH` means the reference and selected tab differ. The error names
+both IDs and suggests the correct `tab_id`; retrying with that selector can
+reuse the reference when it is still valid. If the currently selected tab
+was intended, obtain its own references instead. This is distinct from a
+structural `TARGET_CHANGED` or revision `STALE_REFERENCE` error. Never edit
+opaque references or tokens to change their tab.
+
 See [table references and expectations](../table-references.md) for the position
 contract, [discovery implementation](../table-discovery.md) for geometry and
 pagination, and [concurrent edits](../concurrent-edits.md) for revision policies.

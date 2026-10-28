@@ -771,6 +771,7 @@ def read(
         selected = [item.id for item in roots]
 
     return DocumentSubset(
+        tab_count=len(doc.get('_mcp_tabs', [])),
         sections=[
             DocumentReadSection(
                 heading_id=item.id or None, markdown=item.subtree_markdown(),

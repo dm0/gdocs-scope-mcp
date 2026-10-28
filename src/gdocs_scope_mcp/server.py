@@ -134,13 +134,23 @@ ERRORS:
     before retrying a failed write.
 
 DOCUMENT TABS:
-    docs_tabs_list returns root/nested IDs and hierarchy. Pass tab_id to read,
-    outline, text edit, table and entity tools; omitted/null selects the first
-    root tab. Explicit missing IDs fail without fallback. Heading IDs, matches,
+    Start with docs_get_tree(doc_id): it returns the first tab's headings and
+    the complete tabs inventory. For a single-tab document, continue reading
+    and editing with tab_id omitted; no separate tab discovery call is needed.
+    If several tabs exist, the first tab's outline is already available.
+    To switch to another tab, call docs_get_tree with its tab_id for its own
+    headings, then pass that same tab_id on subsequent read/edit/table/entity
+    calls. docs_tabs_list is optional when only the tab inventory is needed.
+    Omitted/null selects the first root tab, not a previously selected tab.
+    Explicit missing IDs fail without fallback. Heading IDs, matches,
     named ranges and chip definitions are local to the selected tab. Table
     refs, snapshots and page tokens cannot be reused in another tab. Revision
     IDs remain document-wide. Even native replace-all affects one tab only.
     Drive file and comment-thread operations remain document-wide.
+    docs_read returns tab_count; partial=false means the entire selected tab,
+    not every document tab. TAB_MISMATCH means the supplied reference and
+    selected tab differ: follow its suggested_action to fix the selector or
+    obtain a reference in the intended tab. Do not edit opaque tokens.
 
 CONCURRENT EDITS:
     Server setting write_revision_mode selects required (default) or target.
@@ -258,7 +268,11 @@ DOCUMENT MANAGEMENT:
 
 SURGICAL GOOGLE DOCS EDITING WORKFLOW:
   1. Always run 'docs_get_tree' first to inspect the structural outline and
-     gather heading IDs.
+     gather heading IDs and the tabs inventory in one call. With one tab,
+     continue without tab_id. With several tabs, reuse the first tab's outline
+     or select another tab with docs_get_tree(doc_id, tab_id=...). Use heading
+     IDs from that tab and retain its tab_id on subsequent calls. Omitted
+     tab_id always selects the first tab; it never remembers earlier choices.
   2. Use 'docs_read' with specific 'heading_ids' to fetch content chunks
      instead of downloading massive documents all at once.
   3. Identify section scopes using the HTML heading ID tags (<a id="...">) and
@@ -333,6 +347,9 @@ def docs_get_tree(doc_id: str, *,
     Use this tool FIRST when encountering a document to locate target sections
     via their heading IDs, avoiding the need to read a massive document all at
     once.
+    With one tab, continue without tab_id or another discovery call. With
+    several tabs, reuse these headings for the first tab, or call this tool
+    with another tab_id to obtain that tab's headings before editing it.
 
     Args:
         doc_id: Google Doc ID (from the URL: /document/d/{DOC_ID}/edit)
@@ -369,7 +386,7 @@ def docs_read(
     tab_id: TabId | None = None,
 ) -> DocumentSubset | EditFailedResponse:
     """
-    Read a Google document's content converted to Markdown.
+    Read the selected Google document tab's content converted to Markdown.
 
     Native people, resource, date and dropdown chips remain identifiable HTML
     spans with data-mcp-entity and data-mcp-id, rather than ordinary labels or
@@ -387,21 +404,24 @@ def docs_read(
     Snapshot checks compare selected cells/fields, allowing independent edits.
     Reads/snapshots create no bindings or files and write no metadata.
 
-    You can read the entire document, or isolate specific sections by passing
+    You can read the entire selected tab, or isolate sections by passing
     a list of target heading_ids, including their nested subsections.
     Isolating sections reduces token usage on large files.
 
     Args:
         doc_id: Google Doc ID from the URL.
         heading_ids: Optional list of heading IDs to fetch.
-            Pass null or omit this field entirely to read the whole document.
+            Pass null or omit this field to read the whole selected tab.
             An empty list returns no sections. Duplicate IDs and selected
             descendants of selected ancestors are collapsed in document order.
 
     Returns
     -------
         Document metadata and sections [{heading_id, markdown}], effective
-        selected_headings, unknown_heading_ids, and partial. Whole reads
+        selected_headings, unknown_heading_ids, partial and tab_count. The
+        tab_count includes root and nested tabs; one means the only tab.
+        partial=false means the whole selected tab, not all document tabs.
+        Call docs_get_tree to choose among other tabs. Whole-tab reads
         include the preamble with heading_id=null. Mixed selections return
         valid content and diagnostics; all-unknown selections fail with
         HEADING_NOT_FOUND. Refresh IDs with docs_get_tree after that error.

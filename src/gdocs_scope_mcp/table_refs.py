@@ -3,7 +3,7 @@
 # Native table traversal lives in the reader; import lazily to avoid cycles.
 # ruff: noqa: PLC0415
 
-from .document_tabs import select
+from .document_tabs import require_matching_tab, select
 from .table_tokens import Token, digest, fail
 
 
@@ -77,9 +77,7 @@ class Layout:
 
     def resolve(self, token):
         """Validate section structure before following its table ordinal."""
-        if token.tab != self.document.get('_mcp_tab_id'):
-            fail('TARGET_CHANGED',
-                 'The reference belongs to a different document tab.')
+        require_matching_tab(token.tab, self.document.get('_mcp_tab_id'))
         key = tuple(token.section)
         peers = self.sections.get(key, [])
         if (self.inventories.get(key) != token.inventory

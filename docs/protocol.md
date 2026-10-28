@@ -30,6 +30,15 @@ Continue until the token is null, even if a page has zero returned items.
 Clients using the previous JSON-string
 or `result`-wrapped outputs must switch to the direct structured objects.
 
+`docs_read` reports the selected `tab_id`/`tab_title` and total `tab_count`.
+`partial=false` means all content in that tab, not all document tabs.
+`docs_get_tree` supplies the complete compact `tabs` inventory in its usual
+outline call; the single-tab workflow needs no separate tab discovery.
+All table-tool success responses expose the effective `tab_id` at the top
+level. Reference/selector mismatch returns `TAB_MISMATCH` with the reference
+and selected tab IDs and a specific selector recovery action; it does not
+report a structural change. See [document tabs](tools/documents.md#document-tabs).
+
 Document reads accept omitted empty `lists` and `inlineObjects` collections.
 Supplied list definitions retain their formatting. If a paragraph references
 a missing list definition, Markdown rendering fails rather than guessing its

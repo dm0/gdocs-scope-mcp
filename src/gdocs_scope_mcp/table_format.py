@@ -120,6 +120,7 @@ class FormatResponse(BaseModel):
 
     ok: Literal[True] = True
     document_id: str
+    tab_id: str | None = None
     table_ref: str
     revision_id: str | None
     attempts: int
@@ -342,7 +343,8 @@ def format_table(doc_id, table_ref, base_token, changes, *, tab_id=None):
             time.sleep(0.05 * (2 ** (attempt - 1)))
             continue
         return FormatResponse(
-            document_id=doc_id, table_ref=table_ref,
+            document_id=doc_id, tab_id=document.get('_mcp_tab_id'),
+            table_ref=table_ref,
             revision_id=result.get('writeControl', {}).get(
                 'requiredRevisionId',
             ),

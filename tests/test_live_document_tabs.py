@@ -100,6 +100,8 @@ def test_live_document_tabs(live_test_doc, table_probe):
                     },
                 )
                 assert child_read['tab_id'] == child
+                assert child_read['tab_count'] == len(listing['tabs'])
+                assert child_read['partial'] is False
                 assert '```python\nprint(42)' in markdown(child_read)
                 outline = await probe.call(
                     0,
@@ -157,6 +159,7 @@ def test_live_document_tabs(live_test_doc, table_probe):
                     },
                 )
                 reference = tables['tables'][0]['table_ref']
+                assert tables['tab_id'] == child
                 snapshot = await probe.call(
                     0,
                     'docs_table_snapshot',
@@ -167,7 +170,8 @@ def test_live_document_tabs(live_test_doc, table_probe):
                         'cells': ['A2'],
                     },
                 )
-                await probe.call(
+                assert snapshot['tab_id'] == child
+                patched = await probe.call(
                     0,
                     'docs_table_patch',
                     {
@@ -180,6 +184,7 @@ def test_live_document_tabs(live_test_doc, table_probe):
                         ],
                     },
                 )
+                assert patched['tab_id'] == child
                 result = await probe.call(
                     0,
                     'docs_table_read',
@@ -190,6 +195,7 @@ def test_live_document_tabs(live_test_doc, table_probe):
                     },
                 )
                 assert 'child cell' in str(result['rows'])
+                assert result['tab_id'] == child
                 wrong = await probe.clients[0].call_tool(
                     'docs_table_read',
                     {
@@ -200,18 +206,22 @@ def test_live_document_tabs(live_test_doc, table_probe):
                     raise_on_error=False,
                 )
                 assert wrong.is_error
+                assert wrong.structured_content['code'] == 'TAB_MISMATCH'
+                assert repr(child) in wrong.structured_content[
+                    'suggested_action']
                 formatting = await probe.call(0, 'docs_table_snapshot', {
                     'doc_id': live_test_doc, 'tab_id': child,
                     'table_ref': reference, 'cells': ['A1'],
                     'fields': ['cell.background_color'],
                 })
-                await probe.call(0, 'docs_table_format', {
+                formatted = await probe.call(0, 'docs_table_format', {
                     'doc_id': live_test_doc, 'tab_id': child,
                     'table_ref': reference,
                     'base_token': formatting['base_token'],
                     'changes': {'cells': [{'address': 'A1',
                                            'background_color': '#FFEEDD'}]},
                 })
+                assert formatted['tab_id'] == child
                 merging = await probe.call(0, 'docs_table_snapshot', {
                     'doc_id': live_test_doc, 'tab_id': child,
                     'table_ref': reference, 'cells': ['A1', 'B1'],
@@ -225,6 +235,7 @@ def test_live_document_tabs(live_test_doc, table_probe):
                                   'start_cell': 'A1', 'end_cell': 'B1'},
                 })
                 assert merged['table_ref']
+                assert merged['tab_id'] == child
                 assert not merged['reference_refresh_required']
                 await probe.call(0, 'docs_table_read', {
                     'doc_id': live_test_doc, 'tab_id': child,

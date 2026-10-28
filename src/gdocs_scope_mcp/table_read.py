@@ -115,11 +115,10 @@ def _decode(value, kind, doc_id):
 
 def _check_revision(token, document):
     """Reject stale references without reusing an old structural path."""
+    from .document_tabs import require_matching_tab
+    require_matching_tab(token.tab, document.get('_mcp_tab_id'))
     if token.revision != document['revisionId']:
         _fail('STALE_REFERENCE', 'The reference revision is not current.')
-    if token.tab != document.get('_mcp_tab_id'):
-        _fail('STALE_REFERENCE',
-              'The reference belongs to a different document tab.')
 
 
 def _fetch(doc_id, tab_id=None):
@@ -248,6 +247,7 @@ class TablesListResponse(ListingPage):
     """Return a revision-bound page of selected-tab table summaries."""
 
     document_id: str
+    tab_id: str | None = None
     snapshot: TableSnapshot
     total_count: int
     selected_headings: list[str] | None
@@ -291,6 +291,7 @@ class TableReadResponse(ListingPage):
     """Page physical cells in native row order with explicit geometry."""
 
     document_id: str
+    tab_id: str | None = None
     snapshot: TableSnapshot
     table: TableSummary
     total_cells: int
@@ -458,7 +459,8 @@ def tables_list(doc_id, heading_ids=None, limit=50, page_token=None, *,
     layout = Layout(document)
     summaries = [_summary(document, t, model, layout) for t in page]
     return TablesListResponse(
-        document_id=doc_id, snapshot=TableSnapshot(
+        document_id=doc_id, tab_id=document.get('_mcp_tab_id'),
+        snapshot=TableSnapshot(
             revision_id=document['revisionId'],
             tab_id=document.get('_mcp_tab_id'),
             scope='selected_tab' if tab_id is not None else 'first_tab',
@@ -547,7 +549,8 @@ def table_read(doc_id, table_ref, limit=100, max_cell_chars=2000,
         document, entry, 'cells-page', offset=end, options=_digest(options),
     )) if end < len(geometry) else None
     return TableReadResponse(
-        document_id=doc_id, snapshot=TableSnapshot(
+        document_id=doc_id, tab_id=document.get('_mcp_tab_id'),
+        snapshot=TableSnapshot(
             revision_id=document['revisionId'],
             tab_id=document.get('_mcp_tab_id'),
             scope='selected_tab' if tab_id is not None else 'first_tab',

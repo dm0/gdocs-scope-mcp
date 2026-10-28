@@ -322,8 +322,101 @@ def test_catalog_optional_tab_selectors():
                     continue
                 assert 'tab_id' in tool.inputSchema['properties'], tool.name
                 assert 'tab_id' not in tool.inputSchema.get('required', [])
+                selector = tool.inputSchema['properties']['tab_id']
+                description = selector.get('description') or next(
+                    branch.get('description', '')
+                    for branch in selector['anyOf']
+                    if branch.get('type') == 'string'
+                )
+                assert 'docs_get_tree.tabs' in description
+                assert 'single-tab' in description and 'null' in description
 
     asyncio.run(check())
+
+
+@pytest.mark.parametrize('single_tab', [False, True])
+@pytest.mark.parametrize('heading_ids', [None, ['parent']])
+def test_read_discloses_tab_count_without_extra_discovery(
+    tabs, mock_docs, single_tab, heading_ids,
+):
+    """Heading partialness never hides the existence of other tabs."""
+    if single_tab:
+        tabs['tabs'] = tabs['tabs'][:1]
+        tabs['tabs'][0]['childTabs'] = []
+    result = call('docs_read', doc_id='example', heading_ids=heading_ids)
+    assert not result.is_error
+    assert result.structured_content['tab_count'] == (1 if single_tab else 3)
+    assert result.structured_content['partial'] == (heading_ids is not None)
+    assert result.structured_content['tab_id'] == 'first'
+    mock_docs.get.assert_called_once()
+    mock_docs.batchUpdate.assert_not_called()
+
+
+@pytest.mark.parametrize('tab_id', [None, 'nested'])
+@pytest.mark.parametrize('tool', [
+    'docs_tables_list', 'docs_table_read', 'docs_table_snapshot',
+    'docs_table_patch', 'docs_table_format', 'docs_table_structure',
+])
+@pytest.mark.usefixtures('tabs')
+def test_table_responses_identify_effective_tab(mock_docs, tool, tab_id):
+    """All table receipts expose the selected tab without decoding tokens."""
+    listing = table_read.tables_list('example', tab_id=tab_id)
+    reference = listing.tables[0].table_ref
+    fields = (['cell.background_color'] if tool == 'docs_table_format'
+              else ['content', 'text_style'])
+    snapshot = table_snapshots.snapshot('example', reference, ['A1'], fields,
+                                        tab_id=tab_id)
+    arguments = {'doc_id': 'example', 'tab_id': tab_id}
+    if tool != 'docs_tables_list':
+        arguments['table_ref'] = reference
+    if tool == 'docs_table_snapshot':
+        arguments['cells'] = ['A1']
+    if tool in {'docs_table_patch', 'docs_table_format',
+                'docs_table_structure'}:
+        arguments['base_token'] = snapshot.base_token
+    if tool == 'docs_table_patch':
+        arguments['changes'] = [{'address': 'A1', 'markdown': 'new'}]
+    elif tool == 'docs_table_format':
+        arguments['changes'] = {'cells': [{'address': 'A1',
+                                           'background_color': '#112233'}]}
+    elif tool == 'docs_table_structure':
+        arguments['operation'] = {'type': 'insert_rows', 'row': 1,
+                                 'position': 'after'}
+    result = call(tool, **arguments)
+    assert not result.is_error, result.structured_content
+    assert result.structured_content['tab_id'] == (tab_id or 'first')
+    if tool in {'docs_tables_list', 'docs_table_read', 'docs_table_snapshot'}:
+        mock_docs.batchUpdate.assert_not_called()
+
+
+@pytest.mark.usefixtures('tabs')
+def test_tab_mismatch_gives_actionable_recovery_without_writes(mock_docs):
+    """A forgotten selector is recoverable with the existing valid ref."""
+    listing = table_read.tables_list('example', tab_id='second')
+    reference = listing.tables[0].table_ref
+    result = call('docs_table_read', doc_id='example', table_ref=reference)
+    assert result.is_error
+    error = result.structured_content
+    assert error['code'] == 'TAB_MISMATCH'
+    assert "tab_id='first'" in error['description']
+    assert "tab_id='second'" in error['suggested_action']
+    assert error['committed_batches'] == 0
+    recovered = call('docs_table_read', doc_id='example',
+                     table_ref=reference, tab_id='second')
+    assert not recovered.is_error
+    assert recovered.structured_content['tab_id'] == 'second'
+    mock_docs.batchUpdate.assert_not_called()
+
+
+def test_page_selector_error_precedes_revision_error(tabs):
+    """Explain the wrong tab even if another edit also aged the cursor."""
+    page = table_read.tables_list('example', limit=1, tab_id='second')
+    tabs['revisionId'] = 'changed'
+    with pytest.raises(ToolFailureError) as caught:
+        table_read.tables_list('example', limit=1,
+                               page_token=page.next_page_token)
+    assert caught.value.failure.code == 'TAB_MISMATCH'
+    assert "tab_id='second'" in caught.value.failure.suggested_action
 
 
 @pytest.mark.parametrize('remove', [False, True])

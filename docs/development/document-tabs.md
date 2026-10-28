@@ -15,6 +15,11 @@ includes body content. It does not promise reduced API transfer or caching.
 `docs_get_tree` also returns this complete compact inventory in `tabs`,
 alongside the selected tab's outline. It reuses the same native snapshot and
 makes no additional Google API request for tab discovery.
+Single-tab calls can omit `tab_id` throughout. A different tab requires its
+own outline/heading IDs and an explicit selector on subsequent calls;
+selection is stateless. The shared parameter schema documents these rules.
+`docs_read.tab_count` counts root and nested tabs without an extra request;
+`partial` continues to describe heading selection within the chosen tab.
 
 Guarded text edits retain the chosen tab across revision retries, including
 when the original call omitted `tab_id`. Ranges, locations, table locations
@@ -27,7 +32,10 @@ The native criteria contract is documented in Google's
 Table position refs, cell refs, snapshot expectations and pagination tokens
 carry the actual tab ID. Every table call resolves its explicit/default tab
 before validating those references. A mismatch fails even if both tabs have
-identical content, heading IDs and geometry. Structural write receipts refresh
+identical content, heading IDs and geometry. Every table response returns
+the effective `tab_id`. A reference/selector mismatch returns `TAB_MISMATCH`
+with both IDs and selector-specific recovery, before cursor revision checks;
+it does not imply the reference's structure changed. Structural receipts refresh
 their references in the committed tab. Revision IDs and strict table CAS are
 still document-wide, so unrelated-tab writes can require a retry.
 

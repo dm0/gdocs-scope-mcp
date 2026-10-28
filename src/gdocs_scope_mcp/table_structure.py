@@ -104,6 +104,7 @@ class StructureResponse(BaseModel):
 
     ok: Literal[True] = True
     document_id: str
+    tab_id: str | None = None
     previous_table_ref: str
     table_ref: str | None
     revision_id: str | None
@@ -271,7 +272,8 @@ def apply_structure(doc_id, table_ref, base_token, operation, *, tab_id=None):
         if merging:
             updated = refreshed_reference(doc_id, token, revision)
         return StructureResponse(
-            document_id=doc_id, previous_table_ref=table_ref,
+            document_id=doc_id, tab_id=document.get('_mcp_tab_id'),
+            previous_table_ref=table_ref,
             table_ref=updated, revision_id=revision, operation=operation.type,
             affected_count=(len(changed) if merging else
                             getattr(operation, 'count', 1)),

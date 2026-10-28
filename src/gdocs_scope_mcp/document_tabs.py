@@ -17,6 +17,11 @@ TabId = Annotated[
         min_length=1,
         max_length=MAX_TAB_ID_LENGTH,
         pattern=r'^\S+$',
+        description='Tab ID from docs_get_tree.tabs or docs_tabs_list. '
+        'Omit or pass null for the first root tab; no selector is needed '
+        'for a single-tab document. Root and nested IDs are supported. '
+        'When switching to another tab, pass its ID on subsequent calls. '
+        'Explicit missing IDs fail without fallback.',
     ),
 ]
 
@@ -40,6 +45,24 @@ def walk(tabs, parent=None, depth=0):
         yield from walk(
             tab.get('childTabs', []), tab['tabProperties']['tabId'], depth + 1
         )
+
+
+def require_matching_tab(expected, actual):
+    """Explain a tab mismatch without suggesting the layout changed."""
+    if expected == actual:
+        return
+    action = (f'Repeat this call with tab_id={expected!r}. '
+              if expected is not None else
+              'Refresh the reference from the intended tab. ')
+    raise ToolFailureError(EditFailedResponse(
+        code='TAB_MISMATCH',
+        description=f'The reference belongs to tab_id={expected!r}, '
+        f'but this call selected tab_id={actual!r}. '
+        'An omitted tab_id selects the first root tab.',
+        suggested_action=action + 'If you intended the currently selected '
+        'tab, call docs_tables_list in that tab and use its references. '
+        'Do not modify reference or snapshot tokens.',
+    ))
 
 
 def select(document, tab_id=None):

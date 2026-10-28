@@ -80,6 +80,7 @@ class SnapshotResponse(BaseModel):
     """Issue or validate expectations for selected positional cells."""
 
     document_id: str
+    tab_id: str | None = None
     table_ref: str
     revision_id: str
     base_token: str
@@ -207,7 +208,8 @@ def snapshot(doc_id, table_ref, cells, fields, base_token=None, *,
                     get_settings().table_snapshot_ttl_seconds),
     })
     return SnapshotResponse(
-        document_id=doc_id, table_ref=table_ref,
+        document_id=doc_id, tab_id=document.get('_mcp_tab_id'),
+        table_ref=table_ref,
         revision_id=document['revisionId'], base_token=encode(issued),
         expires_at=issued.expires, fields=requested, cells=locations,
         validated=baseline is not None,

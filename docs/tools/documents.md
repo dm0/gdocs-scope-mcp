@@ -13,6 +13,14 @@ include `tab_id`. Revision IDs remain document-wide. Even native replace-all
 is restricted to the selected tab. Drive document listing/creation and
 comment-thread operations remain document-wide.
 
+Start with `docs_get_tree(doc_id)`: one call returns the first tab's headings
+and the complete tab inventory. If there is one tab, continue reading and
+editing with `tab_id` omitted. No separate `docs_tabs_list` call is needed.
+For several tabs, reuse this outline for the first tab. To work in another
+tab, call `docs_get_tree(doc_id, tab_id=...)` to obtain its own heading IDs,
+then retain that `tab_id` on subsequent calls. Selection is stateless: omitting
+`tab_id` always chooses the first tab, even after a call selected another one.
+
 ### docs_tabs_list
 
 ```text
@@ -22,11 +30,12 @@ docs_tabs_list(doc_id)
 Return `document_id`, `title`, `revision_id`, `default_tab_id`, and a flat
 `tabs` array. Each entry has `tab_id`, `title`, `parent_tab_id`, `depth` and
 sibling `index`. Entries follow document order, parents before children.
-Discovery performs no writes. Use these IDs in subsequent tool calls:
+Discovery performs no writes. This tool is optional when only tab metadata
+is needed; `docs_get_tree` already includes the same inventory:
 
 ```python
-docs_tabs_list(doc_id="...")
-docs_read(doc_id="...", tab_id="tab-id-from-discovery")
+docs_get_tree(doc_id="...")
+docs_read(doc_id="...")  # Usual single-tab path; no extra discovery needed.
 ```
 
 ## Shared insertion options
@@ -96,13 +105,20 @@ Return document content as `sections: [{heading_id, markdown}]`, alongside
 `unknown_heading_ids`, and `partial`. This replaces the former `subset_md` field;
 use each section's `markdown` and explicit `heading_id` instead.
 Pass heading IDs from the outline to return only those section subtrees,
-including their nested subsections. Omit `heading_ids` to read the whole document.
+including their nested subsections. Omit `heading_ids` to read the whole
+selected tab.
 Heading lines include HTML anchors carrying their structural IDs.
 
-Omitted or null `heading_ids` returns the whole document (`partial=false`,
+Omitted or null `heading_ids` returns the whole selected tab (`partial=false`,
 `selected_headings=null`), including any preamble before the first heading as
 an entry with `heading_id=null`. A document without headings has only that
 preamble entry; an empty document may have no sections.
+
+`tab_count` is the total number of root and nested tabs, including the selected
+one. One means this is the document's only tab; zero denotes unavailable tab
+metadata in a legacy response. `partial` concerns heading selection within
+the selected tab: `partial=false` does not mean all tabs were read. Use
+`docs_get_tree` for names/IDs if `tab_count` indicates other tabs exist.
 
 An explicit empty list returns no sections (`partial=true`,
 `selected_headings=[]`). Other selections return effective root IDs and their
@@ -204,7 +220,7 @@ docs_search_replace(
     heading_id="heading-id-from-outline",
 )
 
-# Replace all occurrences (whole document, literal search only)
+# Replace all occurrences (selected tab, literal search only)
 docs_search_replace(doc_id="...", find="ACME Corp", replace="Initech", occurrence=0)
 
 # Regex replace
