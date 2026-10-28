@@ -5,7 +5,8 @@ from .table_style_state import cell_at, property_state
 from .table_tokens import digest
 
 
-def deletion_state(document, entry, row, column):
+def deletion_state(document, entry, row, column, *, logical_column=None,
+                   borders=None):
     """Protect a removed cell, its metadata and effective formatting."""
     cell = cell_at(entry, row, column)
     table = entry.item['table']
@@ -68,7 +69,11 @@ def deletion_state(document, entry, row, column):
         _normalized(cell),
         _normalized(extra), named, sorted(ranges), styles,
         table['tableRows'][row].get('tableRowStyle', {}),
-        columns[column] if column < len(columns) else {},
-        [property_state(entry, row, column, 'cell.border_' + side)
-         for side in ('top', 'bottom', 'left', 'right')],
+        columns[logical_column if logical_column is not None else column]
+        if (logical_column if logical_column is not None else column) < len(
+            columns) else {},
+        borders if borders is not None else [
+            property_state(entry, row, column, 'cell.border_' + side)
+            for side in ('top', 'bottom', 'left', 'right')
+        ],
     ])

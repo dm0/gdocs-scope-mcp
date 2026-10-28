@@ -46,8 +46,9 @@ well suited to large Google Docs with structured headings.
   guarded batch. Property-level expectations allow independent text and style
   edits, including changes to different borders of the same cell.
 - **Change table structure safely.** Insert or delete rows and columns, or
-  explicitly remove a table. Deletion expectations protect removed content;
-  unrelated text edits can proceed through bounded revision retries.
+  explicitly remove a table. Merge and unmerge complete cell rectangles with
+  protected content and formatting. Unrelated text edits can proceed through
+  bounded revision retries.
 - **Insert images.** Use Markdown or HTML image references, or explicitly enable
   local image uploads through temporary, link-shared Google Drive files that
   are cleaned up after insertion.

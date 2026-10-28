@@ -12,9 +12,17 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from .revision_guards import MAX_ATTEMPTS, RevisionRaceError, submit
 from .table_deletion_state import deletion_state
+from .table_merge import prepare, refreshed_reference
 from .table_refs import Layout
 from .table_snapshots import resolve_cells, validate_baseline
-from .table_tokens import address, coordinates, decode, encode, fail
+from .table_tokens import (
+    CellAddress,
+    address,
+    coordinates,
+    decode,
+    encode,
+    fail,
+)
 
 log = logging.getLogger(__name__)
 Count = Annotated[int, Field(strict=True, ge=1, le=100)]
@@ -68,8 +76,25 @@ class DeleteTable(Operation):
     type: Literal['delete_table']
 
 
+class MergeCells(Operation):
+    """Concatenate complete rectangular cells in native row-major order."""
+
+    type: Literal['merge_cells']
+    start_cell: CellAddress
+    end_cell: CellAddress
+
+
+class UnmergeCells(Operation):
+    """Split complete merged cells, retaining their contents in their heads."""
+
+    type: Literal['unmerge_cells']
+    start_cell: CellAddress
+    end_cell: CellAddress
+
+
 StructureOperation = Annotated[
-    InsertRows | InsertColumns | DeleteRows | DeleteColumns | DeleteTable,
+    InsertRows | InsertColumns | DeleteRows | DeleteColumns | DeleteTable |
+    MergeCells | UnmergeCells,
     Field(discriminator='type'),
 ]
 
@@ -91,6 +116,12 @@ class StructureResponse(BaseModel):
     committed_batches: Literal[1] = 1
     snapshots_invalidated: Literal[True] = True
     section_references_invalidated: Literal[True] = True
+    affected_cells: list[str] = Field(default_factory=list)
+    result_head_cell: str | None = None
+    content_policy: Literal[
+        'row_major_paragraphs', 'keep_in_heads',
+    ] | None = None
+    reference_refresh_required: bool = False
 
 
 def footprint(entry, operation):
@@ -206,18 +237,26 @@ def apply_structure(doc_id, table_ref, base_token, operation):
         validate_baseline(token, baseline, [], baseline.fields, subset=True)
         document = _fetch(doc_id)
         entry = Layout(document).resolve(token)
-        selected, _, _ = footprint(entry, operation)
-        available = resolve_cells(document, token, selected or ['A1'])
-        for a in selected:
-            if a not in baseline.cells or 'deletion' not in baseline.cells[a]:
-                fail('INVALID_REFERENCE', 'Snapshot needs deletion '
-                     'expectations for every removed cell.')
-            r, c, _ = available[a]
-            if baseline.cells[a]['deletion'] != deletion_state(
-                document, entry, r, c,
-            ):
-                fail('EDIT_CONFLICT', 'Removed cell content/metadata changed.')
-        requests, updated, rows, columns = plan(document, token, operation)
+        merging = isinstance(operation, (MergeCells, UnmergeCells))
+        changed = []
+        if merging:
+            requests, changed = prepare(document, token, baseline, operation)
+            updated, selected = None, []
+            rows, columns = (entry.item['table'][key]
+                             for key in ('rows', 'columns'))
+        else:
+            selected, _, _ = footprint(entry, operation)
+            available = resolve_cells(document, token, selected or ['A1'])
+            for a in selected:
+                if 'deletion' not in baseline.cells.get(a, {}):
+                    fail('INVALID_REFERENCE', 'Snapshot needs deletion '
+                         'expectations for every removed cell.')
+                r, c, _ = available[a]
+                if baseline.cells[a]['deletion'] != deletion_state(
+                    document, entry, r, c,
+                ):
+                    fail('EDIT_CONFLICT', 'Removed content/metadata changed.')
+            requests, updated, rows, columns = plan(document, token, operation)
         try:
             result = submit(docs_edit._get_service(), doc_id, requests,
                             document['revisionId'], force_required=True)
@@ -228,13 +267,24 @@ def apply_structure(doc_id, table_ref, base_token, operation):
                      'attempt=%s', attempt)
             time.sleep(0.05 * (2 ** (attempt - 1)))
             continue
+        revision = result.get('writeControl', {}).get('requiredRevisionId')
+        if merging:
+            updated = refreshed_reference(doc_id, token, revision)
         return StructureResponse(
             document_id=doc_id, previous_table_ref=table_ref,
-            table_ref=updated, revision_id=result.get('writeControl', {}).get(
-                'requiredRevisionId'), operation=operation.type,
-            affected_count=getattr(operation, 'count', 1),
+            table_ref=updated, revision_id=revision, operation=operation.type,
+            affected_count=(len(changed) if merging else
+                            getattr(operation, 'count', 1)),
             deleted_cell_count=len(selected), rows=rows, columns=columns,
             attempts=attempt,
+            affected_cells=changed,
+            result_head_cell=(operation.start_cell if isinstance(
+                operation, MergeCells,
+            ) else None),
+            content_policy=('row_major_paragraphs' if isinstance(
+                operation, MergeCells,
+            ) else 'keep_in_heads' if merging else None),
+            reference_refresh_required=merging and updated is None,
         )
     return fail('REVISION_RETRY_EXHAUSTED', 'The structural batch lost three '
                 'strict revision races; retry later with the same baseline '

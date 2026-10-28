@@ -165,10 +165,18 @@ table_format.submit = _format_failure
 
 def _structure_failure(service, doc_id, requests, *args, **kwargs):
     """Inject an invalid request into one armed structural batch."""
-    return _with_fault(
+    result = _with_fault(
         _submit_structure, _structure_fault, service, doc_id, requests,
         *args, **kwargs,
     )
+    with _gate_lock:
+        pause = (_gate['armed'] and _gate['kind'] == 'structure'
+                 and doc_id == _document_id())
+        if pause:
+            _gate.update(armed=False, ready=True)
+    if pause and not _release.wait(30):
+        raise TimeoutError('Test structure receipt gate was not released')
+    return result
 
 
 table_structure.submit = _structure_failure
@@ -218,6 +226,16 @@ def probe_pause_table_lookup() -> dict:
     with _gate_lock:
         _release.clear()
         _gate.update(armed=True, ready=False, kind='table')
+    return {'armed': True}
+
+
+@mcp.tool
+def probe_pause_structure_receipt() -> dict:
+    """Pause after one structural commit, before its reference readback."""
+    _document_id()
+    with _gate_lock:
+        _release.clear()
+        _gate.update(armed=True, ready=False, kind='structure')
     return {'armed': True}
 
 

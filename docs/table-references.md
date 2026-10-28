@@ -62,8 +62,11 @@ flags. Prepare changes using this state, not an earlier unprotected read.
 Clipped previews are not complete replacement input; hashes cover full native
 state regardless of clipping.
 
-Snapshots require verified unmerged geometry without nested tables in the
-target's cells. Reading unsupported tables remains available with warnings.
+Ordinary snapshot groups require verified unmerged geometry without nested
+tables in the target's cells. The exclusive `merge` group also accepts verified
+merged geometry, using real logical heads and rejecting covered addresses.
+Returned cells expose their logical row/column spans.
+Reading unsupported tables remains available with warnings.
 There is no 200-cell binding limit; the existing geometry verifier supports
 up to 100000 logical slots, and each snapshot selects at most 100 cells.
 
@@ -75,6 +78,7 @@ up to 100000 logical slots, and each snapshot selects at most 100 cells.
 | `cell_style` | Native tableCellStyle properties |
 | `structure` | Selected cell paragraph element kinds and spans, without indices |
 | `deletion` | Full native removed-cell state, referenced metadata, effective named styles, intersecting named ranges, row/column/table styles and both sides of borders |
+| `merge` | Full head and covered physical-member state, referenced metadata, enclosing direction and each adjacent border segment; used exclusively |
 | `cell.background_color`, `cell.vertical_alignment`, `cell.padding_*` | One native cell property |
 | `cell.border_top`, `cell.border_bottom`, `cell.border_left`, `cell.border_right` | Whole native border plus the neighbor's opposite border, when present |
 | `paragraph.alignment` | Distinct effective paragraph alignments in the cell, including named-style inheritance |
@@ -128,12 +132,15 @@ for typed properties, units, partial-border limitations and pinning.
 ## Structural operations
 
 `docs_table_structure` accepts one typed operation to insert/delete consecutive
-rows or columns or explicitly delete a whole table. Existing positions and
+rows or columns, explicitly delete a whole table, or merge/unmerge complete
+cell rectangles. Existing positions and
 insertion boundaries are interpreted only after the structural inventory is
 verified. Unrelated native index shifts are replanned. A changed inventory,
 including insertion at the same boundary, fails rather than guessing which
-row/column the agent intended. Top-level unmerged tables without nested cell
-tables are supported initially; whole-axis deletion requires `delete_table`.
+row/column the agent intended. Row/column/table operations require top-level
+unmerged tables without nested cell tables; whole-axis deletion requires
+`delete_table`. Merge/unmerge support verified merged grids with complete
+rectangle coverage and separate `merge` expectations for every affected head.
 
 Insertion uses any current snapshot for the table and checks no content/style
 fields. Deletion requires the `deletion` field for every removed cell, with a
@@ -144,14 +151,19 @@ Neither text matching nor native indices provide row identity.
 All native requests for a call commit in one strict revision-guarded batch.
 Only confirmed revision rejection can trigger a retry, at most three attempts.
 The original deletion expectations are retained, and unknown outcomes are never
-replayed. Returned structural refs are derived from the planned shape and
-inventory before writing, so later collaborator edits cannot cause a receipt
-to reference an unintended table. Refs describe the committed shape; all old
+replayed. Row/column refs are derived from the planned shape/inventory before
+writing. Merge/unmerge refs use a post-write read only at the confirmed revision;
+failed/interleaved reads return a successful committed receipt requiring
+rediscovery rather than guessing another table or replaying the operation.
+Refs describe the committed shape; all old
 snapshots and references in the changed direct section need refreshing.
 The receipt includes dimensions, committed revision and explicit invalidation
 flags rather than silently issuing a new baseline. See the
 [structural contract](tools/tables.md#docs_table_structure)
 for inputs, limits and recovery.
+
+See [merged-cell implementation notes](development/table-cell-merging.md) for
+head/placeholder ownership, native content rules and supported transformations.
 
 ## Portability and integrity
 
