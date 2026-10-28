@@ -15,6 +15,7 @@ CellAddress = Annotated[
 ]
 SnapshotField = Literal[
     'content', 'text_style', 'paragraph_style', 'cell_style', 'structure',
+    'deletion',
     'cell.background_color', 'cell.vertical_alignment',
     'cell.padding_top', 'cell.padding_bottom',
     'cell.padding_left', 'cell.padding_right',
@@ -23,7 +24,7 @@ SnapshotField = Literal[
     'row.min_height', 'table.header_rows',
 ]
 SnapshotFields = Annotated[
-    list[SnapshotField], Field(min_length=1, max_length=19),
+    list[SnapshotField], Field(min_length=1, max_length=20),
 ]
 SnapshotToken = Annotated[
     str, Field(strict=True, min_length=1, max_length=262144),

@@ -2,8 +2,8 @@
 
 Issue [#27](https://github.com/dm0/gdocs-scope-mcp/issues/27) supplies positional
 references and expected-state primitives used by #28's `docs_table_patch`
-and #29's `docs_table_format`.
-Structural editing remains separate work. Reading, reference
+and #29's `docs_table_format`. Issue #30 adds `docs_table_structure`.
+Reading, reference
 creation and snapshot validation are entirely read-only, including metadata
 and local state. No named ranges, local registry or signing key are used.
 
@@ -74,6 +74,7 @@ up to 100000 logical slots, and each snapshot selects at most 100 cells.
 | `paragraph_style` | Paragraph styles, bullets and referenced named/list styles |
 | `cell_style` | Native tableCellStyle properties |
 | `structure` | Selected cell paragraph element kinds and spans, without indices |
+| `deletion` | Full native removed-cell state, referenced metadata, effective named styles, intersecting named ranges, row/column/table styles and both sides of borders |
 | `cell.background_color`, `cell.vertical_alignment`, `cell.padding_*` | One native cell property |
 | `cell.border_top`, `cell.border_bottom`, `cell.border_left`, `cell.border_right` | Whole native border plus the neighbor's opposite border, when present |
 | `paragraph.alignment` | Distinct effective paragraph alignments in the cell, including named-style inheritance |
@@ -123,6 +124,34 @@ formatting commits in one strictly guarded batch with the same bounded retry
 and unknown-outcome rules as cell replacement. See the
 [formatting contract](../README.md#docs_table_formatdoc_id-table_ref-base_token-changes)
 for typed properties, units, partial-border limitations and pinning.
+
+## Structural operations
+
+`docs_table_structure` accepts one typed operation to insert/delete consecutive
+rows or columns or explicitly delete a whole table. Existing positions and
+insertion boundaries are interpreted only after the structural inventory is
+verified. Unrelated native index shifts are replanned. A changed inventory,
+including insertion at the same boundary, fails rather than guessing which
+row/column the agent intended. Top-level unmerged tables without nested cell
+tables are supported initially; whole-axis deletion requires `delete_table`.
+
+Insertion uses any current snapshot for the table and checks no content/style
+fields. Deletion requires the `deletion` field for every removed cell, with a
+maximum of 100 removed cells per call. Other cells' content remains independent;
+table-wide and associated row/column style dependencies are conservative.
+Neither text matching nor native indices provide row identity.
+
+All native requests for a call commit in one strict revision-guarded batch.
+Only confirmed revision rejection can trigger a retry, at most three attempts.
+The original deletion expectations are retained, and unknown outcomes are never
+replayed. Returned structural refs are derived from the planned shape and
+inventory before writing, so later collaborator edits cannot cause a receipt
+to reference an unintended table. Refs describe the committed shape; all old
+snapshots and references in the changed direct section need refreshing.
+The receipt includes dimensions, committed revision and explicit invalidation
+flags rather than silently issuing a new baseline. See the
+[structural contract](../README.md#docs_table_structuredoc_id-table_ref-base_token-operation)
+for inputs, limits and recovery.
 
 ## Portability and integrity
 
@@ -192,3 +221,19 @@ uv run --locked pytest -q tests/test_live_table_format.py
 The preview is exported to `/tmp/gdocs-scope-mcp-table-format-preview.pdf`
 before the fixture restores the document body. It is a verification artifact,
 not a persistent change to the test document.
+
+Structural tests cover typed operations, bounds, complete deletion footprints,
+new references, native metadata conflicts, index shifts, bounded contention
+and unknown outcomes. Live tests verify all operations, duplicate neighboring
+tables, atomic failure, insertion/text races, deletion overlap and identical
+insertion boundaries using independent processes:
+
+```bash
+uv run --locked pytest -q tests/test_table_structure.py
+```
+
+With the authorized document environment set:
+
+```bash
+uv run --locked pytest -q tests/test_live_table_structure.py
+```

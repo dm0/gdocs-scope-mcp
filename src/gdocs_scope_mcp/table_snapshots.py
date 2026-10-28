@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 
 from .models import GoogleDocumentTableCell
 from .settings import get_settings
+from .table_deletion_state import deletion_state
 from .table_refs import Layout
 from .table_style_state import property_state, property_value
 from .table_tokens import address, decode, digest, encode, fail
@@ -120,12 +121,15 @@ def resolve_cells(document, table, selected):
 def validate_states(document, baseline, available):
     """Compare only affected cells and the baseline's explicit field groups."""
     entry = (Layout(document).resolve(baseline)
-             if any('.' in f for f in baseline.fields) else None)
+             if any('.' in f or f == 'deletion' for f in baseline.fields)
+             else None)
     for selected, (row, column, cell) in available.items():
         state = cell_state(document, cell)
         if entry is not None:
             state.update({f: property_state(entry, row, column, f, document)
                           for f in baseline.fields if '.' in f})
+        if 'deletion' in baseline.fields:
+            state['deletion'] = deletion_state(document, entry, row, column)
         expected = baseline.cells[selected]
         if (set(expected) != set(baseline.fields) or
                 any(expected[field] != state[field]
@@ -151,7 +155,7 @@ def snapshot(doc_id, table_ref, cells, fields, base_token=None):
         validate_states(document, baseline, available)
     model = _model(document)
     entry = (Layout(document).resolve(table)
-             if any('.' in f for f in requested) else None)
+             if any('.' in f or f == 'deletion' for f in requested) else None)
     states, locations = {}, []
     for selected in cells:
         r, c, cell = available[selected]
@@ -162,6 +166,8 @@ def snapshot(doc_id, table_ref, cells, fields, base_token=None):
                           for f in requested if '.' in f}
             state.update({f: property_state(entry, r, c, f, document)
                           for f in formatting})
+        if 'deletion' in requested:
+            state['deletion'] = deletion_state(document, entry, r, c)
         states[selected] = {field: state[field] for field in requested}
         markup = GoogleDocumentTableCell.model_validate(
             deepcopy(cell),

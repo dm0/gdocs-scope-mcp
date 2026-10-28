@@ -13,6 +13,7 @@ from gdocs_scope_mcp import (
     table_format,
     table_insertion,
     table_patch,
+    table_structure,
 )
 from gdocs_scope_mcp.server import mcp
 from gdocs_scope_mcp.tool_logging import configure_logging
@@ -95,6 +96,8 @@ _submit_patch = table_patch.submit
 _patch_fault = {'armed': False}
 _submit_format = table_format.submit
 _format_fault = {'armed': False}
+_submit_structure = table_structure.submit
+_structure_fault = {'armed': False}
 
 
 def _paused_read(service, doc_id, **kwargs):
@@ -158,6 +161,26 @@ def _format_failure(service, doc_id, requests, *args, **kwargs):
 
 table_patch.submit = _atomic_failure
 table_format.submit = _format_failure
+
+
+def _structure_failure(service, doc_id, requests, *args, **kwargs):
+    """Inject an invalid request into one armed structural batch."""
+    return _with_fault(
+        _submit_structure, _structure_fault, service, doc_id, requests,
+        *args, **kwargs,
+    )
+
+
+table_structure.submit = _structure_failure
+
+
+@mcp.tool
+def probe_fail_next_structure() -> dict:
+    """Arm a single structural atomic-failure check in this test server."""
+    _document_id()
+    with _gate_lock:
+        _structure_fault['armed'] = True
+    return {'armed': True}
 
 
 @mcp.tool
