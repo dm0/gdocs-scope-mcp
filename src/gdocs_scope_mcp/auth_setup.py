@@ -13,8 +13,8 @@ from urllib.parse import urlsplit
 from google.auth.exceptions import GoogleAuthError
 
 from gdocs_scope_mcp.google_api import oauth
+from gdocs_scope_mcp.settings import default_token_path, get_settings
 
-DEFAULT_TOKEN_PATH = Path.home() / '.google-docs-mcp' / 'token.json'
 SCOPES = [
     'https://www.googleapis.com/auth/documents',
     'https://www.googleapis.com/auth/drive',
@@ -158,7 +158,8 @@ def main():
     parser.add_argument('--client-id', help='Custom Desktop OAuth client ID')
     parser.add_argument('--client-secret',
                         help='Optional secret for a custom legacy client')
-    parser.add_argument('--out', '-o', type=Path, default=DEFAULT_TOKEN_PATH)
+    parser.add_argument('--out', '-o', type=Path, default=default_token_path(),
+                        help='Token output path (default: %(default)s)')
     modes = parser.add_mutually_exclusive_group()
     modes.add_argument('--headless', action='store_true')
     modes.add_argument('--prepare', action='store_true',
@@ -182,6 +183,7 @@ def main():
 
     try:
         client_id = args.client_id or _first_env(*CLIENT_ID_ENV_ALIASES)
+        client_id = client_id or get_settings().client_id
         secret = args.client_secret or _first_env(*CLIENT_SECRET_ENV_ALIASES)
         if args.credentials:
             config = load_client_config(args.credentials.expanduser())

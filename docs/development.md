@@ -104,7 +104,7 @@ For a Codex STDIO connection, add the variable to the server's environment:
 
 ```toml
 [mcp_servers.gdocs_scope.env]
-GOOGLE_DOCS_MCP_TOKEN = "/home/you/.google-docs-mcp/token.json"
+GOOGLE_DOCS_MCP_TOKEN = "/home/you/.config/gdocs-scope-mcp/token.json"
 GOOGLE_DOCS_MCP_LOG_LEVEL = "INFO"
 ```
 

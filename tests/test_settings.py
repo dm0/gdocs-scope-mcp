@@ -15,7 +15,8 @@ from gdocs_scope_mcp.settings import config_path, get_settings
 def isolated_settings(monkeypatch, tmp_path):
     """Keep user settings and the process cache outside each test."""
     for name in (
-        'GOOGLE_DOCS_MCP_CONFIG', 'GOOGLE_DOCS_MCP_CODE_FONT_FAMILY',
+        'GOOGLE_DOCS_MCP_CONFIG', 'GOOGLE_DOCS_MCP_CLIENT_ID',
+        'GOOGLE_DOCS_MCP_CODE_FONT_FAMILY',
         'GOOGLE_DOCS_MCP_INLINE_CODE_COLOR',
         'GOOGLE_DOCS_MCP_WRITE_REVISION_MODE',
         'GOOGLE_DOCS_MCP_TABLE_SNAPSHOT_TTL_SECONDS',

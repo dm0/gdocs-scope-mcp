@@ -102,7 +102,8 @@ See the [tool reference](docs/tools/documents.md) for operation-specific details
    ```
 
    Set `GOOGLE_DOCS_MCP_TOKEN` to the absolute path of the saved token file
-   (default: `~/.google-docs-mcp/token.json`).
+   (default: `$XDG_CONFIG_HOME/gdocs-scope-mcp/token.json`, or
+   `~/.config/gdocs-scope-mcp/token.json` when unset).
 
 See [Getting started](docs/getting-started.md) for client configuration examples,
 headless authentication, scopes and migration.

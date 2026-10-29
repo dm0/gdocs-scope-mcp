@@ -21,8 +21,10 @@ from google.oauth2.credentials import Credentials
 TOKEN_URI = 'https://oauth2.googleapis.com/token'
 CALLBACK_PATH = '/oauth2/callback'
 DEFAULT_TIMEOUT = 300
-# Set only after registering and live-verifying the project's Desktop client.
-PROJECT_CLIENT_ID: str | None = None
+# Public Desktop client ID; no client secret is distributed.
+PROJECT_CLIENT_ID = (
+    '988487172113-bf649u95noqubdtn4jcvrlfdmd37sii5.apps.googleusercontent.com'
+)
 
 
 class AuthorizationError(ValueError):
@@ -163,8 +165,10 @@ def exchange_code(session, code, client_secret=None):
         timeout=30,
     )
     if response.status != HTTPStatus.OK:
+        reason = token_error_reason(response.data)
         raise AuthorizationError(
-            'Google rejected the PKCE token exchange. Start a new session; '
+            f'Google rejected the PKCE token exchange ({reason}). '
+            'Start a new session; '
             'check the Desktop client registration. No fallback was attempted.'
         )
     try:
@@ -175,6 +179,27 @@ def exchange_code(session, code, client_secret=None):
     except (ValueError, TypeError) as exc:
         raise AuthorizationError('Google returned invalid tokens.') from exc
     return tokens
+
+
+def token_error_reason(payload):
+    """Expose only recognized OAuth errors, never arbitrary response text."""
+    try:
+        data = json.loads(payload)
+    except (ValueError, TypeError):
+        return 'unrecognized response'
+    if not isinstance(data, dict):
+        return 'unrecognized response'
+    if data.get('error_description') == 'client_secret is missing.':
+        return 'client_secret is required by Google for this client'
+    recognized = {
+        'invalid_request', 'invalid_client', 'invalid_grant',
+        'unauthorized_client', 'unsupported_grant_type', 'invalid_scope',
+        'access_denied', 'temporarily_unavailable', 'server_error',
+    }
+    error = data.get('error')
+    return error if isinstance(error, str) and error in recognized else (
+        'unrecognized response'
+    )
 
 
 class PublicClientCredentials(Credentials):

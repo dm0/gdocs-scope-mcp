@@ -13,6 +13,7 @@ from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 
 from gdocs_scope_mcp.google_api.oauth import PublicClientCredentials
+from gdocs_scope_mcp.settings import default_token_path, get_settings
 
 log = logging.getLogger(__name__)
 
@@ -72,7 +73,7 @@ def load_token() -> dict:
     token_file = os.environ.get('GOOGLE_DOCS_TOKEN_FILE')
     if token_file:
         return json.loads(Path(token_file).read_text())
-    for token_path in STANDALONE_TOKEN_PATHS:
+    for token_path in [default_token_path(), *STANDALONE_TOKEN_PATHS]:
         if token_path.exists():
             return json.loads(token_path.read_text())
     try:
@@ -104,6 +105,7 @@ def load_credentials():
         '_token_uri', 'https://oauth2.googleapis.com/token'
     )
     client_id = client_id or first_env(*CLIENT_ID_ENV_ALIASES)
+    client_id = client_id or get_settings().client_id
     public_client = token_data.get('auth_method') == 'pkce-public'
     if public_client:
         client_secret = None

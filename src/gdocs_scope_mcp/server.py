@@ -20,9 +20,10 @@ Auth (in priority order):
   1. GOOGLE_DOCS_MCP_TOKEN env var   — standalone token (auth_setup.py)
   2. GOOGLE_DRIVE_MCP_TOKEN env var  — backward-compatible alias
   3. GOOGLE_DOCS_TOKEN_FILE env var  — legacy gog alias
-  4. ~/.google-docs-mcp/token.json   — default standalone location
-  5. ~/.google-drive-mcp/token.json  — backward-compatible fallback
-  6. GOG_KEYRING_PASSWORD env var    — auto-export from gog CLI
+  4. $XDG_CONFIG_HOME/gdocs-scope-mcp/token.json (default root: ~/.config)
+  5. ~/.google-docs-mcp/token.json   — backward-compatible fallback
+  6. ~/.google-drive-mcp/token.json  — backward-compatible fallback
+  7. GOG_KEYRING_PASSWORD env var    — auto-export from gog CLI
 
 Setup:
   gdocs-scope-mcp-auth --credentials ~/credentials.json

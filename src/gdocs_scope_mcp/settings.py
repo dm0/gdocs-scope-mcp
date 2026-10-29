@@ -1,4 +1,4 @@
-"""Load editing and formatting settings from JSON and environment."""
+"""Load application settings from JSON and environment."""
 
 
 import os
@@ -25,6 +25,19 @@ FontName = Annotated[
 HexColor = Annotated[str, StringConstraints(pattern=r'^#[0-9a-fA-F]{6}$')]
 
 
+def config_directory() -> Path:
+    """Resolve the application's XDG configuration directory."""
+    configured = os.environ.get('XDG_CONFIG_HOME')
+    root = (Path(configured) if configured and Path(configured).is_absolute()
+            else Path.home() / '.config')
+    return root / 'gdocs-scope-mcp'
+
+
+def default_token_path() -> Path:
+    """Keep new credentials in the application's configuration directory."""
+    return config_directory() / 'token.json'
+
+
 def config_path() -> Path:
     """Find the default config or require an explicitly chosen file."""
     explicit = os.environ.get('GOOGLE_DOCS_MCP_CONFIG')
@@ -37,16 +50,18 @@ def config_path() -> Path:
                 f'GOOGLE_DOCS_MCP_CONFIG file does not exist: {path}'
             )
         return path
-    root = Path(os.environ.get('XDG_CONFIG_HOME') or Path.home() / '.config')
-    return root / 'gdocs-scope-mcp' / 'config.json'
+    return config_directory() / 'config.json'
 
 
 class Settings(BaseSettings):
-    """Configure editing and formatting; environment overrides JSON."""
+    """Configure the application; environment overrides JSON."""
 
     model_config = SettingsConfigDict(
         env_prefix='GOOGLE_DOCS_MCP_', extra='forbid', frozen=True,
     )
+    client_id: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=1),
+    ] | None = None
     write_revision_mode: Literal['required', 'target'] = 'required'
     document_cache_enabled: bool = False
     document_cache_storage: Literal['disk', 'memory'] = 'disk'

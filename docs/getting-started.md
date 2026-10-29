@@ -67,11 +67,11 @@ uvx --from git+https://github.com/dm0/gdocs-scope-mcp \
 ```bash
 uvx --from git+https://github.com/dm0/gdocs-scope-mcp \
   gdocs-scope-mcp-auth --client-id YOUR_DESKTOP_CLIENT_ID \
-  --prepare --session ~/.google-docs-mcp/pending-session.json
+  --prepare --session ~/.config/gdocs-scope-mcp/pending-session.json
 
 # Open the printed URL, consent, then copy the FULL loopback redirect URL.
 uvx --from git+https://github.com/dm0/gdocs-scope-mcp \
-  gdocs-scope-mcp-auth --session ~/.google-docs-mcp/pending-session.json \
+  gdocs-scope-mcp-auth --session ~/.config/gdocs-scope-mcp/pending-session.json \
   --callback-url 'http://127.0.0.1:PORT/oauth2/callback?code=...&state=...'
 ```
 
@@ -99,10 +99,12 @@ POSIX modes do not replace Windows ACLs.
 1. `--credentials /path/to/credentials.json`
 2. `--client-id`
 3. `GOOGLE_DOCS_MCP_CLIENT_ID` (or its legacy Drive alias)
-4. The project-managed Desktop client, when configured in the distribution
+4. `client_id` in the JSON settings file
+5. The project-managed Desktop client
 
-This source snapshot has no registered project client configured yet. Until
-registration and live validation are complete, provide your own Desktop client.
+The distribution includes the project's public Desktop client ID. Run
+`gdocs-scope-mcp-auth` without client options to use it. While its Google Cloud
+project is in Testing, the account used for consent must be an allowed test user.
 
 A secret is optional for a custom client (`--client-secret`, environment, or
 the credentials JSON); existing secret-bearing token files remain supported.
@@ -112,7 +114,26 @@ without PKCE. Tokens marked `pkce-public` ignore ambient secret overrides when
 refreshed. Live acceptance of ID-only login and refresh must be checked against
 the actual registered Desktop client before distributing it as the default.
 
-Token is saved to `~/.google-docs-mcp/token.json` by default. Override with `--out /path/to/token.json`.
+New tokens are saved to `$XDG_CONFIG_HOME/gdocs-scope-mcp/token.json`, falling
+back to `~/.config/gdocs-scope-mcp/token.json` when `XDG_CONFIG_HOME` is absent,
+empty or relative. Override the authorization output with `--out` and point
+the server at that file with `GOOGLE_DOCS_MCP_TOKEN`.
+The session examples above assume the default XDG directory.
+
+The CLI and server share the JSON settings path (including
+`GOOGLE_DOCS_MCP_CONFIG`). To override the built-in client, add:
+
+```json
+{
+  "client_id": "YOUR_DESKTOP_CLIENT_ID.apps.googleusercontent.com"
+}
+```
+
+Existing tokens retain their originating client ID; changing the setting does
+not migrate a refresh token to another client. The server uses configuration
+only when a token file contains no client ID. Legacy default token files in
+`~/.google-docs-mcp/` and `~/.google-drive-mcp/` remain readable after the new
+default location is checked. No old token files are moved or rewritten.
 
 ### Project-managed client distribution
 
@@ -148,7 +169,7 @@ and [Drive scopes](https://developers.google.com/workspace/drive/api/guides/api-
       "command": "uvx",
       "args": ["--from", "git+https://github.com/dm0/gdocs-scope-mcp", "gdocs-scope-mcp"],
       "env": {
-        "GOOGLE_DOCS_MCP_TOKEN": "/Users/you/.google-docs-mcp/token.json"
+        "GOOGLE_DOCS_MCP_TOKEN": "/Users/you/.config/gdocs-scope-mcp/token.json"
       }
     }
   }
@@ -164,7 +185,7 @@ and [Drive scopes](https://developers.google.com/workspace/drive/api/guides/api-
         "command": "uvx",
         "args": ["--from", "git+https://github.com/dm0/gdocs-scope-mcp", "gdocs-scope-mcp"],
         "env": {
-          "GOOGLE_DOCS_MCP_TOKEN": "/home/you/.google-docs-mcp/token.json"
+          "GOOGLE_DOCS_MCP_TOKEN": "/home/you/.config/gdocs-scope-mcp/token.json"
         }
       }
     }
@@ -181,7 +202,7 @@ and [Drive scopes](https://developers.google.com/workspace/drive/api/guides/api-
       "command": "uvx",
       "args": ["--from", "/absolute/path/to/gdocs-scope-mcp", "gdocs-scope-mcp"],
       "env": {
-        "GOOGLE_DOCS_MCP_TOKEN": "/Users/you/.google-docs-mcp/token.json"
+        "GOOGLE_DOCS_MCP_TOKEN": "/Users/you/.config/gdocs-scope-mcp/token.json"
       }
     }
   }
@@ -196,7 +217,7 @@ The old `google-docs-mcp` and `google-drive-mcp` CLI aliases are not installed,
 so this project can coexist with the original package.
 
 Existing `GOOGLE_DOCS_MCP_*` settings, legacy `GOOGLE_DRIVE_MCP_*` aliases,
-and the default token path `~/.google-docs-mcp/token.json` are retained.
+and reading the legacy token path `~/.google-docs-mcp/token.json` are retained.
 Existing credentials can be reused without re-authenticating just for the rename.
 
 ## Scopes

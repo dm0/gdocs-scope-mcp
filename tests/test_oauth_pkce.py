@@ -16,6 +16,17 @@ from google.auth.exceptions import RefreshError
 
 from gdocs_scope_mcp import auth_setup
 from gdocs_scope_mcp.google_api import credentials, oauth
+from gdocs_scope_mcp.settings import default_token_path, get_settings
+
+
+@pytest.fixture(autouse=True)
+def isolated_config(monkeypatch, tmp_path):
+    """Separate client configuration from the developer's actual settings."""
+    monkeypatch.delenv('GOOGLE_DOCS_MCP_CONFIG', raising=False)
+    monkeypatch.setenv('XDG_CONFIG_HOME', str(tmp_path / 'config'))
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
 
 
 @pytest.fixture
@@ -139,6 +150,21 @@ def test_failed_exchange_has_no_fallback_or_sensitive_error(
     request.assert_called_once()
 
 
+@pytest.mark.parametrize('payload,expected', [
+    (b'{"error":"invalid_client","error_description":"secret-value"}',
+     'invalid_client'),
+    (b'{"error":"invalid_request",'
+     b'"error_description":"client_secret is missing."}',
+     'client_secret is required by Google for this client'),
+    (b'{"error":"secret-value"}', 'unrecognized response'),
+    (b'not-json', 'unrecognized response'),
+    (b'[]', 'unrecognized response'),
+])
+def test_token_error_diagnostics_are_allowlisted(payload, expected):
+    """Expose recognized causes without reflecting arbitrary response data."""
+    assert oauth.token_error_reason(payload) == expected
+
+
 @pytest.mark.parametrize('legacy_secret', [None, 'legacy-secret'])
 def test_real_google_auth_refresh_and_reload(
     legacy_secret, tmp_path, monkeypatch,
@@ -237,7 +263,7 @@ def test_headless_cancellation_removes_session(monkeypatch, tmp_path):
     assert not path.exists()
 
 
-@pytest.mark.parametrize('source', ['project', 'env', 'cli', 'file'])
+@pytest.mark.parametrize('source', ['project', 'json', 'env', 'cli', 'file'])
 def test_client_selection_precedence(source, monkeypatch, tmp_path):
     """Explicit clients override defaults without requiring a secret."""
     monkeypatch.setattr(oauth, 'PROJECT_CLIENT_ID', 'project')
@@ -245,6 +271,10 @@ def test_client_selection_precedence(source, monkeypatch, tmp_path):
                  *auth_setup.CLIENT_SECRET_ENV_ALIASES):
         monkeypatch.delenv(name, raising=False)
     args = ['auth']
+    if source in {'json', 'env', 'cli', 'file'}:
+        config = tmp_path / 'config.json'
+        config.write_text('{"client_id":"json"}')
+        monkeypatch.setenv('GOOGLE_DOCS_MCP_CONFIG', str(config))
     if source in {'env', 'cli', 'file'}:
         monkeypatch.setenv('GOOGLE_DOCS_MCP_CLIENT_ID', 'env')
     if source in {'cli', 'file'}:
@@ -258,6 +288,70 @@ def test_client_selection_precedence(source, monkeypatch, tmp_path):
     monkeypatch.setattr(auth_setup, 'run_local_flow', run)
     auth_setup.main()
     assert run.call_args.args[:2] == (source, None)
+
+
+def test_cli_default_output_follows_xdg(monkeypatch, tmp_path):
+    """New authorization writes under XDG without touching legacy paths."""
+    monkeypatch.setenv('XDG_CONFIG_HOME', str(tmp_path))
+    monkeypatch.setattr(auth_setup.sys, 'argv', ['auth', '--client-id', 'id'])
+    run = Mock()
+    monkeypatch.setattr(auth_setup, 'run_local_flow', run)
+    auth_setup.main()
+    assert run.call_args.args[2] == tmp_path / 'gdocs-scope-mcp/token.json'
+
+
+@pytest.mark.parametrize('xdg', [None, '', 'relative/path'])
+def test_default_token_path_ignores_invalid_xdg(xdg, monkeypatch, tmp_path):
+    """Unset and nonabsolute XDG paths use the home configuration directory."""
+    monkeypatch.setenv('HOME', str(tmp_path))
+    if xdg is None:
+        monkeypatch.delenv('XDG_CONFIG_HOME', raising=False)
+    else:
+        monkeypatch.setenv('XDG_CONFIG_HOME', xdg)
+    expected = tmp_path / '.config/gdocs-scope-mcp/token.json'
+    assert default_token_path() == expected
+
+
+def test_token_path_precedence_preserves_legacy_files(monkeypatch, tmp_path):
+    """Prefer explicit paths, then XDG, retaining legacy read fallback."""
+    for name in (*credentials.TOKEN_ENV_ALIASES, 'GOOGLE_DOCS_TOKEN_FILE'):
+        monkeypatch.delenv(name, raising=False)
+    old = tmp_path / 'old-token.json'
+    older = tmp_path / 'older-token.json'
+    old.write_text('{"source":"old"}')
+    older.write_text('{"source":"older"}')
+    monkeypatch.setattr(credentials, 'STANDALONE_TOKEN_PATHS', [old, older])
+    assert credentials.load_token() == {'source': 'old'}
+    new = default_token_path()
+    new.parent.mkdir(parents=True)
+    new.write_text('{"source":"xdg"}')
+    assert credentials.load_token() == {'source': 'xdg'}
+    monkeypatch.setenv('GOOGLE_DOCS_MCP_TOKEN', str(older))
+    assert credentials.load_token() == {'source': 'older'}
+    assert old.read_text() == '{"source":"old"}'
+    assert older.read_text() == '{"source":"older"}'
+
+
+@pytest.mark.parametrize('stored_client', [None, 'original-client'])
+def test_server_uses_config_only_when_token_has_no_client(
+    stored_client, monkeypatch, tmp_path,
+):
+    """Configuration cannot rebind an existing refresh token's client."""
+    for name in credentials.CLIENT_ID_ENV_ALIASES:
+        monkeypatch.delenv(name, raising=False)
+    config = tmp_path / 'config.json'
+    config.write_text('{"client_id":"configured-client"}')
+    monkeypatch.setenv('GOOGLE_DOCS_MCP_CONFIG', str(config))
+    token = {'refresh_token': 'refresh', 'client_secret': 'secret'}
+    if stored_client:
+        token['client_id'] = stored_client
+    monkeypatch.setattr(credentials, 'load_token', lambda: token)
+    constructor = Mock()
+    monkeypatch.setattr(credentials, 'Credentials', constructor)
+    credentials.load_credentials()
+    assert constructor.call_args.kwargs['client_id'] == (
+        stored_client or 'configured-client'
+    )
 
 
 def test_saved_session_client_mismatch_never_exchanges(

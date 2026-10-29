@@ -2,7 +2,7 @@
 
 [README](../README.md) · [Getting started](getting-started.md) · [Result contracts](protocol.md)
 
-An optional JSON config sets editing behavior and code formatting. By default, the
+An optional JSON config sets the OAuth client, editing and formatting. By default, the
 server reads `~/.config/gdocs-scope-mcp/config.json`, or
 `$XDG_CONFIG_HOME/gdocs-scope-mcp/config.json` when `XDG_CONFIG_HOME` is set.
 Select another file with `GOOGLE_DOCS_MCP_CONFIG=/absolute/path/config.json`.
@@ -10,6 +10,7 @@ An absent default file is allowed; an explicitly selected file must exist.
 
 ```json
 {
+  "client_id": null,
   "write_revision_mode": "required",
   "document_cache_enabled": false,
   "document_cache_storage": "disk",
@@ -40,6 +41,10 @@ An absent default file is allowed; an explicitly selected file must exist.
 ```
 
 All fields are optional; the example shows the built-in defaults.
+`client_id` overrides the bundled Desktop OAuth client for new authorization;
+`null` selects the bundled client. CLI options and OAuth client environment
+variables take precedence. Existing token files retain their originating
+client ID regardless of this setting.
 `write_revision_mode` selects `required` (validated retries, default) or
 `target` (Google merges concurrent changes, including overlaps). Target mode
 does not provide our local unchanged-target guarantee and never retries a
@@ -75,6 +80,7 @@ Environment variables override individual file settings:
 
 | Environment variable | JSON field | Default |
 |---|---|---|
+| `GOOGLE_DOCS_MCP_CLIENT_ID` | `client_id` | `null` (bundled client for new authorization) |
 | `GOOGLE_DOCS_MCP_WRITE_REVISION_MODE` | `write_revision_mode` | `required` |
 | `GOOGLE_DOCS_MCP_DOCUMENT_CACHE_ENABLED` | `document_cache_enabled` | `false` |
 | `GOOGLE_DOCS_MCP_DOCUMENT_CACHE_STORAGE` | `document_cache_storage` | `disk` |
@@ -109,8 +115,9 @@ Precedence is per-call overrides (theme/background only), environment, JSON
 file, then built-in defaults. Server settings are
 loaded and validated at server startup and cached for that process. Restart
 the MCP server after changing the file or environment. This config
-includes concurrency, table snapshot lifetime and code formatting. Authentication, Drive and logging
-environment variables retain their separate handling. Our config does not
+includes the OAuth client ID, concurrency, table snapshots and code formatting.
+Token paths, client secrets, Drive and logging environment variables retain
+their separate handling. Our config does not
 automatically load `.env` files.
 
 `docs_append`, `docs_insert_before` and `docs_insert_after` also accept optional
@@ -163,8 +170,13 @@ The removed Apps Script bridge IDs (`GOOGLE_DOCS_MCP_APPS_SCRIPT_ID` and its
 Drive-prefixed alias) are no longer used; native comments need no bridge.
 
 Token resolution checks the preferred token environment variables, the legacy
-`GOOGLE_DOCS_TOKEN_FILE`, `~/.google-docs-mcp/token.json`, the older
-`~/.google-drive-mcp/token.json`, then gog export/cache. OAuth client overrides
+`GOOGLE_DOCS_TOKEN_FILE`, then `$XDG_CONFIG_HOME/gdocs-scope-mcp/token.json`
+(default root: `~/.config`), `~/.google-docs-mcp/token.json`, the older
+`~/.google-drive-mcp/token.json`, then gog export/cache. New authorizations use
+the XDG path unless `--out` is supplied. Empty or relative `XDG_CONFIG_HOME`
+values are ignored. Changing `GOOGLE_DOCS_MCP_CONFIG` selects the settings file,
+not the token directory. Existing token files are not moved or rewritten.
+OAuth client overrides
 accept the corresponding legacy `GOOGLE_DRIVE_MCP_CLIENT_ID` and
 `GOOGLE_DRIVE_MCP_CLIENT_SECRET` aliases. See [authentication](getting-started.md#3-authenticate).
 
