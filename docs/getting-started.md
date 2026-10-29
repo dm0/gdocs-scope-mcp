@@ -114,6 +114,13 @@ without PKCE. Tokens marked `pkce-public` ignore ambient secret overrides when
 refreshed. Live acceptance of ID-only login and refresh must be checked against
 the actual registered Desktop client before distributing it as the default.
 
+Live verification on 2026-10-29 reached the loopback callback successfully,
+but Google rejected the bundled client's PKCE code exchange with
+`client_secret is missing.` No token was obtained, and secretless refresh
+could not be tested. ID-only onboarding for this client is therefore not ready
+for release. A custom client may supply its secret locally; the application
+does not automatically retry with one or distribute a secret.
+
 New tokens are saved to `$XDG_CONFIG_HOME/gdocs-scope-mcp/token.json`, falling
 back to `~/.config/gdocs-scope-mcp/token.json` when `XDG_CONFIG_HOME` is absent,
 empty or relative. Override the authorization output with `--out` and point
