@@ -115,7 +115,8 @@ def load_credentials():
             '(legacy GOOGLE_DRIVE_MCP_* aliases also work).'
         )
     scopes = [
-        s for s in token_data.get('scopes', []) if s not in ('email', 'openid')
+        s for s in token_data.get('scopes', [])
+        if s not in ('email', 'openid', 'profile')
     ]
     creds = Credentials(
         token=None, refresh_token=token_data['refresh_token'],

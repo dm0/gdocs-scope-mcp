@@ -97,6 +97,6 @@ def test_new_and_legacy_token_files_refresh(
 
     assert loaded.client_id == 'client'
     assert loaded.refresh_token == 'refresh'
-    assert set(document_scopes).issubset(loaded.scopes)
+    assert list(loaded.scopes) == document_scopes
     refresh.assert_called_once()
     assert path.read_bytes() == before
