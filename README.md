@@ -86,23 +86,25 @@ See the [tool reference](docs/tools/documents.md) for operation-specific details
 
 ## Quick start
 
-1. [Create a Google Cloud OAuth app](docs/getting-started.md#2-create-a-google-cloud-oauth-app)
-   and download its Desktop App credentials.
-2. Authenticate:
+1. Authenticate using the bundled Desktop OAuth client:
 
    ```bash
    uvx --from git+https://github.com/dm0/gdocs-scope-mcp \
-     gdocs-scope-mcp-auth --credentials ~/credentials.json
+     gdocs-scope-mcp-auth
    ```
 
-3. Configure your MCP client to run:
+   While access is limited to test users, your account must be added by the
+   project owner. You can also [use your own client](docs/getting-started.md#choose-a-different-oauth-client).
+
+2. Configure your MCP client to run:
 
    ```bash
    uvx --from git+https://github.com/dm0/gdocs-scope-mcp gdocs-scope-mcp
    ```
 
    Set `GOOGLE_DOCS_MCP_TOKEN` to the absolute path of the saved token file
-   (default: `~/.google-docs-mcp/token.json`).
+   (default: `$XDG_CONFIG_HOME/gdocs-scope-mcp/token.json`, or
+   `~/.config/gdocs-scope-mcp/token.json` when unset).
 
 See [Getting started](docs/getting-started.md) for client configuration examples,
 headless authentication, scopes and migration.
