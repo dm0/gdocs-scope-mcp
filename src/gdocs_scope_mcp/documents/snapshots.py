@@ -12,4 +12,3 @@ def normalized(value):
     if isinstance(value, list):
         return [normalized(v) for v in value]
     return value
-

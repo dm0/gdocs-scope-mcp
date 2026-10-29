@@ -331,4 +331,3 @@ def register(mcp):
         return table_structure.apply_structure(
             doc_id, table_ref, base_token, operation, tab_id=tab_id,
         )
-

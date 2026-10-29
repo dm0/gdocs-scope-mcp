@@ -252,4 +252,3 @@ def register(mcp):
             doc_id, comment_id, 'delete_reply', post_id=reply_id,
             expected_revision_id=expected_revision_id,
         ))
-

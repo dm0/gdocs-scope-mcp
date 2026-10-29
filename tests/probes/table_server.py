@@ -17,7 +17,7 @@ from gdocs_scope_mcp.documents import (
     fetching,
 )
 from gdocs_scope_mcp.google_api import clients
-from gdocs_scope_mcp.rich_text import table_insertion
+from gdocs_scope_mcp.rich_text import execution as table_insertion
 from gdocs_scope_mcp.server import mcp
 from gdocs_scope_mcp.tables import (
     formatting as table_format,

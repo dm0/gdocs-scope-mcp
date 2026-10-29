@@ -81,4 +81,3 @@ def register(mcp):
         return entity_edit.select_dropdown(
             doc_id, entity_id, option_id, tab_id, expected_option_id,
         )
-

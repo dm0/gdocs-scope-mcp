@@ -23,4 +23,3 @@ def register(mcp, identity):
     def server_info() -> ServerInfo:
         """Return startup identity and source fingerprint without Google access."""
         return identity()
-

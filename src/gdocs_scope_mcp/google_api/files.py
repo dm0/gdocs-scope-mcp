@@ -84,4 +84,3 @@ def create_document(title: str, initial_text: str = ''):
         title=title,
         webViewLink=f'https://docs.google.com/document/d/{doc_id}/edit',
     )
-

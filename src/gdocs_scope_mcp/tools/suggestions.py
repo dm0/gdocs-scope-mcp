@@ -134,4 +134,3 @@ def register(mcp):
             doc_id, action, suggestion_ids,
             expected_revision_id=expected_revision_id,
         )
-

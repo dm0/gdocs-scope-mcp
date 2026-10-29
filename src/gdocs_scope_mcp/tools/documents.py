@@ -616,4 +616,3 @@ def register_editing(mcp):
                 expected_revision_id=expected_revision_id, tab_id=tab_id,
             ),
         )
-

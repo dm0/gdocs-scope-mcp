@@ -56,4 +56,3 @@ class ValidatedSnapshots:
             size,
             (self.clock() - started) * 1000,
         )
-

@@ -22,10 +22,13 @@ from gdocs_scope_mcp.google_api import clients, credentials
 def isolated_mcp():
     """Provide a shared-session STDIO client tied to this checkout's source."""
     @asynccontextmanager
-    async def connect(log):
+    async def connect(log, *, probe=False):
         repo = Path(__file__).resolve().parents[1]
+        executable = 'fastmcp' if probe else 'gdocs-scope-mcp'
         transport = StdioTransport(
-            command=str(repo / '.venv/bin/gdocs-scope-mcp'), args=[],
+            command=str(repo / '.venv/bin' / executable),
+            args=(['run', str(repo / 'tests/probes/table_server.py'),
+                   '--transport', 'stdio'] if probe else []),
             cwd=str(repo), env=dict(os.environ), log_file=log,
             keep_alive=False,
         )

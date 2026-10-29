@@ -73,4 +73,3 @@ def register(mcp):
             A structured object with id, title, and webViewLink.
         """
         return files.create_document(title, initial_text)
-
