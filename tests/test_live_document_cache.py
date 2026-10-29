@@ -15,6 +15,7 @@ def test_live_document_cache(
     live_test_doc, table_probe, monkeypatch, tmp_path,
 ):
     """Use a temporary large tab and confirm cleanup in two MCP processes."""
+    monkeypatch.setenv('GOOGLE_DOCS_MCP_DOCUMENT_CACHE_ENABLED', 'true')
     monkeypatch.setenv('GOOGLE_DOCS_MCP_DOCUMENT_CACHE_STORAGE', 'disk')
     monkeypatch.setenv(
         'GOOGLE_DOCS_MCP_DOCUMENT_CACHE_DIRECTORY', str(tmp_path),

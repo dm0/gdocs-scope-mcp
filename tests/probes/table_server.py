@@ -61,6 +61,44 @@ def probe_tabs_document() -> dict:
 
 
 @mcp.tool
+def probe_drive_freshness(tab_id: str, marker: str) -> dict:
+    """Compare uncached Docs content with bracketing Drive metadata reads."""
+    doc_id = _document_id()
+    docs = docs_edit._get_service().documents()
+    drive = docs_edit._get_service('drive', 'v3').files()
+    observations = {}
+    origin = time.monotonic()
+
+    def execute(label, request):
+        started = time.monotonic()
+        value = _native_execute(request)
+        observations[label] = {
+            'start_ms': (started - origin) * 1000,
+            'end_ms': (time.monotonic() - origin) * 1000,
+        }
+        return value
+
+    for label in ('drive_before', 'docs', 'drive_after'):
+        if label == 'docs':
+            document = execute(label, docs.get(
+                documentId=doc_id, includeTabsContent=True,
+                fields='revisionId,tabs(documentTab(body),tabProperties)',
+            ))
+            tab = next(t for t in document['tabs']
+                       if t['tabProperties']['tabId'] == tab_id)
+            observations[label].update(
+                revision=document['revisionId'],
+                marker_present=marker in json.dumps(tab['documentTab']),
+            )
+        else:
+            metadata = execute(label, drive.get(
+                fileId=doc_id, fields='version,modifiedTime',
+            ))
+            observations[label].update(metadata)
+    return observations
+
+
+@mcp.tool
 def probe_suggestions_document(
     view: str = 'SUGGESTIONS_INLINE', threads: bool = False,
 ) -> dict:

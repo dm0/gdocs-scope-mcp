@@ -20,6 +20,9 @@ arguments, examples and supported behavior, start with the [document tools](../t
 
 ## API research
 
+[Cache validation](cache-validation.md) records direct Docs/Drive latency and
+cross-service metadata freshness experiments, including repeatable live probes.
+
 [Suggestions API](suggestions-api.md) records the original native suggest-mode,
 review and revision-control probes. Its baseline gaps and proposed sequence
 predate the production reading, creation and decision tools linked above.

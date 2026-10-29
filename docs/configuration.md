@@ -11,7 +11,7 @@ An absent default file is allowed; an explicitly selected file must exist.
 ```json
 {
   "write_revision_mode": "required",
-  "document_cache_enabled": true,
+  "document_cache_enabled": false,
   "document_cache_storage": "disk",
   "document_cache_directory": null,
   "document_cache_database_max_bytes": 67108864,
@@ -76,7 +76,7 @@ Environment variables override individual file settings:
 | Environment variable | JSON field | Default |
 |---|---|---|
 | `GOOGLE_DOCS_MCP_WRITE_REVISION_MODE` | `write_revision_mode` | `required` |
-| `GOOGLE_DOCS_MCP_DOCUMENT_CACHE_ENABLED` | `document_cache_enabled` | `true` |
+| `GOOGLE_DOCS_MCP_DOCUMENT_CACHE_ENABLED` | `document_cache_enabled` | `false` |
 | `GOOGLE_DOCS_MCP_DOCUMENT_CACHE_STORAGE` | `document_cache_storage` | `disk` |
 | `GOOGLE_DOCS_MCP_DOCUMENT_CACHE_DIRECTORY` | `document_cache_directory` | Platform cache directory |
 | `GOOGLE_DOCS_MCP_DOCUMENT_CACHE_DATABASE_MAX_BYTES` | `document_cache_database_max_bytes` | `67108864` |
@@ -180,15 +180,22 @@ server settings and must remain unchanged while following a pagination token:
 
 ## Document snapshot cache
 
-The server caches full native document responses on disk for repeated reads
-across MCP processes and Codex chats. Before every reuse it requests only
+The document snapshot cache is disabled by default. Enable it explicitly with
+`document_cache_enabled: true` in JSON configuration or
+`GOOGLE_DOCS_MCP_DOCUMENT_CACHE_ENABLED=true` in the server environment.
+When enabled, the server caches full native document responses on disk for
+repeated reads across MCP processes and Codex chats. Before every reuse it requests only
 `revisionId` from Google, validating current access and revision. An unchanged
 document needs one small request; a changed document needs that revision check
 followed by a full download. A cold or expired entry needs only a full download.
 Google credential refresh and Markdown conversion still run; this cache avoids
 repeated document downloads, not all read costs.
 
-Set `document_cache_enabled` to `false` to disable it. The default limits are
+Revision-only requests can be nearly as slow as full reads for large documents;
+when a cached document changes, the extra request can make reading slower than
+with caching disabled. See the [live measurements](development/cache-validation.md).
+
+The default limits when enabled are
 300 seconds, 128 entries and 32 MiB of serialized snapshot payloads. TTL must be
 between 1 and 86399 seconds, below Google's documented 24-hour revision validity
 window. Entry and byte limits must be positive integers. Oversized documents
@@ -236,10 +243,17 @@ database lock during Google requests. Up to 64 persistent lock files bound
 coordination overhead; unrelated documents can occasionally share a lock stripe.
 The memory backend shares data only within its process.
 
-Native comment reads and field-masked requests bypass caching. INFO logs report
-hit/miss,
-serialized snapshot size and cache-operation duration without document IDs or
-content. See the [Google Docs revision contract](https://developers.google.com/workspace/docs/api/reference/rest/v1/documents#Document).
+Native comment reads and field-masked requests bypass caching. With the cache
+wrapper enabled, INFO logs distinguish native `document_get=revision`,
+`document_get=document` and `document_get=partial` calls, with execution status
+and `duration_ms`. This timer covers only the Google client's `execute()`
+(including HTTP and client JSON decoding), after request construction and
+outside our cache/SQLite handling and document conversion. Failed requests are
+timed too. The existing `snapshot_cache=hit/miss` records report serialized
+snapshot size and the broader cache-operation duration; deserialization of a
+cached snapshot and subsequent Markdown conversion happen afterward. No
+document IDs, revisions, URLs, content or exception details are logged by
+these timings. See the [Google Docs revision contract](https://developers.google.com/workspace/docs/api/reference/rest/v1/documents#Document).
 
 ## Logging
 
