@@ -15,18 +15,18 @@ from gdocs_scope_mcp.settings import config_path, get_settings
 def isolated_settings(monkeypatch, tmp_path):
     """Keep user settings and the process cache outside each test."""
     for name in (
-        'GOOGLE_DOCS_MCP_CONFIG', 'GOOGLE_DOCS_MCP_CLIENT_ID',
-        'GOOGLE_DOCS_MCP_CODE_FONT_FAMILY',
-        'GOOGLE_DOCS_MCP_INLINE_CODE_COLOR',
-        'GOOGLE_DOCS_MCP_WRITE_REVISION_MODE',
-        'GOOGLE_DOCS_MCP_TABLE_SNAPSHOT_TTL_SECONDS',
-        'GOOGLE_DOCS_MCP_DOCUMENT_CACHE_ENABLED',
-        'GOOGLE_DOCS_MCP_DOCUMENT_CACHE_STORAGE',
-        'GOOGLE_DOCS_MCP_DOCUMENT_CACHE_DIRECTORY',
-        'GOOGLE_DOCS_MCP_DOCUMENT_CACHE_DATABASE_MAX_BYTES',
-        'GOOGLE_DOCS_MCP_DOCUMENT_CACHE_TTL_SECONDS',
-        'GOOGLE_DOCS_MCP_DOCUMENT_CACHE_MAX_ENTRIES',
-        'GOOGLE_DOCS_MCP_DOCUMENT_CACHE_MAX_BYTES',
+        'GDOCS_SCOPE_MCP_CONFIG', 'GDOCS_SCOPE_MCP_CLIENT_ID',
+        'GDOCS_SCOPE_MCP_CODE_FONT_FAMILY',
+        'GDOCS_SCOPE_MCP_INLINE_CODE_COLOR',
+        'GDOCS_SCOPE_MCP_WRITE_REVISION_MODE',
+        'GDOCS_SCOPE_MCP_TABLE_SNAPSHOT_TTL_SECONDS',
+        'GDOCS_SCOPE_MCP_DOCUMENT_CACHE_ENABLED',
+        'GDOCS_SCOPE_MCP_DOCUMENT_CACHE_STORAGE',
+        'GDOCS_SCOPE_MCP_DOCUMENT_CACHE_DIRECTORY',
+        'GDOCS_SCOPE_MCP_DOCUMENT_CACHE_DATABASE_MAX_BYTES',
+        'GDOCS_SCOPE_MCP_DOCUMENT_CACHE_TTL_SECONDS',
+        'GDOCS_SCOPE_MCP_DOCUMENT_CACHE_MAX_ENTRIES',
+        'GDOCS_SCOPE_MCP_DOCUMENT_CACHE_MAX_BYTES',
     ):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv('XDG_CONFIG_HOME', str(tmp_path))
@@ -42,7 +42,7 @@ def custom_config(tmp_path, monkeypatch):
     path.write_text(json.dumps({
         'code_font_family': 'Courier New', 'inline_code_color': '#aabbcc',
     }), encoding='utf-8')
-    monkeypatch.setenv('GOOGLE_DOCS_MCP_CONFIG', str(path))
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_CONFIG', str(path))
     return path
 
 
@@ -68,7 +68,7 @@ def test_default_file_is_discovered():
 
 def test_explicit_file_and_environment_precedence(custom_config, monkeypatch):
     """Override individual JSON fields while keeping the other file values."""
-    monkeypatch.setenv('GOOGLE_DOCS_MCP_CODE_FONT_FAMILY', ' Consolas ')
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_CODE_FONT_FAMILY', ' Consolas ')
     assert config_path() == custom_config
     assert get_settings().code_font_family == 'Consolas'
     assert get_settings().inline_code_color == '#AABBCC'
@@ -76,8 +76,8 @@ def test_explicit_file_and_environment_precedence(custom_config, monkeypatch):
 
 def test_environment_without_file(monkeypatch):
     """Allow configuring both fields through the MCP client's environment."""
-    monkeypatch.setenv('GOOGLE_DOCS_MCP_INLINE_CODE_COLOR', '#000000')
-    monkeypatch.setenv('GOOGLE_DOCS_MCP_CODE_FONT_FAMILY', 'Consolas')
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_INLINE_CODE_COLOR', '#000000')
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_CODE_FONT_FAMILY', 'Consolas')
     assert get_settings().inline_code_color == '#000000'
     assert get_settings().code_font_family == 'Consolas'
 
@@ -85,8 +85,8 @@ def test_environment_without_file(monkeypatch):
 @pytest.mark.parametrize('value', ['', ' ', 'missing.json'])
 def test_explicit_missing_or_empty_path_fails(value, monkeypatch):
     """Fail when an explicitly chosen file is absent."""
-    monkeypatch.setenv('GOOGLE_DOCS_MCP_CONFIG', value)
-    with pytest.raises(ValueError, match='GOOGLE_DOCS_MCP_CONFIG'):
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_CONFIG', value)
+    with pytest.raises(ValueError, match='GDOCS_SCOPE_MCP_CONFIG'):
         get_settings()
 
 
@@ -117,14 +117,14 @@ def test_invalid_settings_fail(custom_config, data):
 
 def test_invalid_environment_fails(monkeypatch):
     """Validate overrides as strictly as file settings."""
-    monkeypatch.setenv('GOOGLE_DOCS_MCP_INLINE_CODE_COLOR', 'invalid')
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_INLINE_CODE_COLOR', 'invalid')
     with pytest.raises(ValidationError):
         get_settings()
 
 
 def test_table_snapshot_environment(monkeypatch):
     """Choose snapshot expiry independently of process lifetime."""
-    monkeypatch.setenv('GOOGLE_DOCS_MCP_TABLE_SNAPSHOT_TTL_SECONDS', '3600')
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_TABLE_SNAPSHOT_TTL_SECONDS', '3600')
     assert get_settings().table_snapshot_ttl_seconds == 3600  # noqa: PLR2004
 
 
@@ -134,14 +134,14 @@ def test_document_cache_configuration(custom_config, monkeypatch):
         'document_cache_enabled': True, 'document_cache_ttl_seconds': 600,
         'document_cache_max_entries': 8, 'document_cache_max_bytes': 1048576,
     }))
-    monkeypatch.setenv('GOOGLE_DOCS_MCP_DOCUMENT_CACHE_ENABLED', 'false')
-    monkeypatch.setenv('GOOGLE_DOCS_MCP_DOCUMENT_CACHE_TTL_SECONDS', '900')
-    monkeypatch.setenv('GOOGLE_DOCS_MCP_DOCUMENT_CACHE_STORAGE', 'memory')
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_DOCUMENT_CACHE_ENABLED', 'false')
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_DOCUMENT_CACHE_TTL_SECONDS', '900')
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_DOCUMENT_CACHE_STORAGE', 'memory')
     monkeypatch.setenv(
-        'GOOGLE_DOCS_MCP_DOCUMENT_CACHE_DIRECTORY', '/tmp/cache',
+        'GDOCS_SCOPE_MCP_DOCUMENT_CACHE_DIRECTORY', '/tmp/cache',
     )
     monkeypatch.setenv(
-        'GOOGLE_DOCS_MCP_DOCUMENT_CACHE_DATABASE_MAX_BYTES', '2097152',
+        'GDOCS_SCOPE_MCP_DOCUMENT_CACHE_DATABASE_MAX_BYTES', '2097152',
     )
     settings = get_settings()
     assert settings.document_cache_enabled is False
@@ -180,10 +180,10 @@ def test_revision_mode_configuration(custom_config, monkeypatch):
     custom_config.write_text('{"write_revision_mode":"target"}')
     assert get_settings().write_revision_mode == 'target'
     get_settings.cache_clear()
-    monkeypatch.setenv('GOOGLE_DOCS_MCP_WRITE_REVISION_MODE', 'required')
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_WRITE_REVISION_MODE', 'required')
     assert get_settings().write_revision_mode == 'required'
     get_settings.cache_clear()
-    monkeypatch.setenv('GOOGLE_DOCS_MCP_WRITE_REVISION_MODE', 'merge')
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_WRITE_REVISION_MODE', 'merge')
     with pytest.raises(ValidationError):
         get_settings()
 

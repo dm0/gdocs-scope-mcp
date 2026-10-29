@@ -25,7 +25,7 @@ def isolated_settings(monkeypatch, tmp_path):
     for name in ('CONFIG', 'CODE_FONT_FAMILY', 'INLINE_CODE_COLOR',
                  'CODE_BLOCK_HIGHLIGHTING', 'CODE_BLOCK_STYLE',
                  'CODE_BLOCK_LINE_SPACING', 'CODE_BLOCK_THEME_BACKGROUND'):
-        monkeypatch.delenv('GOOGLE_DOCS_MCP_' + name, raising=False)
+        monkeypatch.delenv('GDOCS_SCOPE_MCP_' + name, raising=False)
     monkeypatch.setenv('XDG_CONFIG_HOME', str(tmp_path))
     get_settings.cache_clear()
     yield
@@ -90,8 +90,8 @@ def test_agent_values_override_or_inherit_environment(
     overrides, expected_theme, expected_background,
 ):
     """Distinguish explicit False from omitted/null inherited defaults."""
-    monkeypatch.setenv('GOOGLE_DOCS_MCP_CODE_BLOCK_STYLE', base_theme)
-    monkeypatch.setenv('GOOGLE_DOCS_MCP_CODE_BLOCK_THEME_BACKGROUND',
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_CODE_BLOCK_STYLE', base_theme)
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_CODE_BLOCK_THEME_BACKGROUND',
                        str(base_background).lower())
     defaults = get_settings()
     result = call(operation, arguments(operation, **overrides))
@@ -177,7 +177,7 @@ def test_omitted_parameters_inherit_json_file(
         '{"code_block_style":"monokai","code_block_theme_background":true}',
         encoding='utf-8',
     )
-    monkeypatch.setenv('GOOGLE_DOCS_MCP_CONFIG', str(path))
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_CONFIG', str(path))
     result = call(operation, arguments(operation))
     assert not result.is_error
     assert_style(mock_docs, 'monokai', True)

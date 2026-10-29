@@ -93,8 +93,7 @@ def main():
         env = {key: value for key, value in os.environ.items()
                if not key.startswith(('GOOGLE_DOCS_', 'GOOGLE_DRIVE_',
                                       'GDOCS_SCOPE_MCP_', 'GOG_'))}
-        env['GOOGLE_DOCS_MCP_TOKEN'] = str(directory / 'missing-token.json')
-        env['GDOCS_SCOPE_MCP_TOKEN'] = env['GOOGLE_DOCS_MCP_TOKEN']
+        env['GDOCS_SCOPE_MCP_TOKEN'] = str(directory / 'missing-token.json')
         source_scripts = Path(sys.executable).parent
         tools = json.loads(run(str(source_scripts / 'fastmcp'), 'list',
             '--command', str(source_scripts / 'gdocs-scope-mcp'),

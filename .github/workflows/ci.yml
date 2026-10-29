@@ -27,7 +27,7 @@ jobs:
       UV_PYTHON: ${{ matrix.python }}
       UV_VERSION: '0.12.18'
       # No Google secrets or live-test target are supplied to this workflow.
-      GOOGLE_DOCS_MCP_TOKEN: /tmp/gdocs-scope-mcp-ci-missing-token.json
+      GDOCS_SCOPE_MCP_TOKEN: /tmp/gdocs-scope-mcp-ci-missing-token.json
     steps:
       - name: Check out source and version tags
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

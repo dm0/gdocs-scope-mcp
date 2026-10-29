@@ -38,7 +38,7 @@ def test_live_named_range_switch(live_test_doc, isolated_mcp, monkeypatch):
         native = fetching.get_document(service, live_test_doc)
         added = _code_range_ids(native)
         assert len(added - baseline) == 1
-        monkeypatch.setenv('GOOGLE_DOCS_MCP_CODE_BLOCK_NAMED_RANGES', 'false')
+        monkeypatch.setenv('GDOCS_SCOPE_MCP_CODE_BLOCK_NAMED_RANGES', 'false')
         async with isolated_mcp(log.with_suffix('.disabled.log')) as session:
             client, info = session
             report['disabled'] = info

@@ -21,7 +21,7 @@ UI_OBSERVATION_SECONDS = 120
 
 def test_live_drive_freshness(table_probe, monkeypatch):
     """Record three rapid edits and poll Drive metadata for a minute."""
-    monkeypatch.setenv('GOOGLE_DOCS_MCP_DOCUMENT_CACHE_ENABLED', 'false')
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_DOCUMENT_CACHE_ENABLED', 'false')
 
     async def run():
         async with table_probe('drive-freshness') as probe:
@@ -98,7 +98,7 @@ def test_live_drive_freshness_ui(table_probe, monkeypatch):
     """Optionally observe a UI edit in a disposable tab for two minutes."""
     if os.environ.get('GDOCS_SCOPE_MCP_FRESHNESS_UI') != '1':
         pytest.skip('Set GDOCS_SCOPE_MCP_FRESHNESS_UI=1 for a manual UI edit.')
-    monkeypatch.setenv('GOOGLE_DOCS_MCP_DOCUMENT_CACHE_ENABLED', 'false')
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_DOCUMENT_CACHE_ENABLED', 'false')
 
     async def run():
         async with table_probe('drive-freshness-ui') as probe:

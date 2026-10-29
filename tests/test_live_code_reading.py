@@ -128,7 +128,7 @@ def test_live_unmarked_code_heuristic(
             'requests': [{'deleteNamedRange': {'namedRangeId': matching[0]}}],
             'writeControl': {'requiredRevisionId': native['revisionId']},
         }).execute()
-        monkeypatch.setenv('GOOGLE_DOCS_MCP_READ_CODE_BLOCK_HEURISTIC', 'true')
+        monkeypatch.setenv('GDOCS_SCOPE_MCP_READ_CODE_BLOCK_HEURISTIC', 'true')
         async with isolated_mcp(log.with_suffix('.reader.log')) as session:
             client, info = session
             report['reader'] = info

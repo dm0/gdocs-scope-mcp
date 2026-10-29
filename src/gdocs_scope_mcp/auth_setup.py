@@ -2,7 +2,6 @@
 
 import argparse
 import json
-import os
 import sys
 import time
 import webbrowser
@@ -13,7 +12,11 @@ from urllib.parse import urlsplit
 from google.auth.exceptions import GoogleAuthError
 
 from gdocs_scope_mcp.google_api import oauth
-from gdocs_scope_mcp.settings import default_token_path, get_settings
+from gdocs_scope_mcp.settings import (
+    default_token_path,
+    get_settings,
+    optional_env,
+)
 
 SCOPES = [
     'https://www.googleapis.com/auth/documents',
@@ -21,17 +24,8 @@ SCOPES = [
     'https://www.googleapis.com/auth/drive.readonly',
     'https://www.googleapis.com/auth/drive.file',
 ]
-CLIENT_ID_ENV_VAR = 'GOOGLE_DOCS_MCP_CLIENT_ID'
-CLIENT_SECRET_ENV_VAR = 'GOOGLE_DOCS_MCP_CLIENT_SECRET'
-CLIENT_ID_ENV_ALIASES = (CLIENT_ID_ENV_VAR, 'GOOGLE_DRIVE_MCP_CLIENT_ID')
-CLIENT_SECRET_ENV_ALIASES = (
-    CLIENT_SECRET_ENV_VAR, 'GOOGLE_DRIVE_MCP_CLIENT_SECRET',
-)
-
-
-def _first_env(*names):
-    return next((os.environ[name] for name in names if os.environ.get(name)),
-                None)
+CLIENT_ID_ENV_VAR = 'GDOCS_SCOPE_MCP_CLIENT_ID'
+CLIENT_SECRET_ENV_VAR = 'GDOCS_SCOPE_MCP_CLIENT_SECRET'
 
 
 def load_client_config(creds_path: Path) -> dict:
@@ -182,13 +176,17 @@ def main():
         parser.error('--session requires a headless or callback mode')
 
     try:
-        client_id = args.client_id or _first_env(*CLIENT_ID_ENV_ALIASES)
-        client_id = client_id or get_settings().client_id
-        secret = args.client_secret or _first_env(*CLIENT_SECRET_ENV_ALIASES)
         if args.credentials:
             config = load_client_config(args.credentials.expanduser())
             client_id = config['client_id']
             secret = config.get('client_secret')
+        else:
+            client_id = args.client_id
+            if not client_id:
+                configured = optional_env(CLIENT_ID_ENV_VAR)
+                client_id = (configured.strip() if configured
+                             else get_settings().client_id)
+            secret = args.client_secret or optional_env(CLIENT_SECRET_ENV_VAR)
         if args.callback_url:
             session, code = oauth.consume_session(args.session.expanduser(),
                                                   args.callback_url)
@@ -239,7 +237,7 @@ def main():
         raise SystemExit(1) from None
     print('✓ Authorisation successful')
     print(f'✓ Token saved: {args.out.expanduser()}')
-    print(f'Set GOOGLE_DOCS_MCP_TOKEN={args.out.expanduser()}')
+    print(f'Set GDOCS_SCOPE_MCP_TOKEN={args.out.expanduser()}')
 
 
 if __name__ == '__main__':

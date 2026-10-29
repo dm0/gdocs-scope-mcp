@@ -49,7 +49,7 @@ def test_live_image_layout(
     image_path = tmp_path / 'image.png'
     image_path.write_bytes(image_png)
     monkeypatch.setenv(
-        'GOOGLE_DOCS_MCP_DOCUMENT_CACHE_DIRECTORY', str(tmp_path / 'cache')
+        'GDOCS_SCOPE_MCP_DOCUMENT_CACHE_DIRECTORY', str(tmp_path / 'cache')
     )
 
     async def run():

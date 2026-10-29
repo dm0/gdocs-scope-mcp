@@ -67,7 +67,7 @@ def test_live_suggestion_lifecycle(
 ):
     """Check projections, decisions, formatting and revision guards."""
     monkeypatch.setenv(
-        'GOOGLE_DOCS_MCP_DOCUMENT_CACHE_DIRECTORY', str(tmp_path)
+        'GDOCS_SCOPE_MCP_DOCUMENT_CACHE_DIRECTORY', str(tmp_path)
     )
 
     async def run():
@@ -346,7 +346,7 @@ def test_live_accepted_content_and_scoped_inspection(
 ):
     """Read accepted content and inspect a replacement proposal separately."""
     monkeypatch.setenv(
-        'GOOGLE_DOCS_MCP_DOCUMENT_CACHE_DIRECTORY', str(tmp_path)
+        'GDOCS_SCOPE_MCP_DOCUMENT_CACHE_DIRECTORY', str(tmp_path)
     )
 
     async def run():

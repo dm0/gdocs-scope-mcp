@@ -29,8 +29,8 @@ GREEN = {'foregroundColor': {'color': {'rgbColor': {
 def code_settings(monkeypatch, tmp_path):
     """Keep read settings independent of user files and previous tests."""
     monkeypatch.setenv('XDG_CONFIG_HOME', str(tmp_path))
-    monkeypatch.delenv('GOOGLE_DOCS_MCP_CONFIG', raising=False)
-    monkeypatch.setenv('GOOGLE_DOCS_MCP_READ_CODE_BLOCK_HEURISTIC', 'false')
+    monkeypatch.delenv('GDOCS_SCOPE_MCP_CONFIG', raising=False)
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_READ_CODE_BLOCK_HEURISTIC', 'false')
     get_settings.cache_clear()
     yield
     get_settings.cache_clear()
@@ -103,22 +103,22 @@ def test_inline_runs_merge_without_emphasis_or_links(code_document):
 def test_inline_matching_policy(code_document, monkeypatch, mode, style,
                                 detected):
     """Require the configured signals rather than any incidental style."""
-    monkeypatch.setenv('GOOGLE_DOCS_MCP_READ_INLINE_CODE_MATCH', mode)
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_READ_INLINE_CODE_MATCH', mode)
     markdown = render(code_document(['code\n'], style=style))
     assert ('`code`' in markdown) == detected
 
 
 def test_inline_custom_fonts_colors_and_disabled(code_document, monkeypatch):
     """Use case-insensitive font/color settings and allow opting out."""
-    monkeypatch.setenv('GOOGLE_DOCS_MCP_READ_INLINE_CODE_FONTS',
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_READ_INLINE_CODE_FONTS',
                        '["consolas"]')
-    monkeypatch.setenv('GOOGLE_DOCS_MCP_READ_INLINE_CODE_COLORS',
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_READ_INLINE_CODE_COLORS',
                        '["#000000"]')
     style = {'weightedFontFamily': {'fontFamily': 'Consolas'},
              'foregroundColor': {'color': {'rgbColor': {}}}}
     doc = code_document(['word\n'], style=style)
     assert render(doc) == '`word`\n\n'
-    monkeypatch.setenv('GOOGLE_DOCS_MCP_READ_INLINE_CODE', 'false')
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_READ_INLINE_CODE', 'false')
     get_settings.cache_clear()
     assert render(doc) == 'word\n\n'
 
@@ -198,10 +198,10 @@ def test_optional_block_heuristic_preserves_internal_blank_lines(
     doc = code_document(['first\n', '\n', '  second\n'], style=FONT,
                         paragraph_style={'lineSpacing': 100})
     assert '```' not in render(doc)
-    monkeypatch.setenv('GOOGLE_DOCS_MCP_READ_CODE_BLOCK_HEURISTIC', 'true')
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_READ_CODE_BLOCK_HEURISTIC', 'true')
     get_settings.cache_clear()
     assert render(doc) == '```\nfirst\n\n  second\n```\n\n'
-    monkeypatch.setenv('GOOGLE_DOCS_MCP_READ_CODE_BLOCK_REQUIRE_BACKGROUND',
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_READ_CODE_BLOCK_REQUIRE_BACKGROUND',
                        'true')
     get_settings.cache_clear()
     assert '```' not in render(doc)
@@ -211,7 +211,7 @@ def test_optional_block_heuristic_preserves_internal_blank_lines(
 def test_block_heuristic_rejects_weak_signals(code_document, monkeypatch,
                                             mismatch):
     """Do not turn isolated monospace prose into a block by default."""
-    monkeypatch.setenv('GOOGLE_DOCS_MCP_READ_CODE_BLOCK_HEURISTIC', 'true')
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_READ_CODE_BLOCK_HEURISTIC', 'true')
     style = FONT if mismatch != 'font' else {}
     lines = ['a\n'] if mismatch == 'single' else ['a\n', 'b\n']
     paragraph_style = {'lineSpacing': 100}
@@ -258,7 +258,7 @@ def test_named_ranges_are_enabled_by_default():
 
 def test_disabled_named_ranges_are_not_created(mock_docs, monkeypatch):
     """Keep rich code styling while disabling only code metadata writes."""
-    monkeypatch.setenv('GOOGLE_DOCS_MCP_CODE_BLOCK_NAMED_RANGES', 'false')
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_CODE_BLOCK_NAMED_RANGES', 'false')
     docs_edit.append('example', '```python\nx = 1\n```')
     requests = mock_docs.batchUpdate.call_args.kwargs['body']['requests']
     assert not any('createNamedRange' in request for request in requests)
@@ -270,22 +270,22 @@ def test_disabled_named_ranges_do_not_affect_reading(
     code_document, monkeypatch, malformed,
 ):
     """Ignore both valid and broken markers, allowing formatting heuristics."""
-    monkeypatch.setenv('GOOGLE_DOCS_MCP_CODE_BLOCK_NAMED_RANGES', 'false')
-    monkeypatch.setenv('GOOGLE_DOCS_MCP_READ_CODE_BLOCK_HEURISTIC', 'true')
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_CODE_BLOCK_NAMED_RANGES', 'false')
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_READ_CODE_BLOCK_HEURISTIC', 'true')
     doc = code_document(['first\n', 'second\n'], style=FONT,
                         paragraph_style={'lineSpacing': 100}, marked=True)
     if malformed:
         named = next(iter(doc['namedRanges'].values()))['namedRanges'][0]
         named['ranges'].append({'startIndex': 1, 'endIndex': 4})
     assert render(doc) == '```\nfirst\nsecond\n```\n\n'
-    monkeypatch.setenv('GOOGLE_DOCS_MCP_READ_CODE_BLOCK_HEURISTIC', 'false')
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_READ_CODE_BLOCK_HEURISTIC', 'false')
     get_settings.cache_clear()
     assert render(doc) == 'first\n\nsecond\n\n'
 
 
 def test_block_heuristic_is_enabled_by_default(monkeypatch):
     """Use the default policy requested for documents without code markers."""
-    monkeypatch.delenv('GOOGLE_DOCS_MCP_READ_CODE_BLOCK_HEURISTIC')
+    monkeypatch.delenv('GDOCS_SCOPE_MCP_READ_CODE_BLOCK_HEURISTIC')
     assert Settings().read_code_block_heuristic is True
 
 
@@ -308,7 +308,7 @@ def test_empty_blocks_are_not_dropped():
 
 def test_marked_language_wins_over_heuristic(code_document, monkeypatch):
     """Do not replace explicit language or absorb neighboring styled prose."""
-    monkeypatch.setenv('GOOGLE_DOCS_MCP_READ_CODE_BLOCK_HEURISTIC', 'true')
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_READ_CODE_BLOCK_HEURISTIC', 'true')
     doc = code_document(['first\n', 'second\n', 'next\n'], style=FONT,
                         paragraph_style={'lineSpacing': 100}, marked=True)
     named = next(iter(doc['namedRanges'].values()))['namedRanges'][0]
@@ -318,7 +318,7 @@ def test_marked_language_wins_over_heuristic(code_document, monkeypatch):
 
 def test_heuristic_stops_at_different_background(code_document, monkeypatch):
     """Keep sequences with different paragraph shading separate."""
-    monkeypatch.setenv('GOOGLE_DOCS_MCP_READ_CODE_BLOCK_HEURISTIC', 'true')
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_READ_CODE_BLOCK_HEURISTIC', 'true')
     doc = code_document(['a\n', 'b\n', 'c\n'], style=FONT,
                         paragraph_style={'lineSpacing': 100})
     doc['body']['content'][-1]['paragraph']['paragraphStyle'] = {
@@ -335,7 +335,7 @@ def test_code_read_preserves_editable_utf16_positions(code_document,
     """Rendered fence syntax never becomes part of source text mapping."""
     doc = code_document(['a😀 = 1\n', '\n', '  return 2\n'], marked=True)
     mock_docs.get.return_value.execute.side_effect = lambda: deepcopy(doc)
-    monkeypatch.setenv('GOOGLE_DOCS_MCP_READ_CODE_BLOCK_HEURISTIC', 'true')
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_READ_CODE_BLOCK_HEURISTIC', 'true')
     result = docs_edit.search_replace('example', 'return 2', 'return 3')
     expected_index = utf16_length('a😀 = 1\n\n  ') + 1
     assert result.ok
@@ -346,7 +346,7 @@ def test_code_read_preserves_editable_utf16_positions(code_document,
 
 def test_heuristics_do_not_cross_table_cells(table_document, monkeypatch):
     """Adjacent monospaced cells cannot become a single code block."""
-    monkeypatch.setenv('GOOGLE_DOCS_MCP_READ_CODE_BLOCK_HEURISTIC', 'true')
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_READ_CODE_BLOCK_HEURISTIC', 'true')
     table = table_document['body']['content'][2]['table']
     for row in table['tableRows']:
         for cell in row['tableCells']:
@@ -362,12 +362,12 @@ def test_heuristics_do_not_cross_table_cells(table_document, monkeypatch):
 
 def test_custom_block_policy_and_json_settings(code_document, monkeypatch):
     """Combine a custom font, spacing, minimum length and required fill."""
-    monkeypatch.setenv('GOOGLE_DOCS_MCP_READ_CODE_BLOCK_HEURISTIC', 'true')
-    monkeypatch.setenv('GOOGLE_DOCS_MCP_READ_CODE_BLOCK_FONTS',
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_READ_CODE_BLOCK_HEURISTIC', 'true')
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_READ_CODE_BLOCK_FONTS',
                        '["Consolas"]')
-    monkeypatch.setenv('GOOGLE_DOCS_MCP_READ_CODE_BLOCK_LINE_SPACING', '1.5')
-    monkeypatch.setenv('GOOGLE_DOCS_MCP_READ_CODE_BLOCK_MIN_LINES', '1')
-    monkeypatch.setenv('GOOGLE_DOCS_MCP_READ_CODE_BLOCK_REQUIRE_BACKGROUND',
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_READ_CODE_BLOCK_LINE_SPACING', '1.5')
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_READ_CODE_BLOCK_MIN_LINES', '1')
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_READ_CODE_BLOCK_REQUIRE_BACKGROUND',
                        'true')
     doc = code_document(['custom\n'], style={
         'weightedFontFamily': {'fontFamily': 'Consolas'},
@@ -386,12 +386,12 @@ def native_code_document():
 
 def test_native_ui_code_without_spacing(native_code_document, monkeypatch):
     """Require observed delimiter pairs without inventing a language."""
-    monkeypatch.setenv('GOOGLE_DOCS_MCP_READ_CODE_BLOCK_HEURISTIC', 'true')
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_READ_CODE_BLOCK_HEURISTIC', 'true')
     expected = ('```\nUI_CODE_20261027 = 1\n\n'
                 '    return UI_CODE_20261027\n\n```\n\n')
     assert render(native_code_document) == expected
-    monkeypatch.setenv('GOOGLE_DOCS_MCP_READ_CODE_BLOCK_HEURISTIC', 'false')
-    monkeypatch.setenv('GOOGLE_DOCS_MCP_READ_NATIVE_CODE_BLOCKS', 'false')
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_READ_CODE_BLOCK_HEURISTIC', 'false')
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_READ_NATIVE_CODE_BLOCKS', 'false')
     get_settings.cache_clear()
     assert '```' not in render(native_code_document)
 
@@ -401,9 +401,9 @@ def test_native_switch_is_independent(native_code_document, monkeypatch,
                                       heuristic):
     """Keep native blocks plain even when generic heuristics are enabled."""
     assert Settings().read_native_code_blocks is True
-    monkeypatch.setenv('GOOGLE_DOCS_MCP_READ_CODE_BLOCK_HEURISTIC',
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_READ_CODE_BLOCK_HEURISTIC',
                        str(heuristic))
-    monkeypatch.setenv('GOOGLE_DOCS_MCP_READ_NATIVE_CODE_BLOCKS', 'false')
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_READ_NATIVE_CODE_BLOCKS', 'false')
     for item in native_code_document['body']['content']:
         item['paragraph']['paragraphStyle']['lineSpacing'] = 100
         for element in item['paragraph']['elements']:
@@ -413,7 +413,7 @@ def test_native_switch_is_independent(native_code_document, monkeypatch,
     assert '`UI_CODE' not in markup
     assert '\ue907' not in markup
     assert 'UI&#95;CODE&#95;20261027 &#61;&#32;1' in markup
-    monkeypatch.setenv('GOOGLE_DOCS_MCP_READ_NATIVE_CODE_BLOCKS', 'true')
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_READ_NATIVE_CODE_BLOCKS', 'true')
     get_settings.cache_clear()
     assert markup != render(native_code_document)
     assert render(native_code_document).startswith('```\n')
@@ -424,7 +424,7 @@ def test_native_switch_is_independent(native_code_document, monkeypatch,
 def test_native_delimiters_alone_are_not_code(native_code_document,
                                              monkeypatch, change):
     """Reject private-use text and incomplete UI blocks."""
-    monkeypatch.setenv('GOOGLE_DOCS_MCP_READ_CODE_BLOCK_HEURISTIC', 'true')
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_READ_CODE_BLOCK_HEURISTIC', 'true')
     content = native_code_document['body']['content']
     if change == 'missing_end':
         content.pop()

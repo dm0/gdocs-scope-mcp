@@ -17,19 +17,17 @@ Tools:
   Manage:   docs_list, docs_create
 
 Auth (in priority order):
-  1. GOOGLE_DOCS_MCP_TOKEN env var   — standalone token (auth_setup.py)
-  2. GOOGLE_DRIVE_MCP_TOKEN env var  — backward-compatible alias
-  3. GOOGLE_DOCS_TOKEN_FILE env var  — legacy gog alias
-  4. $XDG_CONFIG_HOME/gdocs-scope-mcp/token.json (default root: ~/.config)
-  5. ~/.google-docs-mcp/token.json   — backward-compatible fallback
-  6. ~/.google-drive-mcp/token.json  — backward-compatible fallback
-  7. GOG_KEYRING_PASSWORD env var    — auto-export from gog CLI
+  1. GDOCS_SCOPE_MCP_TOKEN env var   — standalone token (auth_setup.py)
+  2. $XDG_CONFIG_HOME/gdocs-scope-mcp/token.json (default root: ~/.config)
+  3. ~/.google-docs-mcp/token.json   — legacy-file fallback
+  4. ~/.google-drive-mcp/token.json  — legacy-file fallback
+  5. GOG_KEYRING_PASSWORD env var    — auto-export from gog CLI
 
 Setup:
   gdocs-scope-mcp-auth --credentials ~/credentials.json
   gdocs-scope-mcp-auth --credentials ~/credentials.json --headless  # no
   browser
-  GOOGLE_DOCS_MCP_CLIENT_ID=... GOOGLE_DOCS_MCP_CLIENT_SECRET=...
+  GDOCS_SCOPE_MCP_CLIENT_ID=... GDOCS_SCOPE_MCP_CLIENT_SECRET=...
   gdocs-scope-mcp-auth
 
 Transport: stdio (Claude Desktop / OpenClaw MCP config)

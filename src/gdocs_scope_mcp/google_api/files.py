@@ -1,24 +1,22 @@
 """List and create Google Docs through uncached Google API clients."""
 
-import os
-
 from gdocs_scope_mcp.google_api import clients
 from gdocs_scope_mcp.google_api.models import (
     CreateDocumentResponse,
     ListDocumentsResponse,
 )
+from gdocs_scope_mcp.settings import optional_env
 
 
 def list_documents(
     query: str = '', limit: int = 20, page_token: str | None = None,
 ):
     """Run the Google API workflow independently of MCP registration."""
-    drive = clients.get_service('drive', 'v3', cached=False)
-
-    use_drive = (
-        os.environ.get('GOOGLE_DOCS_USE_DRIVE', 'false').lower() == 'true'
-    )
-    drive_id = os.environ.get('GOOGLE_DOCS_DRIVE_ID', None)
+    configured = optional_env('GDOCS_SCOPE_MCP_USE_DRIVE') or 'false'
+    if configured.lower() not in {'true', 'false'}:
+        raise ValueError('GDOCS_SCOPE_MCP_USE_DRIVE must be true or false')
+    use_drive = configured.lower() == 'true'
+    drive_id = optional_env('GDOCS_SCOPE_MCP_DRIVE_ID')
     drive_kwargs: dict[str, str | bool] = {}
     if drive_id is not None:
         use_drive = True
@@ -38,6 +36,7 @@ def list_documents(
     if query:
         q += f' and fullText contains "{query}"'
 
+    drive = clients.get_service('drive', 'v3', cached=False)
     results = (
         drive.files()
         .list(

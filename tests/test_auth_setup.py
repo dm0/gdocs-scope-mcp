@@ -123,7 +123,7 @@ def test_new_and_legacy_token_files_refresh(
     path = tmp_path / 'token.json'
     path.write_text(json.dumps(token))
     before = path.read_bytes()
-    monkeypatch.setenv('GOOGLE_DOCS_MCP_TOKEN', str(path))
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_TOKEN', str(path))
     refresh = Mock()
     monkeypatch.setattr(credentials.Credentials, 'refresh', refresh)
 

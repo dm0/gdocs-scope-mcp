@@ -208,7 +208,7 @@ def table_probe(live_test_doc):
             **os.environ, 'GDOCS_SCOPE_MCP_LIVE_TEST_DOC': live_test_doc,
         }
         if revision_mode is not None:
-            environment['GOOGLE_DOCS_MCP_WRITE_REVISION_MODE'] = revision_mode
+            environment['GDOCS_SCOPE_MCP_WRITE_REVISION_MODE'] = revision_mode
             report['write_revision_mode'] = revision_mode
         transports = [StdioTransport(
             command=str(repo / '.venv/bin/fastmcp'),

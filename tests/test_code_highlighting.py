@@ -27,7 +27,7 @@ def clean_config(monkeypatch, tmp_path):
     for name in ('CONFIG', 'CODE_FONT_FAMILY', 'INLINE_CODE_COLOR',
                  'CODE_BLOCK_HIGHLIGHTING', 'CODE_BLOCK_STYLE',
                  'CODE_BLOCK_LINE_SPACING', 'CODE_BLOCK_THEME_BACKGROUND'):
-        monkeypatch.delenv('GOOGLE_DOCS_MCP_' + name, raising=False)
+        monkeypatch.delenv('GDOCS_SCOPE_MCP_' + name, raising=False)
     monkeypatch.setenv('XDG_CONFIG_HOME', str(tmp_path))
     get_settings.cache_clear()
     yield
@@ -68,8 +68,8 @@ def test_default_python_keyword_style():
 
 def test_dark_theme_has_readable_foreground_and_background(monkeypatch):
     """Transfer Monokai's light base text and dark background together."""
-    monkeypatch.setenv('GOOGLE_DOCS_MCP_CODE_BLOCK_STYLE', 'monokai')
-    monkeypatch.setenv('GOOGLE_DOCS_MCP_CODE_BLOCK_THEME_BACKGROUND', 'true')
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_CODE_BLOCK_STYLE', 'monokai')
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_CODE_BLOCK_THEME_BACKGROUND', 'true')
     [(text, style)] = code_spans('()', 'python')
     assert text == '()'
     fg = style.foreground_color.color.rgb_color
@@ -81,8 +81,8 @@ def test_dark_theme_has_readable_foreground_and_background(monkeypatch):
 
 def test_highlighting_can_be_disabled_without_losing_font(monkeypatch):
     """Keep the configured font while disabling all syntax-derived styles."""
-    monkeypatch.setenv('GOOGLE_DOCS_MCP_CODE_BLOCK_HIGHLIGHTING', 'false')
-    monkeypatch.setenv('GOOGLE_DOCS_MCP_CODE_FONT_FAMILY', 'Courier New')
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_CODE_BLOCK_HIGHLIGHTING', 'false')
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_CODE_FONT_FAMILY', 'Courier New')
     [(text, style)] = code_spans('return "x"', 'python')
     assert text == 'return "x"'
     assert style.model_dump(by_alias=True, exclude_unset=True) == {
@@ -93,7 +93,7 @@ def test_highlighting_can_be_disabled_without_losing_font(monkeypatch):
 @pytest.mark.parametrize('style', ['', 'not-a-real-theme'])
 def test_unknown_theme_fails_configuration_validation(style, monkeypatch):
     """Catch a theme typo before any document insertion can happen."""
-    monkeypatch.setenv('GOOGLE_DOCS_MCP_CODE_BLOCK_STYLE', style)
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_CODE_BLOCK_STYLE', style)
     with pytest.raises(ValidationError, match='Unknown Pygments style'):
         get_settings()
 
@@ -105,8 +105,8 @@ def test_file_and_environment_control_highlighting(monkeypatch, tmp_path):
         '{"code_block_highlighting":false,"code_block_style":"friendly"}',
         encoding='utf-8',
     )
-    monkeypatch.setenv('GOOGLE_DOCS_MCP_CONFIG', str(path))
-    monkeypatch.setenv('GOOGLE_DOCS_MCP_CODE_BLOCK_STYLE', 'monokai')
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_CONFIG', str(path))
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_CODE_BLOCK_STYLE', 'monokai')
     assert get_settings().code_block_style == 'monokai'
     assert not get_settings().code_block_highlighting
 
@@ -120,7 +120,7 @@ def test_layout_defaults():
 @pytest.mark.parametrize('value', ['0', '-1', 'nan', 'inf', '-inf', 'bad'])
 def test_line_spacing_must_be_positive_and_finite(value, monkeypatch):
     """Reject invalid spacing before issuing document updates."""
-    monkeypatch.setenv('GOOGLE_DOCS_MCP_CODE_BLOCK_LINE_SPACING', value)
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_CODE_BLOCK_LINE_SPACING', value)
     with pytest.raises(ValidationError):
         get_settings()
 
@@ -132,8 +132,8 @@ def test_layout_file_values_and_environment_override(monkeypatch, tmp_path):
         '{"code_block_line_spacing":1.5,"code_block_theme_background":true}',
         encoding='utf-8',
     )
-    monkeypatch.setenv('GOOGLE_DOCS_MCP_CONFIG', str(path))
-    monkeypatch.setenv('GOOGLE_DOCS_MCP_CODE_BLOCK_LINE_SPACING', '1.25')
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_CONFIG', str(path))
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_CODE_BLOCK_LINE_SPACING', '1.25')
     assert get_settings().code_block_line_spacing == CUSTOM_LINE_SPACING
     assert get_settings().code_block_theme_background
 
@@ -141,7 +141,7 @@ def test_layout_file_values_and_environment_override(monkeypatch, tmp_path):
 @pytest.mark.parametrize('background', [False, True])
 def test_background_switch_reaches_native_styles(background, monkeypatch):
     """Toggle background without suppressing colors or clearing emphasis."""
-    monkeypatch.setenv('GOOGLE_DOCS_MCP_CODE_BLOCK_THEME_BACKGROUND',
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_CODE_BLOCK_THEME_BACKGROUND',
                        str(background).lower())
     requests = markdown_to_requests('```python\nreturn (1)\n```', start=1)
     styles = [r['updateTextStyle']['textStyle'] for r in requests
@@ -163,8 +163,8 @@ def test_paragraph_shading_includes_empty_lines_and_stays_within_code(
     monkeypatch, newline_before, html,
 ):
     """Fill the whole block range, including leading/trailing blank lines."""
-    monkeypatch.setenv('GOOGLE_DOCS_MCP_CODE_BLOCK_THEME_BACKGROUND', 'true')
-    monkeypatch.setenv('GOOGLE_DOCS_MCP_CODE_BLOCK_STYLE', 'monokai')
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_CODE_BLOCK_THEME_BACKGROUND', 'true')
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_CODE_BLOCK_STYLE', 'monokai')
     code = '\nfirst🦷\n\nlast\n\n'
     block = (f'<pre><code class="language-python">{code}\n</code></pre>'
              if html else f'```python\n{code}\n```')
@@ -202,8 +202,8 @@ def test_no_shading_without_highlighted_block(
     monkeypatch, markup, highlighting,
 ):
     """Keep unsupported/unlabelled blocks and inline code unshaded."""
-    monkeypatch.setenv('GOOGLE_DOCS_MCP_CODE_BLOCK_THEME_BACKGROUND', 'true')
-    monkeypatch.setenv('GOOGLE_DOCS_MCP_CODE_BLOCK_HIGHLIGHTING',
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_CODE_BLOCK_THEME_BACKGROUND', 'true')
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_CODE_BLOCK_HIGHLIGHTING',
                        str(highlighting).lower())
     requests = markdown_to_requests(markup, start=1)
     assert all('shading' not in r.get('updateParagraphStyle', {}).get(
@@ -219,7 +219,7 @@ def test_token_background_is_separate_from_paragraph_fill(
         background_color = '#272822'
         styles: ClassVar[dict] = {Token: '#abcdef bg:#123456'}
 
-    monkeypatch.setenv('GOOGLE_DOCS_MCP_CODE_BLOCK_THEME_BACKGROUND',
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_CODE_BLOCK_THEME_BACKGROUND',
                        str(background).lower())
     monkeypatch.setattr(code_highlighting, 'get_style_by_name',
                         lambda _: ProbeStyle)
@@ -251,7 +251,7 @@ def test_spacing_only_targets_code_after_all_insertions(
     block, newline_before, monkeypatch,
 ):
     """Set percent-based spacing without leaking it to surrounding prose."""
-    monkeypatch.setenv('GOOGLE_DOCS_MCP_CODE_BLOCK_LINE_SPACING', '1.25')
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_CODE_BLOCK_LINE_SPACING', '1.25')
     requests = markdown_to_requests(
         'Before🦷\n\n' + block + '\n\nAfter `inline`', start=10,
         newline_before=newline_before,

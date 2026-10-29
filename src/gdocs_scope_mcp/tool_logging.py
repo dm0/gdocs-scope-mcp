@@ -11,7 +11,7 @@ from fastmcp.server.middleware import Middleware, MiddlewareContext
 from gdocs_scope_mcp.tool_errors import ErrorToolResult, failure_from_exception
 
 LOGGER_NAME = 'gdocs_scope_mcp'
-LOG_LEVEL_ENV = 'GOOGLE_DOCS_MCP_LOG_LEVEL'
+LOG_LEVEL_ENV = 'GDOCS_SCOPE_MCP_LOG_LEVEL'
 logger = logging.getLogger(LOGGER_NAME)
 
 
