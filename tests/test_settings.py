@@ -52,6 +52,7 @@ def test_defaults_need_no_config_file():
     assert settings.code_font_family == 'Roboto Mono'
     assert settings.inline_code_color == '#188038'
     assert settings.write_revision_mode == 'required'
+    assert settings.document_cache_enabled is False
     assert settings.table_snapshot_ttl_seconds == 86400  # noqa: PLR2004
 
 

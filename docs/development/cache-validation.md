@@ -59,7 +59,8 @@ strict freshness policy: an unchanged version can accompany newer Docs
 content. Reading Drive both before and after the Docs snapshot does not
 eliminate this cross-service visibility problem.
 
-Docs revision checks remain the default. A future faster read policy would
+The snapshot cache is disabled by default. Explicitly enabling it retains
+native Docs revision checks before reuse. A future faster read policy would
 need to expose its permitted staleness explicitly, such as a validation TTL
 with periodic native Docs checks. Write guards must continue to use native
 Docs revision IDs; a Drive version is not a substitute.

@@ -47,7 +47,7 @@ class Settings(BaseSettings):
         env_prefix='GOOGLE_DOCS_MCP_', extra='forbid', frozen=True,
     )
     write_revision_mode: Literal['required', 'target'] = 'required'
-    document_cache_enabled: bool = True
+    document_cache_enabled: bool = False
     document_cache_storage: Literal['disk', 'memory'] = 'disk'
     document_cache_directory: Path | None = None
     document_cache_database_max_bytes: Annotated[
