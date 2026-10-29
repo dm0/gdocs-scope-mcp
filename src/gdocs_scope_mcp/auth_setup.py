@@ -43,10 +43,6 @@ SCOPES = [
     'https://www.googleapis.com/auth/drive.readonly',
     # Existing Drive file permissions (access-mode changes are separate).
     'https://www.googleapis.com/auth/drive.file',
-    # Identity
-    'openid',
-    'email',
-    'profile',
 ]
 
 REDIRECT_PORT = 14399
@@ -125,27 +121,11 @@ def exchange_code(code: str, client_id: str, client_secret: str) -> dict:
         return json.loads(resp.read())
 
 
-def get_email(access_token: str) -> str:
-    """Fetch the account email, returning an empty string on failure."""
-    req = urllib.request.Request(
-        'https://www.googleapis.com/oauth2/v2/userinfo',
-        headers={'Authorization': f'Bearer {access_token}'},
-    )
-    try:
-        with urllib.request.urlopen(req) as resp:
-            return json.loads(resp.read()).get('email', '')
-    # This boundary intentionally handles all errors without propagating.
-    except Exception:  # noqa: BLE001
-        return ''
-
-
 def save_token(
     token_response: dict, client_id: str, client_secret: str, out_path: Path
 ):
     """Save refresh credentials with owner-only file permissions."""
-    email = get_email(token_response.get('access_token', ''))
     token_data = {
-        'email': email,
         'client_id': client_id,
         'client_secret': client_secret,
         'refresh_token': token_response['refresh_token'],
@@ -154,7 +134,6 @@ def save_token(
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(token_data, indent=2))
     out_path.chmod(0o600)
-    return email
 
 
 class _CallbackHandler(BaseHTTPRequestHandler):
@@ -352,19 +331,19 @@ Examples:
     out_path = Path(args.out).expanduser()
 
     print(f'Token will be saved to: {out_path}')
-    print('Scopes: docs, drive, appscript (for inline comments)')
+    print('Scopes: ' + ', '.join(SCOPES))
 
     # Run the appropriate flow
     if args.code:
-        email = run_code_exchange(
+        run_code_exchange(
             args.code, client_id, client_secret, out_path
         )
     elif args.headless:
-        email = run_headless_flow(client_id, client_secret, out_path)
+        run_headless_flow(client_id, client_secret, out_path)
     else:
-        email = run_local_flow(client_id, client_secret, out_path)
+        run_local_flow(client_id, client_secret, out_path)
 
-    print(f'\n✓ Authenticated as: {email or "(email unknown)"}')
+    print('\n✓ Authorisation successful')
     print(f'✓ Token saved: {out_path}')
     print()
     print('Set this env var to use the token:')

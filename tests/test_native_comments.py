@@ -317,7 +317,6 @@ def test_native_comments_need_no_script_scopes():
     assert not any('/auth/script.' in scope for scope in auth_setup.SCOPES)
     assert 'https://www.googleapis.com/auth/documents' in auth_setup.SCOPES
     assert 'https://www.googleapis.com/auth/drive' in auth_setup.SCOPES
-    assert 'openid' in auth_setup.SCOPES  # Identity cleanup belongs to #38.
 
 
 @pytest.mark.parametrize('mode,key', [

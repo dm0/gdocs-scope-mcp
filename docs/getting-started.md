@@ -149,14 +149,26 @@ The auth setup requests these scopes:
 | `https://www.googleapis.com/auth/drive` | Access Drive files |
 | `https://www.googleapis.com/auth/drive.readonly` | Read Drive file metadata |
 | `https://www.googleapis.com/auth/drive.file` | Per-file Drive access |
-| `openid`, `email`, `profile` | Identity |
 
 ---
 
-New authorizations no longer request Apps Script scopes. Existing token files
-remain usable; this change does not revoke previously granted permissions.
-Native comments use the Docs API. Identity-scope cleanup and per-file access
-are separate work.
+New authorizations request neither identity scopes (`openid`, `email`,
+`profile`) nor Apps Script scopes. Authorization does not fetch account profile
+data, store an email address, or require identity data to report success.
+Native comments use the Docs API. Configurable per-file access is separate work.
+
+Existing token files, including those with identity scopes and an `email` field,
+remain usable without modification. Changing requested scopes does not revoke
+previously granted permissions. To obtain a fresh grant without identity scopes:
+
+1. Remove this application's access in your
+   [Google Account connections](https://myaccount.google.com/connections).
+   This interrupts other clients using the same application grant.
+2. Run the updated `gdocs-scope-mcp-auth` command with your OAuth client settings
+   and the intended `--out` token path, then complete consent again.
+3. Restart MCP processes using that token file so they load the new credentials.
+
+Deleting a local token file alone does not revoke the Google Account grant.
 
 See [configuration](configuration.md#auth-environment-variables) for token and
 OAuth environment variables, [development](development.md) for a source

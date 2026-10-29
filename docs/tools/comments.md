@@ -211,8 +211,9 @@ comments can still return a null revision.
   repaired. Old auxiliary named ranges/bookmarks are not removed automatically.
 - New authorization requests no `script.*` scopes. Existing token files remain
   accepted, and prior grants are not revoked by this code change. Docs and
-  Drive scopes are retained; identity-scope cleanup and per-file access are
-  separate tasks.
+  Drive scopes are retained. New authorizations also omit identity scopes;
+  see [authentication migration](../getting-started.md#scopes). Configurable
+  per-file access is a separate task.
 
 See [native comment implementation notes](../development/native-comments.md)
 for API details, regression tests and live verification.
