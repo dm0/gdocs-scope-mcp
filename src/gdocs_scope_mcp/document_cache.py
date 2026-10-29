@@ -171,6 +171,23 @@ class CachedService:
         return CachedDocuments(self.service.documents(), self.owner)
 
 
+def _execute_get(request, *args, **options):
+    """Time native execute only, excluding cache and request construction."""
+    query = dict(parse_qsl(urlsplit(request.uri).query))
+    kind = ('revision' if query.get('fields') == 'revisionId' else
+            'partial' if 'fields' in query else 'document')
+    started = time.perf_counter()
+    status = 'error'
+    try:
+        result = request.execute(*args, **options)
+        status = 'success'
+        return result
+    finally:
+        duration = (time.perf_counter() - started) * 1000
+        log.info('document_get=%s status=%s duration_ms=%.1f',
+                 kind, status, duration)
+
+
 class CachedDocuments:
     """Leave unrelated discovery methods unchanged."""
 
@@ -193,16 +210,16 @@ class CachedDocuments:
                 or 'commentsViewMode' in query
                 or not get_settings().document_cache_enabled
             ):
-                return request.execute(*args, **options)
+                return _execute_get(request, *args, **options)
             return selected_cache().read(
                 self.owner,
                 kwargs['documentId'],
                 tuple(sorted(query.items())),
-                fetch=lambda: request.execute(*args, **options),
-                check=lambda: self.documents.get(
+                fetch=lambda: _execute_get(request, *args, **options),
+                check=lambda: _execute_get(self.documents.get(
                     documentId=kwargs['documentId'],
                     fields='revisionId',
-                ).execute(*args, **options),
+                ), *args, **options),
                 settings=get_settings(),
             )
 

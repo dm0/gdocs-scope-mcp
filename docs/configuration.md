@@ -236,10 +236,17 @@ database lock during Google requests. Up to 64 persistent lock files bound
 coordination overhead; unrelated documents can occasionally share a lock stripe.
 The memory backend shares data only within its process.
 
-Native comment reads and field-masked requests bypass caching. INFO logs report
-hit/miss,
-serialized snapshot size and cache-operation duration without document IDs or
-content. See the [Google Docs revision contract](https://developers.google.com/workspace/docs/api/reference/rest/v1/documents#Document).
+Native comment reads and field-masked requests bypass caching. With the cache
+wrapper enabled, INFO logs distinguish native `document_get=revision`,
+`document_get=document` and `document_get=partial` calls, with execution status
+and `duration_ms`. This timer covers only the Google client's `execute()`
+(including HTTP and client JSON decoding), after request construction and
+outside our cache/SQLite handling and document conversion. Failed requests are
+timed too. The existing `snapshot_cache=hit/miss` records report serialized
+snapshot size and the broader cache-operation duration; deserialization of a
+cached snapshot and subsequent Markdown conversion happen afterward. No
+document IDs, revisions, URLs, content or exception details are logged by
+these timings. See the [Google Docs revision contract](https://developers.google.com/workspace/docs/api/reference/rest/v1/documents#Document).
 
 ## Logging
 

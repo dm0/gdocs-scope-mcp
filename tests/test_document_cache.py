@@ -2,6 +2,7 @@
 
 # ruff: noqa: D103, PLR2004
 
+import logging
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
@@ -93,6 +94,53 @@ def test_hit_validates_access_and_isolates_mutations(setup_cache):
         'revisionId',
         'revisionId',
     ]
+
+
+def test_native_get_timing_separates_full_and_revision(setup_cache, caplog):
+    caplog.set_level(logging.INFO, logger=document_cache.__name__)
+    setup_cache.read()
+    setup_cache.read()
+    messages = [r.message for r in caplog.records]
+    assert sum('document_get=document status=success' in m
+               for m in messages) == 1
+    assert sum('document_get=revision status=success' in m
+               for m in messages) == 1
+    assert any('snapshot_cache=hit' in m for m in messages)
+    assert all('example' not in m for m in messages)
+
+
+@pytest.mark.parametrize('fails', [False, True])
+def test_native_get_timer_boundary_and_private_failure(
+    monkeypatch, caplog, fails,
+):
+    caplog.set_level(logging.INFO, logger=document_cache.__name__)
+    ticks = iter([10.0, 10.75])
+    monkeypatch.setattr(document_cache.time, 'perf_counter',
+                        lambda: next(ticks))
+
+    def execute(*args, **kwargs):
+        assert args == ('argument',)
+        assert kwargs == {'num_retries': 0}
+        if fails:
+            raise TimeoutError('private-response')
+        return {'revisionId': 'private-revision'}
+
+    request = SimpleNamespace(
+        uri='https://docs.test/private-document?fields=revisionId'
+        '&access_token=private-token', execute=execute,
+    )
+    if fails:
+        with pytest.raises(TimeoutError, match='private-response'):
+            document_cache._execute_get(request, 'argument', num_retries=0)
+    else:
+        assert document_cache._execute_get(
+            request, 'argument', num_retries=0,
+        ) == {'revisionId': 'private-revision'}
+    message = caplog.records[-1].message
+    assert 'document_get=revision' in message
+    assert f'status={"error" if fails else "success"}' in message
+    assert 'duration_ms=750.0' in message
+    assert 'private-' not in message
 
 
 def test_changed_revision_uses_revision_from_full_fetch(setup_cache):
