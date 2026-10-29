@@ -11,8 +11,8 @@ from gdocs_scope_mcp.contracts import EditFailedResponse
 from gdocs_scope_mcp.documents.tabs import require_matching_tab
 from gdocs_scope_mcp.errors import ToolFailureError
 from gdocs_scope_mcp.tables.geometry import (
-    _geometry,
-    _tables,
+    cell_geometry,
+    walk_tables,
 )
 from gdocs_scope_mcp.tables.refs import Layout
 from gdocs_scope_mcp.tables.tokens import (
@@ -23,27 +23,37 @@ from gdocs_scope_mcp.tables.tokens import (
 )
 
 
-def _fail(code, description, action=None):
+def reference_failure(code, description, action=None):
     """Give callers a safe way to reacquire a reference instead of guessing."""
-    raise ToolFailureError(EditFailedResponse(
-        code=code, description=description,
-        suggested_action=action or (
-            'Read the document or call docs_tables_list and use the returned '
-            'reference/page token with unchanged arguments. References are '
-            'tab-scoped; page tokens require the same revision. '
-            'Structural changes require fresh table refs; do not edit tokens.'
-        ),
-    ))
+    raise ToolFailureError(
+        EditFailedResponse(
+            code=code,
+            description=description,
+            suggested_action=action
+            or (
+                'Read the document or call docs_tables_list and use the '
+                'returned reference/page token with unchanged arguments. '
+                'References are tab-scoped; page tokens require the same '
+                'revision. Structural changes require fresh table refs; '
+                'do not edit tokens.'
+            ),
+        )
+    )
 
 
-def _digest(value):
+def reference_digest(value):
     """Hash canonical native data or cursor options without a process cache."""
-    return hashlib.sha256(json.dumps(
-        value, ensure_ascii=True, sort_keys=True, separators=(',', ':'),
-    ).encode()).hexdigest()
+    return hashlib.sha256(
+        json.dumps(
+            value,
+            ensure_ascii=True,
+            sort_keys=True,
+            separators=(',', ':'),
+        ).encode()
+    ).hexdigest()
 
 
-class _Token(BaseModel):
+class PageToken(BaseModel):
     """Validate internal token data; tokens confer no document permissions."""
 
     model_config = ConfigDict(extra='forbid', strict=True)
@@ -60,7 +70,7 @@ class _Token(BaseModel):
     tab: str | None = None
 
 
-def _encode(token):
+def encode_reference(token):
     """Use versioned, portable opaque references with a corruption checksum."""
     if isinstance(token, Token):
         return encode_position(token)
@@ -77,70 +87,92 @@ def _unpack(value):
     prefix, payload, checksum = value.split('.')
     if prefix != 'gdt1':
         raise ValueError('Unsupported token version')
-    data = base64.b64decode(payload + '=' * (-len(payload) % 4),
-                            altchars=b'-_', validate=True)
+    data = base64.b64decode(
+        payload + '=' * (-len(payload) % 4), altchars=b'-_', validate=True
+    )
     if hashlib.sha256(data).hexdigest()[:16] != checksum:
         raise ValueError('Invalid token checksum')
-    return _Token.model_validate_json(data)
+    return PageToken.model_validate_json(data)
 
 
-def _decode(value, kind, doc_id):
+def decode_reference(value, kind, doc_id):
     """Reject malformed, mismatched and wrong-kind tokens before API access."""
     if kind in {'table', 'cell'}:
         return decode_position(value, kind, doc_id)
     try:
         token = _unpack(value)
     except (ValueError, TypeError, ValidationError):
-        _fail('INVALID_ARGUMENT', 'Invalid reference or continuation token '
-              'for this document/tool.')
+        reference_failure(
+            'INVALID_ARGUMENT',
+            'Invalid reference or continuation token for this document/tool.',
+        )
     if token.kind != kind or token.document != doc_id:
-        _fail('INVALID_ARGUMENT', 'Reference has a different tool/document.')
+        reference_failure(
+            'INVALID_ARGUMENT', 'Reference has a different tool/document.'
+        )
     return token
 
 
-def _check_revision(token, document):
+def check_reference_revision(token, document):
     """Reject stale references without reusing an old structural path."""
     require_matching_tab(token.tab, document.get('_mcp_tab_id'))
     if token.revision != document['revisionId']:
-        _fail('STALE_REFERENCE', 'The reference revision is not current.')
+        reference_failure(
+            'STALE_REFERENCE', 'The reference revision is not current.'
+        )
 
 
-def _require_revision(document):
+def require_revision(document):
     """Do not issue misleading revision-bound references without metadata."""
-    if not isinstance(document.get('revisionId'), str) or not document[
-        'revisionId'
-    ]:
-        _fail('REVISION_UNAVAILABLE', 'Table references require a document '
-              'revision, which this read did not return.',
-              'Verify edit access: Google returns revision IDs only to '
-              'editors. Refresh the document after access is corrected.')
+    if (
+        not isinstance(document.get('revisionId'), str)
+        or not document['revisionId']
+    ):
+        reference_failure(
+            'REVISION_UNAVAILABLE',
+            'Table references require a document '
+            'revision, which this read did not return.',
+            'Verify edit access: Google returns revision IDs only to '
+            'editors. Refresh the document after access is corrected.',
+        )
 
 
-def _table_token(document, entry, kind='table', *, layout=None, **updates):
+def table_token(document, entry, kind='table', *, layout=None, **updates):
     """Describe a checked position or an exact-revision page cursor."""
     if kind in {'table', 'cell'}:
         cell = updates.get('cell')
         cell_address = None
         if cell is not None:
-            geometry, valid = _geometry(entry)
+            geometry, valid = cell_geometry(entry)
             value = next(x for x in geometry if x[:2] == tuple(cell))
             if not valid:
-                _fail('INVALID_ARGUMENT', 'Cell geometry is not verified.')
+                reference_failure(
+                    'INVALID_ARGUMENT', 'Cell geometry is not verified.'
+                )
             cell_address = address(value[0], value[2])
         return (layout or Layout(document)).reference(
-            entry, kind=kind, address=cell_address,
+            entry,
+            kind=kind,
+            address=cell_address,
         )
-    return _Token(kind=kind, document=document['documentId'],
-                  revision=document['revisionId'], path=entry.path,
-                  tab=document.get('_mcp_tab_id'),
-                  fingerprint=_digest(entry.item), **updates)
+    return PageToken(
+        kind=kind,
+        document=document['documentId'],
+        revision=document['revisionId'],
+        path=entry.path,
+        tab=document.get('_mcp_tab_id'),
+        fingerprint=reference_digest(entry.item),
+        **updates,
+    )
 
 
 def reference_map(document):
     """Supply HTML table references without any document writes."""
-    entries = _tables(document)
+    entries = walk_tables(document)
     if entries:
-        _require_revision(document)
+        require_revision(document)
     layout = Layout(document)
-    return {entry.item['startIndex']: _encode(layout.reference(entry))
-            for entry in entries}
+    return {
+        entry.item['startIndex']: encode_reference(layout.reference(entry))
+        for entry in entries
+    }

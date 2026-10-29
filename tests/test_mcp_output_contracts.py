@@ -102,7 +102,6 @@ def contract_api(monkeypatch, mock_docs, simple_document):
         'id': 'reply-id',
         'content': 'Reply body',
     }
-    monkeypatch.setattr(server, 'build', lambda *_args, **_kwargs: api)
     monkeypatch.setattr(clients, 'build', lambda *_args, **_kwargs: api)
     monkeypatch.setattr(google_credentials, 'load_credentials', object)
     wire_native_comments(mock_docs, simple_document)

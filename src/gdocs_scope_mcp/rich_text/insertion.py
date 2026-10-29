@@ -9,10 +9,7 @@ from gdocs_scope_mcp.entity_edit import (
 )
 from gdocs_scope_mcp.google_api import clients
 from gdocs_scope_mcp.image_layout import fit_images
-from gdocs_scope_mcp.revision_guards import (
-    insertion_context,
-    submit,
-)
+from gdocs_scope_mcp.revision_guards import insertion_context, submit
 from gdocs_scope_mcp.rich_text.compiler import (
     gpars_to_requests,
     inserted_text_from_requests,

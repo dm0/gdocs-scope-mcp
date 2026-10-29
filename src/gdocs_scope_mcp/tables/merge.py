@@ -3,7 +3,7 @@
 # Reuse the normal fetch boundary without import cycles.
 import logging
 
-from gdocs_scope_mcp.tables.fetching import _fetch
+from gdocs_scope_mcp.tables.fetching import fetch_native
 from gdocs_scope_mcp.tables.grid import Grid, content_direction, merge_state
 from gdocs_scope_mcp.tables.refs import Layout, section
 from gdocs_scope_mcp.tables.tokens import coordinates, encode, fail
@@ -112,7 +112,7 @@ def refreshed_reference(doc_id, token, revision):
     failing with zero committed batches, or repeating the transformation.
     """
     try:
-        document = _fetch(doc_id, tab_id=token.tab)
+        document = fetch_native(doc_id, tab_id=token.tab)
         if not revision or document['revisionId'] != revision or (
             document.get('_mcp_tab_id') != token.tab
         ):

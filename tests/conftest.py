@@ -15,7 +15,7 @@ from fastmcp import Client
 from fastmcp.client.transports import StdioTransport
 
 from gdocs_scope_mcp.diagnostics import capture_server_info
-from gdocs_scope_mcp.google_api import clients
+from gdocs_scope_mcp.google_api import clients, credentials
 
 
 @pytest.fixture
@@ -130,7 +130,8 @@ def mock_docs(monkeypatch, simple_document):
         simple_document
     )
     documents.batchUpdate.return_value.execute.return_value = {}
-    monkeypatch.setattr(clients, 'get_service', lambda *_args: service)
+    monkeypatch.setattr(clients, 'build', lambda *_args, **_kwargs: service)
+    monkeypatch.setattr(credentials, 'load_credentials', object)
     return documents
 
 

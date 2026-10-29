@@ -17,7 +17,7 @@ from gdocs_scope_mcp.rich_text.compiler import gpars_to_requests
 from gdocs_scope_mcp.rich_text.parsing import html_to_gpars, markdown_to_html
 from gdocs_scope_mcp.rich_text.plans import TableInsertionPlan
 from gdocs_scope_mcp.rich_text.preparation import PreparedInsertion
-from gdocs_scope_mcp.rich_text.validation import _image_failure
+from gdocs_scope_mcp.rich_text.validation import image_failure
 
 logger = logging.getLogger('gdocs_scope_mcp')
 MAX_LOCAL_IMAGE_BYTES = 50_000_000
@@ -32,26 +32,26 @@ def _local_image(uri: str) -> tuple[Path, bytes, str] | None:
         try:
             parsed = urlsplit(uri)
         except ValueError:
-            _image_failure('Local image file URL is invalid.')
+            image_failure('Local image file URL is invalid.')
         if (parsed.netloc not in {'', 'localhost'} or parsed.query
                 or parsed.fragment):
-            _image_failure('Local file URLs must have no remote host, query '
+            image_failure('Local file URLs must have no remote host, query '
                            'or fragment.')
         path = Path(unquote(parsed.path))
     else:
         return None
     if not path.is_absolute():
-        _image_failure('Local images require an absolute server-side path.')
+        image_failure('Local images require an absolute server-side path.')
     try:
         path = path.resolve(strict=True)
         if not path.is_file():
-            _image_failure('Local image path must refer to a regular file.')
+            image_failure('Local image path must refer to a regular file.')
         with path.open('rb') as stream:
             content = stream.read(MAX_LOCAL_IMAGE_BYTES)
     except OSError:
-        _image_failure('Local image file could not be read by the MCP server.')
+        image_failure('Local image file could not be read by the MCP server.')
     if not content or len(content) >= MAX_LOCAL_IMAGE_BYTES:
-        _image_failure('Local images must be nonempty and smaller than 50 MB.')
+        image_failure('Local images must be nonempty and smaller than 50 MB.')
     if content.startswith(b'\x89PNG\r\n\x1a\n'):
         mime = 'image/png'
     elif content.startswith(b'\xff\xd8\xff'):
@@ -59,7 +59,7 @@ def _local_image(uri: str) -> tuple[Path, bytes, str] | None:
     elif content.startswith((b'GIF87a', b'GIF89a')):
         mime = 'image/gif'
     else:
-        _image_failure('Local image must contain PNG, JPEG or GIF data.')
+        image_failure('Local image must contain PNG, JPEG or GIF data.')
     return path, content, mime
 
 
@@ -155,7 +155,7 @@ def staged_local_images(
             ).execute()
             link = metadata.get('webContentLink')
             if not link:
-                _image_failure('Drive did not return a temporary image '
+                image_failure('Drive did not return a temporary image '
                                'download link; the document was not changed.')
             if isinstance(planned.requests, TableInsertionPlan):
                 planned.requests.replace_image_uri(placeholder, link)

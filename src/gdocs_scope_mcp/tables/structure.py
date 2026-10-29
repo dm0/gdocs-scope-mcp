@@ -15,7 +15,7 @@ from gdocs_scope_mcp.revision_guards import (
     submit,
 )
 from gdocs_scope_mcp.tables.deletion_state import deletion_state
-from gdocs_scope_mcp.tables.fetching import _fetch
+from gdocs_scope_mcp.tables.fetching import fetch_native
 from gdocs_scope_mcp.tables.merge import prepare, refreshed_reference
 from gdocs_scope_mcp.tables.refs import Layout
 from gdocs_scope_mcp.tables.snapshots import resolve_cells, validate_baseline
@@ -239,7 +239,7 @@ def apply_structure(doc_id, table_ref, base_token, operation, *, tab_id=None):
     validate_baseline(token, baseline, [], baseline.fields, subset=True)
     for attempt in range(1, MAX_ATTEMPTS + 1):
         validate_baseline(token, baseline, [], baseline.fields, subset=True)
-        document = _fetch(doc_id, tab_id=tab_id)
+        document = fetch_native(doc_id, tab_id=tab_id)
         entry = Layout(document).resolve(token)
         merging = isinstance(operation, (MergeCells, UnmergeCells))
         changed = []

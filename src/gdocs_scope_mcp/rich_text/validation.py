@@ -5,7 +5,7 @@ from gdocs_scope_mcp.contracts import EditFailedResponse
 from gdocs_scope_mcp.errors import ToolFailureError
 
 
-def _image_failure(description: str) -> None:
+def image_failure(description: str) -> None:
     """Refuse unsupported images before submitting any document changes."""
     raise ToolFailureError(EditFailedResponse(
         code='INVALID_ARGUMENT', description=description,
@@ -15,7 +15,7 @@ def _image_failure(description: str) -> None:
     ))
 
 
-def _unsupported_list(description: str) -> None:
+def unsupported_list(description: str) -> None:
     """Reject list forms that cannot yet preserve their structure."""
     raise ToolFailureError(EditFailedResponse(
         code='INVALID_ARGUMENT', description=description,

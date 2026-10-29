@@ -2,10 +2,7 @@
 
 
 from gdocs_scope_mcp.documents.tabs import select
-from gdocs_scope_mcp.revision_guards import (
-    pinned_tab,
-    remember_snapshot,
-)
+from gdocs_scope_mcp.revision_guards import pinned_tab, remember_snapshot
 
 
 def get_document(service, doc_id: str, *, tab_id=None) -> dict:

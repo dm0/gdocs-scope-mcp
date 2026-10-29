@@ -36,8 +36,8 @@ from gdocs_scope_mcp.rich_text.models import (
 )
 from gdocs_scope_mcp.rich_text.validation import (
     IMAGE_URI_MAX_BYTES,
-    _image_failure,
-    _unsupported_list,
+    image_failure,
+    unsupported_list,
     unsupported_table,
 )
 from gdocs_scope_mcp.settings import get_code_settings
@@ -58,10 +58,10 @@ def _convert_image(element: Tag, start: int) -> InsertionImage:
     except ValueError:
         valid = False
     if not valid:
-        _image_failure('Image src must be an absolute HTTP(S) URL of at '
+        image_failure('Image src must be an absolute HTTP(S) URL of at '
                        'most 2 kB, without whitespace or credentials.')
     if any(element.get(key) for key in ('style', 'srcset', 'sizes')):
-        _image_failure('CSS image styling and responsive image sources are '
+        image_failure('CSS image styling and responsive image sources are '
                        'unsupported.')
     size = {}
     for dimension in ('width', 'height'):
@@ -69,10 +69,10 @@ def _convert_image(element: Tag, start: int) -> InsertionImage:
             continue
         value = str(element[dimension]).strip()
         if not re.fullmatch(r'\d+(?:\.\d+)?(?:px)?', value):
-            _image_failure('Image dimensions must be positive pixel numbers.')
+            image_failure('Image dimensions must be positive pixel numbers.')
         pixels = float(value.removesuffix('px'))
         if not 0 < pixels < float('inf'):
-            _image_failure('Image dimensions must be finite and positive.')
+            image_failure('Image dimensions must be finite and positive.')
         size[dimension] = {'magnitude': pixels * 0.75, 'unit': 'PT'}
     return InsertionImage(
         start_index=start, end_index=start + 1, uri=uri, object_size=size,
@@ -86,14 +86,14 @@ def _convert_list(
     if list_key is None:
         list_key = start
     if element.name == 'ol' and str(element.get('start', '1')) != '1':
-        _unsupported_list('Custom ordered-list starting numbers are '
+        unsupported_list('Custom ordered-list starting numbers are '
                           'unsupported.')
     result = []
     for item in element.find_all('li', recursive=False):
         if item.find('table') is not None:
             unsupported_table('Tables inside lists are unsupported.')
         if item.find('pre') is not None:
-            _unsupported_list('Code blocks inside list items are unsupported.')
+            unsupported_list('Code blocks inside list items are unsupported.')
         item_key = start
         item_paragraphs = 0
         blocks = []
@@ -130,10 +130,10 @@ def _convert_list(
             if isinstance(child, Tag) and child.name in {'ul', 'ol'}:
                 flush()
                 if not item_paragraphs:
-                    _unsupported_list('List items must start with a nonempty '
+                    unsupported_list('List items must start with a nonempty '
                                       'ordinary paragraph.')
                 if child.name != element.name:
-                    _unsupported_list('Mixed ordered/unordered nesting is '
+                    unsupported_list('Mixed ordered/unordered nesting is '
                                       'not supported in a single list.')
                 children = _convert_list(
                     child, start, level=level + 1, list_key=list_key,
@@ -150,12 +150,12 @@ def _convert_list(
                     child.name in {'blockquote', 'div', 'hr', 'input'}
                     or re.fullmatch(r'h\d+', child.name)
                 ):
-                    _unsupported_list('Only ordinary paragraphs and nested '
+                    unsupported_list('Only ordinary paragraphs and nested '
                                       'lists are supported inside items.')
                 blocks.append(child)
         flush()
         if not item_paragraphs:
-            _unsupported_list('List items must contain a nonempty paragraph.')
+            unsupported_list('List items must contain a nonempty paragraph.')
     return result
 
 
@@ -294,7 +294,7 @@ def _convert_page_elements(
                 last.end_index = start + 1
                 continue
             if element.name == 'picture':
-                _image_failure('HTML picture/source selection is unsupported; '
+                image_failure('HTML picture/source selection is unsupported; '
                                'use a single img with src.')
             if element.name in {'ul', 'ol'}:
                 added.extend(_convert_list(

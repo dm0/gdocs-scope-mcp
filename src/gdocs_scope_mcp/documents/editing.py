@@ -4,25 +4,8 @@ Edit Google Docs through text anchors and batch updates.
 Edits Google Docs in-place using real batchUpdate requests, preserving
 document history, comments, and suggestions. LLMs never touch indices.
 
-Rich mode uses the shared Markdown converter for paragraphs and inline styles:
-    # / ## / ### headings
-    **bold**, *italic*, ***bold italic***
-
-Native homogeneous lists and rectangular tables are supported.
-
-Auth (in priority order):
-    1. GOOGLE_DOCS_MCP_TOKEN env var  → path to standalone token JSON
-    2. GOOGLE_DOCS_TOKEN_FILE env var → legacy gog-exported token JSON
-    3. Default standalone path        → ~/.google-docs-mcp/token.json
-    4. GOG_KEYRING_PASSWORD env var   → auto-export from gog
-    5. Cached gog token               → /tmp/docs_edit_token_cache.json
-
-Legacy GOOGLE_DRIVE_MCP_* env var aliases still work.
-
-Python API:
-    from gdocs_scope_mcp.docs_edit import read, search_replace, insert_after,
-    insert_before,
-                          delete_paragraph, append, batch_replace
+Use shared source parsing and targeting APIs for coordinates, Google client
+construction for authentication, and rich-text insertion for staged writes.
 """
 
 from __future__ import annotations
@@ -58,26 +41,6 @@ from gdocs_scope_mcp.revision_guards import (
 from gdocs_scope_mcp.text_indices import utf16_length
 
 log = logging.getLogger(__name__)
-
-# ---------------------------------------------------------------------------
-# Auth helpers
-# ---------------------------------------------------------------------------
-
-SUGGESTIONS_VIEW_MODE = 'SUGGESTIONS_INLINE'
-
-
-# ---------------------------------------------------------------------------
-# Document structure helpers
-# ---------------------------------------------------------------------------
-
-
-# def _paragraph_to_md(item: dict[str, ]):
-
-
-# ---------------------------------------------------------------------------
-# Core operations
-# ---------------------------------------------------------------------------
-
 
 # Preserve the public positional calling convention.
 @guarded_edit

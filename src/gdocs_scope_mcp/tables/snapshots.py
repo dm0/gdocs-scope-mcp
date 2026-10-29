@@ -8,14 +8,14 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from gdocs_scope_mcp.documents.native_models import GoogleDocumentTableCell
-from gdocs_scope_mcp.revision_guards import _normalized
+from gdocs_scope_mcp.documents.snapshots import normalized as normalize_source
 from gdocs_scope_mcp.settings import get_settings
 from gdocs_scope_mcp.tables.deletion_state import deletion_state
-from gdocs_scope_mcp.tables.fetching import _fetch
-from gdocs_scope_mcp.tables.geometry import _geometry
+from gdocs_scope_mcp.tables.fetching import fetch_native
+from gdocs_scope_mcp.tables.geometry import cell_geometry
 from gdocs_scope_mcp.tables.grid import Grid, merge_state
 from gdocs_scope_mcp.tables.refs import Layout
-from gdocs_scope_mcp.tables.rendering import _model
+from gdocs_scope_mcp.tables.rendering import native_model
 from gdocs_scope_mcp.tables.style_state import property_state, property_value
 from gdocs_scope_mcp.tables.tokens import address, decode, digest, encode, fail
 
@@ -28,7 +28,7 @@ def cell_state(document, cell):
         paragraph = item.get('paragraph', {})
         values, styles, elements = [], [], []
         for element in paragraph.get('elements', []):
-            normalized = _normalized(element)
+            normalized = normalize_source(element)
             run = normalized.get('textRun')
             if run is not None:
                 text = run.get('content', '')
@@ -112,7 +112,7 @@ def resolve_cells(document, table, selected, *, merged=False):
         grid = Grid(entry)
         return {a: (head.row, head.column, head.native) for a in selected
                 for head in [grid.cell(a)]}
-    geometry, valid = _geometry(entry)
+    geometry, valid = cell_geometry(entry)
     if (not valid or any(rs != 1 or cs != 1 for _, _, _, rs, cs, _, _ in
                          geometry) or any('table' in child
                          for *_, cell in geometry
@@ -164,12 +164,12 @@ def snapshot(doc_id, table_ref, cells, fields, base_token=None, *,
         fail('INVALID_ARGUMENT', 'Duplicate cell addresses are not allowed.')
     if baseline is not None:
         validate_baseline(table, baseline, cells, requested)
-    document = _fetch(doc_id, tab_id=tab_id)
+    document = fetch_native(doc_id, tab_id=tab_id)
     available = resolve_cells(document, table, cells,
                               merged=requested == ['merge'])
     if baseline is not None:
         validate_states(document, baseline, available)
-    model = _model(document)
+    model = native_model(document)
     entry = (Layout(document).resolve(table)
              if any('.' in f or f in {'deletion', 'merge'} for f in requested)
              else None)

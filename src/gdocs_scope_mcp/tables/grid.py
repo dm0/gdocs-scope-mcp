@@ -4,7 +4,7 @@
 from dataclasses import dataclass
 
 from gdocs_scope_mcp.tables.deletion_state import deletion_state
-from gdocs_scope_mcp.tables.geometry import _geometry
+from gdocs_scope_mcp.tables.geometry import cell_geometry
 from gdocs_scope_mcp.tables.tokens import address, coordinates, digest, fail
 
 
@@ -36,7 +36,7 @@ class Grid:
     def __init__(self, entry):
         """Index each real head, covered slot and physical placeholder."""
         self.entry = entry
-        geometry, valid = _geometry(entry)
+        geometry, valid = cell_geometry(entry)
         if (not valid or any(type(rs) is not int or type(cs) is not int
                              for _, _, _, rs, cs, _, _ in geometry)):
             fail('INVALID_ARGUMENT', 'Merged-cell operations require verified '

@@ -1,6 +1,5 @@
 """Read accepted-content projections and inspect native suggestion threads."""
 
-# Authentication and tree parsing are shared lazily with the edit backend.
 from dataclasses import dataclass
 from http import HTTPStatus
 from typing import Annotated, NoReturn

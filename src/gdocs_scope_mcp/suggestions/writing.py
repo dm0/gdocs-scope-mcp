@@ -1,6 +1,5 @@
 """Plan native proposals and verify their persistence separately from edits."""
 
-# Reuse authentication and source mapping without a docs_edit import cycle.
 from http import HTTPStatus
 
 from googleapiclient.errors import HttpError

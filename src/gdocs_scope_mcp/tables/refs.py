@@ -2,7 +2,7 @@
 
 # Native table traversal lives in the reader; import lazily to avoid cycles.
 from gdocs_scope_mcp.documents.tabs import require_matching_tab, select
-from gdocs_scope_mcp.tables.geometry import _tables
+from gdocs_scope_mcp.tables.geometry import walk_tables
 from gdocs_scope_mcp.tables.tokens import Token, digest, fail
 
 
@@ -39,7 +39,7 @@ class Layout:
     def __init__(self, document):
         """Group top-level tables by their nearest heading hierarchy."""
         self.document = document
-        self.entries = _tables(document)
+        self.entries = walk_tables(document)
         self.by_path = {tuple(e.path): e for e in self.entries}
         self.sections = {}
         self.shapes = {tuple(e.path): digest(structure(e.item))

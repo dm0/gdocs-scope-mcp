@@ -20,7 +20,7 @@ from gdocs_scope_mcp.revision_guards import (
 )
 from gdocs_scope_mcp.rich_text.cells import convert_table, shifted_requests
 from gdocs_scope_mcp.rich_text.parsing import markdown_to_html
-from gdocs_scope_mcp.tables.fetching import _fetch
+from gdocs_scope_mcp.tables.fetching import fetch_native
 from gdocs_scope_mcp.tables.snapshots import (
     resolve_cells,
     validate_baseline,
@@ -210,7 +210,7 @@ def patch(doc_id, table_ref, base_token, changes, *, tab_id=None):
     compiled = {c.address: compile_cell(c.markdown) for c in changes}
     for attempt in range(1, MAX_ATTEMPTS + 1):
         validate_baseline(table, baseline, cells, baseline.fields, subset=True)
-        document = _fetch(doc_id, tab_id=tab_id)
+        document = fetch_native(doc_id, tab_id=tab_id)
         available = resolve_cells(document, table, cells)
         validate_states(document, baseline, available)
         requests, receipts = plan_requests(document, available, compiled)

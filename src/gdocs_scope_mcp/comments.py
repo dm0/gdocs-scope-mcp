@@ -1,6 +1,5 @@
 """Read native comment threads and confirm independently persisted writes."""
 
-# Reuse authentication lazily without a docs_edit import cycle.
 import base64
 import hashlib
 import json
@@ -381,10 +380,7 @@ def mutate(
     return result
 
 
-from gdocs_scope_mcp.revision_guards import (
-    depend_on,
-    guarded_edit,
-)
+from gdocs_scope_mcp.revision_guards import depend_on, guarded_edit
 
 
 @guarded_edit

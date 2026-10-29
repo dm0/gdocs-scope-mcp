@@ -9,6 +9,7 @@ from fastmcp import Client
 
 from gdocs_scope_mcp import server
 from gdocs_scope_mcp.diagnostics import capture_server_info
+from gdocs_scope_mcp.google_api import credentials
 
 
 def test_server_info_keeps_startup_snapshot(tmp_path, monkeypatch):
@@ -22,7 +23,7 @@ def test_server_info_keeps_startup_snapshot(tmp_path, monkeypatch):
         raise AssertionError('server_info must not use Google credentials')
 
     monkeypatch.setattr(
-        server.credentials, 'load_credentials', unexpected_auth,
+        credentials, 'load_credentials', unexpected_auth,
     )
 
     async def check():

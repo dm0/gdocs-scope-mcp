@@ -1,6 +1,5 @@
-"""Plan native tables and fill cells using indices read back from Google."""
+"""Group, rebase and preview insertion blocks without network operations."""
 
-# Deferred imports separate the paragraph converter and structural planner.
 from copy import deepcopy
 from dataclasses import dataclass
 

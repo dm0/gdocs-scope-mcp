@@ -9,18 +9,27 @@ PREFIX = 'gdocs_scope_mcp'
 
 def import_graph():
     """Resolve all local imports, including imports nested in functions."""
-    paths = {PREFIX + '.' + '.'.join(
-        p.relative_to(ROOT).with_suffix('').parts): p
-             for p in ROOT.rglob('*.py')}
+    paths = {}
+    for path in ROOT.rglob('*.py'):
+        parts = path.relative_to(ROOT).with_suffix('').parts
+        if parts[-1] == '__init__':
+            parts = parts[:-1]
+        paths['.'.join([PREFIX, *parts])] = path
     graph = {name: set() for name in paths}
     for name, path in paths.items():
+        parent = name.rpartition('.')[0]
+        if parent in paths:
+            graph[name].add(parent)
         for node in ast.walk(ast.parse(path.read_text())):
             if isinstance(node, ast.Import):
                 targets = [alias.name for alias in node.names]
             elif isinstance(node, ast.ImportFrom):
                 parent = node.module or ''
                 if node.level:
-                    parent = '.'.join(name.split('.')[:-node.level]
+                    package = (name.split('.') if path.name == '__init__.py'
+                               else name.split('.')[:-1])
+                    depth = len(package) - node.level + 1
+                    parent = '.'.join(package[:depth]
                                       + ([parent] if parent else []))
                 targets = [parent, *[parent + '.' + a.name
                                      for a in node.names]]
@@ -79,3 +88,33 @@ def test_pure_rich_text_has_no_execution_dependencies():
         assert not any(dep == PREFIX + '.' + target
                        or dep.startswith(PREFIX + '.' + target + '.')
                        for dep in graph[node] for target in prohibited)
+
+
+def test_shared_utilities_stay_below_feature_operations():
+    """Keep table geometry/references and document source mapping reusable."""
+    graph = import_graph()
+    foundational = {
+        'tables.geometry', 'tables.refs', 'tables.references', 'tables.tokens',
+        'tables.grid', 'tables.style_state', 'tables.deletion_state',
+        'documents.parsing', 'documents.targeting', 'documents.native_models',
+        'documents.rendering', 'documents.snapshots',
+    }
+    prohibited = {
+        'documents.editing', 'documents.reading', 'tables.reading',
+        'tables.patch', 'tables.formatting', 'tables.structure',
+        'tables.merge', 'suggestions.writing', 'rich_text.insertion',
+    }
+    for name in foundational:
+        assert not (graph[PREFIX + '.' + name]
+                    & {PREFIX + '.' + p for p in prohibited}), name
+
+
+def test_shared_apis_do_not_import_private_helpers():
+    """Cross-module consumers use explicit internal APIs."""
+    for path in ROOT.rglob('*.py'):
+        for node in ast.walk(ast.parse(path.read_text())):
+            if (isinstance(node, ast.ImportFrom)
+                    and (node.module or '').startswith(PREFIX)):
+                assert not any(a.name.startswith('_') for a in node.names), (
+                    path.relative_to(ROOT), node.lineno,
+                )

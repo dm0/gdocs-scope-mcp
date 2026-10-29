@@ -8,6 +8,13 @@ complete round-trip fidelity for every element in this response. The smaller
 synthetic fixture in `conftest.py` supplies ASCII text and repeated anchors for
 precise edit assertions.
 
+`refactor_behavior.json` was captured from the Git source at `096c27e` before
+the package-boundary refactor. The same permanent snapshot helper runs against
+the refactored package. It covers rendered native content, paragraph/list/code/
+image/table requests and previews, successful edit receipts, native batches and
+expected failures. Only the generated code-marker UUID is fixed for comparison;
+source indices, request order, formatting and receipts are compared exactly.
+
 # Native code fixture
 
 `native_code.json` retains the API structure of a code block created through

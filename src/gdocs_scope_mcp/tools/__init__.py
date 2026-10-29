@@ -1,0 +1,1 @@
+"""Explicit MCP feature registration."""

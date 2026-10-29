@@ -15,6 +15,7 @@ from googleapiclient.errors import HttpError
 from httplib2 import HttpLib2Error
 
 from gdocs_scope_mcp.contracts import EditFailedResponse
+from gdocs_scope_mcp.documents.snapshots import normalized
 from gdocs_scope_mcp.documents.tabs import scope_requests
 from gdocs_scope_mcp.errors import ToolFailureError
 from gdocs_scope_mcp.settings import get_settings
@@ -40,14 +41,6 @@ def fail(code, description, committed=0):
     ))
 
 
-def _normalized(value):
-    """Remove absolute indices without dropping native text or style data."""
-    if isinstance(value, dict):
-        return {k: _normalized(v) for k, v in value.items()
-                if k not in {'startIndex', 'endIndex'}}
-    if isinstance(value, list):
-        return [_normalized(v) for v in value]
-    return value
 
 
 def _dependencies(document, item):
@@ -87,7 +80,7 @@ def _units(document):
             headings.append((level, style.get('headingId')))
         if 'paragraph' not in item and 'table' not in item:
             continue
-        token = json.dumps([_normalized(item), headings,
+        token = json.dumps([normalized(item), headings,
                             _dependencies(document, item)], sort_keys=True)
         result.append((item['startIndex'], item['endIndex'], token))
     return result

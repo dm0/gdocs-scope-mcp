@@ -1,7 +1,7 @@
 """Hash native data removed by a structural operation, excluding indices."""
 
 
-from gdocs_scope_mcp.revision_guards import _normalized
+from gdocs_scope_mcp.documents.snapshots import normalized
 from gdocs_scope_mcp.tables.style_state import cell_at, property_state
 from gdocs_scope_mcp.tables.tokens import digest
 
@@ -67,8 +67,8 @@ def deletion_state(document, entry, row, column, *, logical_column=None,
     named = [s for s in document.get('namedStyles', {}).get('styles', [])
              if s.get('namedStyleType') in kinds]
     return digest([
-        _normalized(cell),
-        _normalized(extra), named, sorted(ranges), styles,
+        normalized(cell),
+        normalized(extra), named, sorted(ranges), styles,
         table['tableRows'][row].get('tableRowStyle', {}),
         columns[logical_column if logical_column is not None else column]
         if (logical_column if logical_column is not None else column) < len(

@@ -1,6 +1,5 @@
 """Read checked table positions and revision-bound pages without writes."""
 
-# Reuse the existing OAuth boundary without a docs_edit import cycle.
 from copy import deepcopy
 from typing import Annotated, Literal
 
@@ -14,21 +13,21 @@ from gdocs_scope_mcp.documents.native_models import (
 from gdocs_scope_mcp.google_api import clients
 from gdocs_scope_mcp.suggestions.reading import fetch, table_references
 from gdocs_scope_mcp.tables.geometry import (
-    _geometry,
-    _tables,
+    cell_geometry,
+    walk_tables,
 )
 from gdocs_scope_mcp.tables.references import (
-    _check_revision,
-    _decode,
-    _digest,
-    _encode,
-    _fail,
-    _require_revision,
-    _table_token,
-    _Token,
+    PageToken,
+    check_reference_revision,
+    decode_reference,
+    encode_reference,
+    reference_digest,
+    reference_failure,
+    require_revision,
+    table_token,
 )
 from gdocs_scope_mcp.tables.refs import Layout
-from gdocs_scope_mcp.tables.rendering import _model
+from gdocs_scope_mcp.tables.rendering import native_model
 from gdocs_scope_mcp.tables.tokens import (
     address,
 )
@@ -37,7 +36,8 @@ TableLimit = Annotated[int, Field(strict=True, ge=1, le=100)]
 CellLimit = Annotated[int, Field(strict=True, ge=1, le=200)]
 CellPreviewLimit = Annotated[int, Field(strict=True, ge=1, le=4000)]
 ReadReference = Annotated[
-    str, Field(strict=True, min_length=1, max_length=8192),
+    str,
+    Field(strict=True, min_length=1, max_length=8192),
 ]
 PREVIEW_LIMIT = 200
 NESTED_REF_LIMIT = 20
@@ -47,13 +47,16 @@ def _read_fetch(doc_id, tab_id=None):
     """Read accepted cells while keeping write/snapshot fetches native."""
 
     view = fetch(clients.get_service(), doc_id, tab_id)
-    _require_revision(view.document)
+    require_revision(view.document)
     _, warnings = table_references(view)
     if warnings:
-        _fail('TARGET_CHANGED', 'Pending structural proposals prevent safe '
-              'table positions in the accepted-content view.',
-              'Read the tab with docs_read and inspect proposals using '
-              'docs_suggestions_read before using table references.')
+        reference_failure(
+            'TARGET_CHANGED',
+            'Pending structural proposals prevent safe '
+            'table positions in the accepted-content view.',
+            'Read the tab with docs_read and inspect proposals using '
+            'docs_suggestions_read before using table references.',
+        )
     return view.document
 
 
@@ -144,12 +147,16 @@ class TableReadResponse(ListingPage):
 
 def _summary(document, entry, model, layout=None):
     """Create a bounded preview and explicit structural warnings."""
-    geometry, valid = _geometry(entry)
-    merged = any((isinstance(rs, int) and rs > 1)
-                 or (isinstance(cs, int) and cs > 1)
-                 for _, _, _, rs, cs, _, _ in geometry)
-    nested = any('table' in item for *_, cell in geometry
-                 for item in cell.get('content', []))
+    geometry, valid = cell_geometry(entry)
+    merged = any(
+        (isinstance(rs, int) and rs > 1) or (isinstance(cs, int) and cs > 1)
+        for _, _, _, rs, cs, _, _ in geometry
+    )
+    nested = any(
+        'table' in item
+        for *_, cell in geometry
+        for item in cell.get('content', [])
+    )
     reasons = []
     if not valid:
         reasons.append('unverified_geometry')
@@ -168,21 +175,28 @@ def _summary(document, entry, model, layout=None):
     parent_ref = None
     if entry.parent_cell is not None:
         path, r, c = entry.parent_cell
-        parent = next(t for t in _tables(document) if t.path == path)
-        if _geometry(parent)[1]:
-            parent_ref = _encode(_table_token(document, parent, 'cell',
-                                              cell=[r, c], layout=layout))
+        parent = next(t for t in walk_tables(document) if t.path == path)
+        if cell_geometry(parent)[1]:
+            parent_ref = encode_reference(
+                table_token(
+                    document, parent, 'cell', cell=[r, c], layout=layout
+                )
+            )
     token = (layout or Layout(document)).reference(entry)
     return TableSummary(
-        table_ref=_encode(token), section_table_number=token.ordinal + 1,
+        table_ref=encode_reference(token),
+        section_table_number=token.ordinal + 1,
         heading_id=entry.headings[-1][1] if entry.headings else None,
         heading_title=entry.headings[-1][2][:80] if entry.headings else None,
         ancestor_heading_ids=[h[1] for h in entry.headings[:-1]],
-        nesting_depth=(len(entry.path) - 1) // 3, parent_cell_ref=parent_ref,
+        nesting_depth=(len(entry.path) - 1) // 3,
+        parent_cell_ref=parent_ref,
         row_count=entry.item['table'].get('rows', 0),
         column_count=entry.item['table'].get('columns', 0),
-        has_merged_cells=merged, geometry_valid=valid,
-        unsupported_edit_reasons=reasons, preview=preview[:PREVIEW_LIMIT],
+        has_merged_cells=merged,
+        geometry_valid=valid,
+        unsupported_edit_reasons=reasons,
+        preview=preview[:PREVIEW_LIMIT],
         preview_truncated=len(preview) > PREVIEW_LIMIT,
     )
 
@@ -193,101 +207,158 @@ def _headings(document, requested):
     if requested is None:
         return None, []
     found = set(requested).intersection(tree.headings)
-    unknown = list(dict.fromkeys(
-        h for h in requested if h not in tree.headings
-    ))
+    unknown = list(
+        dict.fromkeys(h for h in requested if h not in tree.headings)
+    )
     if requested and not found:
-        _fail('HEADING_NOT_FOUND', 'None of the requested heading IDs exist.')
-    return [h.id for h in tree.descendants() if h.id in found
-            and not found.intersection(h.ancestor_ids)], unknown
+        reference_failure(
+            'HEADING_NOT_FOUND', 'None of the requested heading IDs exist.'
+        )
+    return [
+        h.id
+        for h in tree.descendants()
+        if h.id in found and not found.intersection(h.ancestor_ids)
+    ], unknown
 
 
 def _page(document, kind, options, page_token, entry=None):
     """Bind pagination to its exact snapshot, scope and output bounds."""
     if page_token is None:
         return 0
-    token = _decode(page_token, kind, document['documentId'])
-    _check_revision(token, document)
-    if token.options != _digest(options) or (entry is not None and (
-        token.path != entry.path or token.fingerprint != _digest(entry.item)
-    )):
-        _fail('INVALID_ARGUMENT', 'Continuation parameters do not match.')
+    token = decode_reference(page_token, kind, document['documentId'])
+    check_reference_revision(token, document)
+    if token.options != reference_digest(options) or (
+        entry is not None
+        and (
+            token.path != entry.path
+            or token.fingerprint != reference_digest(entry.item)
+        )
+    ):
+        reference_failure(
+            'INVALID_ARGUMENT', 'Continuation parameters do not match.'
+        )
     return token.offset
 
 
-def tables_list(doc_id, heading_ids=None, limit=50, page_token=None, *,
-                tab_id=None):
+def tables_list(
+    doc_id, heading_ids=None, limit=50, page_token=None, *, tab_id=None
+):
     """Discover tables without returning the surrounding document text."""
     if page_token is not None:
-        _decode(page_token, 'tables-page', doc_id)
+        decode_reference(page_token, 'tables-page', doc_id)
     document = _read_fetch(doc_id, tab_id=tab_id)
     selected, unknown = _headings(document, heading_ids)
-    entries = [t for t in _tables(document) if selected is None
-               or set(selected).intersection(h[1] for h in t.headings)]
+    entries = [
+        t
+        for t in walk_tables(document)
+        if selected is None
+        or set(selected).intersection(h[1] for h in t.headings)
+    ]
     options = [heading_ids, limit]
     offset = _page(document, 'tables-page', options, page_token)
     if offset > len(entries):
-        _fail('INVALID_ARGUMENT', 'Continuation offset is outside the result.')
-    page = entries[offset:offset + limit]
+        reference_failure(
+            'INVALID_ARGUMENT', 'Continuation offset is outside the result.'
+        )
+    page = entries[offset : offset + limit]
     end = offset + len(page)
-    next_token = _encode(_Token(
-        kind='tables-page', document=doc_id, revision=document['revisionId'],
-        tab=document.get('_mcp_tab_id'),
-        offset=end, options=_digest(options),
-    )) if end < len(entries) else None
-    model = _model(document)
+    next_token = (
+        encode_reference(
+            PageToken(
+                kind='tables-page',
+                document=doc_id,
+                revision=document['revisionId'],
+                tab=document.get('_mcp_tab_id'),
+                offset=end,
+                options=reference_digest(options),
+            )
+        )
+        if end < len(entries)
+        else None
+    )
+    model = native_model(document)
     layout = Layout(document)
     summaries = [_summary(document, t, model, layout) for t in page]
     return TablesListResponse(
-        document_id=doc_id, tab_id=document.get('_mcp_tab_id'),
+        document_id=doc_id,
+        tab_id=document.get('_mcp_tab_id'),
         snapshot=TableSnapshot(
             revision_id=document['revisionId'],
             tab_id=document.get('_mcp_tab_id'),
             scope='selected_tab' if tab_id is not None else 'first_tab',
-        ), total_count=len(entries), count=len(page),
+        ),
+        total_count=len(entries),
+        count=len(page),
         tables=summaries,
-        next_page_token=next_token, selected_headings=selected,
+        next_page_token=next_token,
+        selected_headings=selected,
         unknown_heading_ids=unknown,
     )
 
 
-def table_read(doc_id, table_ref, limit=100, max_cell_chars=2000,
-               page_token=None, *, tab_id=None):
+def table_read(
+    doc_id,
+    table_ref,
+    limit=100,
+    max_cell_chars=2000,
+    page_token=None,
+    *,
+    tab_id=None,
+):
     """Read bounded cell pages without creating persistent bindings."""
-    token = _decode(table_ref, 'table', doc_id)
+    token = decode_reference(table_ref, 'table', doc_id)
     if page_token is not None:
-        _decode(page_token, 'cells-page', doc_id)
+        decode_reference(page_token, 'cells-page', doc_id)
     document = _read_fetch(doc_id, tab_id=tab_id)
     layout = Layout(document)
     entries = layout.entries
     entry = layout.resolve(token)
     options = [table_ref, limit, max_cell_chars]
     offset = _page(document, 'cells-page', options, page_token, entry)
-    geometry, valid = _geometry(entry)
-    merged_table = any((isinstance(rs, int) and rs > 1)
-                       or (isinstance(cs, int) and cs > 1)
-                       for _, _, _, rs, cs, _, _ in geometry)
+    geometry, valid = cell_geometry(entry)
+    merged_table = any(
+        (isinstance(rs, int) and rs > 1) or (isinstance(cs, int) and cs > 1)
+        for _, _, _, rs, cs, _, _ in geometry
+    )
     if offset > len(geometry):
-        _fail('INVALID_ARGUMENT', 'Continuation offset is outside the table.')
-    page = geometry[offset:offset + limit]
+        reference_failure(
+            'INVALID_ARGUMENT', 'Continuation offset is outside the table.'
+        )
+    page = geometry[offset : offset + limit]
     end = offset + len(page)
-    model = _model(document)
-    addresses = {(r, p): address(r, c) for r, p, c, *_ in geometry} if (
-        valid
-    ) else {}
+    model = native_model(document)
+    addresses = (
+        {(r, p): address(r, c) for r, p, c, *_ in geometry} if (valid) else {}
+    )
     rows = {}
     for r, physical, c, rs, cs, owner, cell in page:
         is_covered = owner is not None and owner != (r, physical)
-        cell_ref = _encode(layout.reference(
-            entry, kind='cell', address=addresses[r, physical],
-        )) if valid else None
-        covered_by = (_encode(layout.reference(
-            entry, kind='cell', address=addresses[owner],
-        ))
-                      if is_covered and valid else None)
+        cell_ref = (
+            encode_reference(
+                layout.reference(
+                    entry,
+                    kind='cell',
+                    address=addresses[r, physical],
+                )
+            )
+            if valid
+            else None
+        )
+        covered_by = (
+            encode_reference(
+                layout.reference(
+                    entry,
+                    kind='cell',
+                    address=addresses[owner],
+                )
+            )
+            if is_covered and valid
+            else None
+        )
         content = cell.get('content', [])
-        nested = [t for t in entries
-                  if t.parent_cell == (entry.path, r, physical)]
+        nested = [
+            t for t in entries if t.parent_cell == (entry.path, r, physical)
+        ]
         reasons = []
         if not valid:
             reasons.append('unverified_geometry')
@@ -299,47 +370,73 @@ def table_read(doc_id, table_ref, limit=100, max_cell_chars=2000,
             reasons.append('merged_cell')
         if nested:
             reasons.append('nested_table')
-        if (len(content) != 1 or 'paragraph' not in content[0]):
+        if len(content) != 1 or 'paragraph' not in content[0]:
             reasons.append('complex_cell_content')
-        if any('textRun' not in e for item in content
-               for e in item.get('paragraph', {}).get('elements', [])):
+        if any(
+            'textRun' not in e
+            for item in content
+            for e in item.get('paragraph', {}).get('elements', [])
+        ):
             reasons.append('non_text_elements')
         markdown = GoogleDocumentTableCell.model_validate(
             deepcopy(cell),
         ).to_markdown(model)
         # Strip only the outer td wrapper; preserve nested tables and styles.
-        markdown = markdown[markdown.index('>') + 1:-len('</td>')]
+        markdown = markdown[markdown.index('>') + 1 : -len('</td>')]
         record = TableCellRead(
-            row=r, column=c if valid else None, physical_cell=physical,
-            row_span=rs, column_span=cs,
+            row=r,
+            column=c if valid else None,
+            physical_cell=physical,
+            row_span=rs,
+            column_span=cs,
             cell_ref=None if is_covered else cell_ref,
             address=address(r, c) if valid and not is_covered else None,
-            covered_by=covered_by, simple_text_target=not reasons,
+            covered_by=covered_by,
+            simple_text_target=not reasons,
             unsupported_edit_reasons=reasons,
             markdown=markdown[:max_cell_chars],
             markdown_char_count=len(markdown),
             markdown_truncated=len(markdown) > max_cell_chars,
-            nested_table_refs=[_encode(layout.reference(t))
-                               for t in nested[:NESTED_REF_LIMIT]],
+            nested_table_refs=[
+                encode_reference(layout.reference(t))
+                for t in nested[:NESTED_REF_LIMIT]
+            ],
             nested_table_count=len(nested),
             nested_table_refs_truncated=len(nested) > NESTED_REF_LIMIT,
         )
         rows.setdefault(r, []).append(record)
-    next_token = _encode(_table_token(
-        document, entry, 'cells-page', offset=end, options=_digest(options),
-    )) if end < len(geometry) else None
+    next_token = (
+        encode_reference(
+            table_token(
+                document,
+                entry,
+                'cells-page',
+                offset=end,
+                options=reference_digest(options),
+            )
+        )
+        if end < len(geometry)
+        else None
+    )
     return TableReadResponse(
-        document_id=doc_id, tab_id=document.get('_mcp_tab_id'),
+        document_id=doc_id,
+        tab_id=document.get('_mcp_tab_id'),
         snapshot=TableSnapshot(
             revision_id=document['revisionId'],
             tab_id=document.get('_mcp_tab_id'),
             scope='selected_tab' if tab_id is not None else 'first_tab',
-        ), table=_summary(document, entry, model, layout),
+        ),
+        table=_summary(document, entry, model, layout),
         total_cells=len(geometry),
-        count=len(page), next_page_token=next_token,
-        rows=[TableRowRead(
-            row=r, cells=cells,
-            complete=len(cells) == len(entry.item['table']['tableRows'][r][
-                'tableCells']),
-        ) for r, cells in rows.items()],
+        count=len(page),
+        next_page_token=next_token,
+        rows=[
+            TableRowRead(
+                row=r,
+                cells=cells,
+                complete=len(cells)
+                == len(entry.item['table']['tableRows'][r]['tableCells']),
+            )
+            for r, cells in rows.items()
+        ],
     )
