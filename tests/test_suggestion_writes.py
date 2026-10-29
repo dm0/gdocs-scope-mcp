@@ -34,10 +34,13 @@ def proposal_api(monkeypatch, simple_document):
                           ]}, 'error': None, 'verify': True,
              'before_write': None}
 
-    def get(**_kwargs):
+    def get(**kwargs):
         request = MagicMock()
         request.uri = 'https://docs.test/v1/documents/example'
-        request.execute.side_effect = lambda: deepcopy(state['document'])
+        key = ('preview' if kwargs.get('suggestionsViewMode')
+               == 'PREVIEW_WITHOUT_SUGGESTIONS' and 'preview' in state
+               else 'document')
+        request.execute.side_effect = lambda: deepcopy(state[key])
         return request
 
     def batch(**kwargs):
@@ -491,4 +494,44 @@ def test_text_operations_preserve_paragraph_terminator(
     with pytest.raises(ToolFailureError) as error:
         suggestion_writes.suggest('example', op(**arguments))
     assert error.value.failure.code == 'INVALID_ARGUMENT'
+    assert not proposal_api['batches']
+
+
+def test_proposal_before_target_keeps_native_indices(proposal_api):
+    proposal_api['preview'] = deepcopy(proposal_api['document'])
+    content = proposal_api['document']['body']['content']
+    first = content[0]
+    first['endIndex'] += 2
+    for item in content:
+        if item is not first:
+            item['startIndex'] += 2
+            item['endIndex'] += 2
+        for element in item['paragraph']['elements']:
+            element['startIndex'] += 2
+            element['endIndex'] += 2
+    first['paragraph']['elements'].insert(0, {
+        'startIndex': 1, 'endIndex': 3,
+        'textRun': {'content': 'XX', 'textStyle': {},
+                    'suggestedInsertionIds': ['prefix']},
+    })
+    suggestion_writes.suggest('example', op(
+        operation='replace', find='Target phrase', text='new',
+    ))
+    index = proposal_api['batches'][0]['requests'][0]['insertText'][
+        'location'
+    ]['index']
+    assert index == 23
+    assert index != proposal_api['preview']['body']['content'][2]['startIndex']
+
+
+def test_unlocated_open_thread_requires_explicit_review(proposal_api):
+    proposal_api['document']['suggestions'] = [
+        {'suggestionId': 'unlocated', 'status': 'OPEN'},
+    ]
+    with pytest.raises(ToolFailureError) as error:
+        suggestion_writes.suggest('example', op(
+            operation='replace', find='Target phrase', text='new',
+        ))
+    assert error.value.failure.code == 'EDIT_CONFLICT'
+    assert 'unlocated' in error.value.failure.description
     assert not proposal_api['batches']
