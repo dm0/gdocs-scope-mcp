@@ -63,7 +63,12 @@ It launches two isolated STDIO processes, checks their source identity, creates
 a temporary root tab with a child, and exercises discovery, heading selection,
 code-marker reads, native replace-all, table insertion/patching, formatting, merge receipt refresh and chip reads.
 It removes both temporary tabs in `finally` and compares every original tab's
-native payload. Reports and separate stderr logs are saved under
+native payload. The shared cleanup assertion ignores only the values of native
+inline/positioned image `imageProperties.contentUri` fields: these are temporary
+download URLs and can rotate without an image edit. Image IDs, URL presence,
+source URLs, dimensions, cropping, text, styles and tab structure remain checked.
+Failures report changed field paths rather than document content or signed URLs.
+Reports and separate stderr logs are saved under
 `/tmp/gdocs-scope-mcp-table-probe-document-tabs*`; the fixture verifies process
 reaping on success and failure. No normal MCP server is reconfigured.
 
