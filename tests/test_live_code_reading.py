@@ -3,6 +3,7 @@
 import asyncio
 import json
 import uuid
+from html import unescape
 from pathlib import Path
 
 import pytest
@@ -54,8 +55,8 @@ def test_live_code_reads(live_test_doc, isolated_mcp, tool):
                                           {'doc_id': live_test_doc})
             markdown = _markdown(read)
             assert expected in markdown
-            assert f'Before {marker} `inline😀`' in markdown
-            assert f'After {marker}' in markdown
+            assert f'Before {marker} `inline😀`' in unescape(markdown)
+            assert f'After {marker}' in unescape(markdown)
             await client.call_tool('docs_search_replace', {
                 'doc_id': live_test_doc, 'find': f'"{marker}😀"',
                 'replace': f'"{marker}🦷"',
@@ -77,7 +78,7 @@ def test_live_code_reads(live_test_doc, isolated_mcp, tool):
             read = await client.call_tool('docs_read',
                                           {'doc_id': live_test_doc})
             markdown = _markdown(read)
-            assert marker + '_updated = 1' in markdown
+            assert marker + '_updated = 1' in unescape(markdown)
             assert expected.replace('😀', '🦷') not in markdown
             report['checks_passed'] = True
 
@@ -137,8 +138,8 @@ def test_live_unmarked_code_heuristic(
                                             {'doc_id': live_test_doc})
             markdown = _markdown(result)
             assert f'```\n{marker}\n\n  second\n```' in markdown
-            assert f'Before {marker}' in markdown
-            assert f'After {marker}' in markdown
+            assert f'Before {marker}' in unescape(markdown)
+            assert f'After {marker}' in unescape(markdown)
             assert fetching.get_document(service, live_test_doc)[
                 'revisionId'] == before
             report['checks_passed'] = True
@@ -190,7 +191,7 @@ def test_live_code_marker_boundaries(live_test_doc, isolated_mcp, operation):
                               2 if operation == 'copy' else 1)
             assert markdown.count(expected) == expected_count
             if operation in {'before', 'after'}:
-                assert 'Outside ' + marker in markdown
+                assert 'Outside ' + marker in unescape(markdown)
                 assert f'```python\nOutside {marker}' not in markdown
             if operation == 'delete':
                 assert marker + '_first' not in markdown

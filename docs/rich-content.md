@@ -16,7 +16,7 @@ All three rich insertion tools (`docs_append`, `docs_insert_before`, and
 `docs_insert_after`) also accept the reader's HTML for bold (`b`), italic (`i`),
 underline (`u`), and paragraph alignment (`p` with `text-align: center`, `right`,
 or `justify`). Nested inline styles combine within their text ranges. Heading
-ID anchors (`<a id=...></a>`) are omitted from inserted text; new headings use
+ID anchors (`<a id="..."></a>`) are omitted from inserted text; new headings use
 the Markdown heading level and receive their own Google Docs IDs.
 
 Markdown links (`[label](https://example.com)`) become native Google Docs links
@@ -33,6 +33,29 @@ unsupported formatting or attributes; non-text tags may contribute no content.
 For example, a styled `span` retains its text but loses its styling. Tables
 support the [rectangular subset](#tables). Use `rich=False` to preserve
 HTML tags and Markdown literally.
+
+### Literal reader content
+
+Reader output distinguishes literal document characters from generated markup.
+Ordinary text uses HTML character references for HTML/Markdown syntax, tabs,
+and run-edge spaces. For example, literal `**stars**` is returned as
+`&#42;&#42;stars&#42;&#42;`; a genuinely bold word still uses `<b>word</b>`.
+Escaping applies to each native run, so adjacent runs cannot accidentally form
+links, emphasis, headings, or list markers. Native soft breaks use `<br>`.
+Recognized inline and fenced code retains its existing literal code encoding.
+
+Pass this output directly to rich insertion without first unescaping it.
+The shared converter decodes character references once, restoring literal
+characters without treating them as new markup. This also works inside the
+supported HTML table subset. Inline images use `<img src="..." alt="...">`
+with escaped attributes; heading IDs and link URLs are escaped independently.
+Image titles remain display metadata and are not copied into native alt text.
+
+Search and edit anchors use the original visible document text, not its
+serialized character references. For example, find `**stars**`, not
+`&#42;&#42;stars&#42;&#42;`. Source maps and UTF-16 ranges always refer to native
+Google Docs text. `rich=False` inserts the serialized response literally and
+therefore does not decode these references.
 
 ## Tables
 
