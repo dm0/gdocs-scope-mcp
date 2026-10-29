@@ -723,6 +723,7 @@ def test_catalog_contract_covers_every_registered_tool():
         'docs_tables_list', 'docs_table_read',
         'docs_table_snapshot', 'docs_table_patch', 'docs_table_format',
         'docs_table_structure',
+        'docs_suggest', 'docs_suggestions_manage',
     }
 
 

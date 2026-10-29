@@ -70,8 +70,10 @@ IDs or style-change maps. Thread reading exposed comments only. Adding a
 write-mode switch alone would leave agents without a clear review workflow.
 The live `docs_read` observation confirmed that the proposed insertion was
 rendered without its native suggestion ID. Reading support now addresses these
-gaps through an accepted-content view and separate proposal inspection;
-proposal creation/management remains tracked in #43.
+gaps through an accepted-content view and separate proposal inspection.
+The subsequent [writing tools](../tools/suggestions.md#docs_suggest) add typed
+proposal creation and verified decisions; the sequence below records the
+original agreement for #42 and #43.
 
 The agreed implementation sequence is tracked in two issues:
 

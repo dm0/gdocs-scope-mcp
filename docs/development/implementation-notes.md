@@ -13,16 +13,16 @@ arguments, examples and supported behavior, start with the [document tools](../t
 | [Concurrent edits](../concurrent-edits.md) | Revision policies, dependencies, retries, atomicity and unknown write outcomes | [Tests and reproduction](../concurrent-edits.md#verification) |
 | [Table references](../table-references.md) | Checked positions, structural inventories, selective expectations and structural operations | [Tests and reproduction](../table-references.md#verification) |
 | [Native comments](native-comments.md) | Native anchors, post operations, save-state validation and migration | [Verification](native-comments.md#verification) |
-| [Reading suggestions](../tools/suggestions.md) | Clean projections, native proposal locations, scoped indicators and thread pagination | [Verification](../tools/suggestions.md#verification) |
+| [Suggestions](../tools/suggestions.md) | Clean projections, scoped inspection, typed proposal plans and verified decisions | [Verification](../tools/suggestions.md#verification) |
 | [Document tabs](document-tabs.md) | Shared tab selection, write scoping and live isolation checks | [Verification](document-tabs.md#verification) |
 | [Table discovery](../table-discovery.md) | Selected-tab traversal, physical/logical geometry, pagination and bounds | [Tests and reproduction](../table-discovery.md#validation) |
 | [Cell merge/unmerge](table-cell-merging.md) | Logical heads, complete rectangles, content rules and safe reference readback | [Tests and reproduction](table-cell-merging.md#verification) |
 
 ## API research
 
-[Suggestions API](suggestions-api.md) records native suggest-mode, review and
-revision-control probes, current reader gaps, and a proposed implementation
-sequence. Production suggestion tools are not implemented by that research.
+[Suggestions API](suggestions-api.md) records the original native suggest-mode,
+review and revision-control probes. Its baseline gaps and proposed sequence
+predate the production reading, creation and decision tools linked above.
 
 [Table identity and concurrent writes](../table-identity.md) records historical
 API probes and their results, including named-range behavior across structural

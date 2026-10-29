@@ -19,6 +19,10 @@ well suited to large Google Docs with structured headings.
 - **Native comments:** attach comments directly to text, read their anchors,
   reply, edit, resolve/reopen, and delete through the Docs API.
 
+- **Native suggestions:** propose text and formatting changes with dedicated
+  tools, inspect proposals separately, and accept, reject or delete native IDs.
+  Ordinary reads show accepted content and report pending changes.
+
 - **Document tabs:** discover root and nested tabs, select one consistently
   across reading, text edits, tables and smart chips; references stay scoped
   to that tab. Existing calls default to the first tab.
@@ -126,7 +130,7 @@ and edit positions.
 | [Document tools](docs/tools/documents.md) | Reading, searching, inserting, replacing and creating documents |
 | [Table tools](docs/tools/tables.md) | Discovery, snapshots, cell patches, formatting and structure |
 | [Comment tools](docs/tools/comments.md) | Native anchored comments, replies, editing and resolution |
-| [Reading suggestions](docs/tools/suggestions.md) | Accepted-content views, pending-change indicators and native proposal inspection |
+| [Suggestions](docs/tools/suggestions.md) | Accepted-content views, proposal creation, inspection and decisions |
 | [Rich content](docs/rich-content.md) | Markdown/HTML, lists, images, code and smart chips |
 | [MCP result contracts](docs/protocol.md) | Structured results, errors, annotations, receipts and pagination |
 | [Development](docs/development.md) | Local setup, testing, FastMCP CLI, diagnostics and logging |

@@ -171,8 +171,11 @@ Ordinary `docs_get_tree` and `docs_read` expose the accepted-content view
 corresponding to `PREVIEW_WITHOUT_SUGGESTIONS`. Their `suggestions` metadata
 distinguishes pending changes in the document and selected fragment from
 unknown detection. No proposals are accepted or rejected by reading.
-See [reading suggestions](tools/suggestions.md) for metadata, scope and
-pagination contracts.
+See [suggestions](tools/suggestions.md) for metadata, scope and pagination.
+`docs_suggest` creates native proposals with typed operations;
+`docs_suggestions_manage` applies decisions to explicit IDs. Ordinary edit tools
+remain direct writes. Proposal receipts require `ALL_SAVED` and fresh native
+readback; partial or uncertain outcomes are never replayed automatically.
 
 Internally, edit planning still requests `SUGGESTIONS_INLINE`, which preserves
 native indices for `documents.batchUpdate`. Preview indices never drive writes.
