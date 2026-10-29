@@ -5,8 +5,8 @@ from typing import Annotated
 
 from pydantic import BaseModel, Field
 
+from .errors import ToolFailureError
 from .models import EditFailedResponse, TabInfo
-from .tool_errors import ToolFailureError
 
 MAX_TAB_ID_LENGTH = 256
 

@@ -9,9 +9,9 @@ import json
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from .document_tabs import walk
+from .errors import ToolFailureError
 from .models import EditFailedResponse, ReadCommentsResponse
 from .revision_guards import guarded_edit, remember_snapshot, submit
-from .tool_errors import ToolFailureError
 
 
 def fail(code, description, committed=0):

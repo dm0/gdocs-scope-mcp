@@ -27,27 +27,19 @@ Python API:
 
 from __future__ import annotations
 
-import json
 import logging
-import os
 import re
-import subprocess
-import tempfile
-from contextlib import nullcontext, suppress
+from contextlib import nullcontext
 from copy import deepcopy
 from dataclasses import dataclass
-from pathlib import Path
-
-from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials
-from googleapiclient.discovery import build
 
 # isort: split
 from .comments import created, fail, saved
-from .document_cache import wrap_service
 from .document_tabs import discover, select
 from .entities import collect_entities
 from .entity_edit import INSERT_ENTITY_KINDS, validate_insertions
+from .errors import ToolFailureError
+from .google_api.clients import get_service as _get_service
 from .image_layout import fit_images
 from .image_uploads import PreparedInsertion, rich_insertion_requests
 from .md2requests import inserted_text_from_requests
@@ -88,181 +80,12 @@ from .suggestions import (
 )
 from .table_insertion import TableInsertionPlan
 from .text_indices import utf16_length
-from .tool_errors import ToolFailureError
 
 log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Auth helpers
 # ---------------------------------------------------------------------------
-
-# Standalone defaults (auth_setup.py output)
-STANDALONE_TOKEN_PATHS = [
-    Path.home() / '.google-docs-mcp' / 'token.json',
-    Path.home() / '.google-drive-mcp' / 'token.json',
-]
-TOKEN_ENV_VAR = 'GOOGLE_DOCS_MCP_TOKEN'
-TOKEN_ENV_ALIASES = (TOKEN_ENV_VAR, 'GOOGLE_DRIVE_MCP_TOKEN')
-CLIENT_ID_ENV_VAR = 'GOOGLE_DOCS_MCP_CLIENT_ID'
-CLIENT_SECRET_ENV_VAR = 'GOOGLE_DOCS_MCP_CLIENT_SECRET'
-CLIENT_ID_ENV_ALIASES = (CLIENT_ID_ENV_VAR, 'GOOGLE_DRIVE_MCP_CLIENT_ID')
-CLIENT_SECRET_ENV_ALIASES = (
-    CLIENT_SECRET_ENV_VAR,
-    'GOOGLE_DRIVE_MCP_CLIENT_SECRET',
-)
-
-# Gog fallback paths (backward compat)
-GOG_CREDENTIALS_PATH = Path('/config/gogcli/credentials.json')
-GOG_TOKEN_CACHE = Path('/tmp/docs_edit_token_cache.json')
-
-
-def _export_gog_token(email: str = 'david@harriethq.com') -> dict:
-    """Export token from gog keyring using GOG_KEYRING_PASSWORD env var."""
-    password = os.environ.get('GOG_KEYRING_PASSWORD')
-    if not password:
-        raise RuntimeError('GOG_KEYRING_PASSWORD not set')
-    env = {**os.environ, 'GOG_KEYRING_PASSWORD': password}
-    with tempfile.NamedTemporaryFile(suffix='.json', delete=False) as f:
-        tmp = f.name
-    try:
-        result = subprocess.run(
-            [
-                'gog',
-                'auth',
-                'tokens',
-                'export',
-                email,
-                '--out',
-                tmp,
-                '--overwrite',
-                '-y',
-            ],
-            env=env,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if result.returncode != 0:
-            raise RuntimeError(f'gog token export failed: {result.stderr}')
-        return json.loads(Path(tmp).read_text())
-    finally:
-        with suppress(OSError):
-            Path(tmp).unlink()
-
-
-def _first_env(*names: str) -> str | None:
-    for name in names:
-        value = os.environ.get(name)
-        if value:
-            return value
-    return None
-
-
-def _load_token() -> dict:
-    """
-    Load token data. Priority:
-
-      1. GOOGLE_DOCS_MCP_TOKEN env var   (standalone auth_setup.py output)
-      2. GOOGLE_DRIVE_MCP_TOKEN env var  (backward-compatible alias)
-      3. GOOGLE_DOCS_TOKEN_FILE env var  (legacy / gog compat)
-      4. ~/.google-docs-mcp/token.json   (standalone default location)
-      5. ~/.google-drive-mcp/token.json  (backward-compatible fallback)
-      6. GOG_KEYRING_PASSWORD auto-export (gog compat)
-      7. Cached gog token
-    """
-    # 1. Standalone env vars
-    token_file = _first_env(*TOKEN_ENV_ALIASES)
-    if token_file:
-        return json.loads(Path(token_file).read_text())
-
-    # 2. Legacy env var
-    token_file = os.environ.get('GOOGLE_DOCS_TOKEN_FILE')
-    if token_file:
-        return json.loads(Path(token_file).read_text())
-
-    # 3. Default standalone locations
-    for token_path in STANDALONE_TOKEN_PATHS:
-        if token_path.exists():
-            return json.loads(token_path.read_text())
-
-    # 4. Gog auto-export
-    try:
-        token = _export_gog_token()
-        GOG_TOKEN_CACHE.write_text(json.dumps(token))
-    except RuntimeError as e:
-        log.warning('Gog auto-export failed: %s', e)
-    else:
-        return token
-
-    # 5. Gog cache
-    if GOG_TOKEN_CACHE.exists():
-        log.info('Using cached gog token')
-        return json.loads(GOG_TOKEN_CACHE.read_text())
-
-    raise RuntimeError(
-        'No Google credentials found.\n'
-        'Run: gdocs-scope-mcp-auth --credentials ~/credentials.json\n'
-        'Or set GOOGLE_DOCS_MCP_TOKEN to your token file path '
-        '(legacy GOOGLE_DRIVE_MCP_TOKEN also works).'
-    )
-
-
-def _load_creds():
-    """Return refreshed google.oauth2.credentials.Credentials."""
-    token_data = _load_token()
-
-    # Self-contained token — auth_setup.py embeds client_id / client_secret
-    # directly
-    # (also handle legacy _client_id / _client_secret with underscore prefix)
-    client_id = token_data.get('client_id') or token_data.get('_client_id')
-    client_secret = token_data.get('client_secret') or token_data.get(
-        '_client_secret'
-    )
-    token_uri = token_data.get('token_uri') or token_data.get(
-        '_token_uri', 'https://oauth2.googleapis.com/token'
-    )
-
-    # Environment override allows using external client credentials instead of
-    # a credentials.json file.
-    client_id = client_id or _first_env(*CLIENT_ID_ENV_ALIASES)
-    client_secret = client_secret or _first_env(*CLIENT_SECRET_ENV_ALIASES)
-
-    # Gog compat: read from separate credentials.json if not embedded
-    if not client_id and GOG_CREDENTIALS_PATH.exists():
-        gog_creds = json.loads(GOG_CREDENTIALS_PATH.read_text())
-        client_id = gog_creds.get('client_id')
-        client_secret = gog_creds.get('client_secret')
-
-    if not client_id or not client_secret:
-        raise RuntimeError(
-            'No OAuth client credentials found. Re-run gdocs-scope-mcp-auth '
-            'to generate a self-contained token, '
-            f'or set {CLIENT_ID_ENV_VAR} and {CLIENT_SECRET_ENV_VAR} '
-            '(legacy GOOGLE_DRIVE_MCP_* aliases also work).'
-        )
-
-    scopes = [
-        s for s in token_data.get('scopes', []) if s not in ('email', 'openid')
-    ]
-
-    creds = Credentials(
-        token=None,
-        refresh_token=token_data['refresh_token'],
-        token_uri=token_uri,
-        client_id=client_id,
-        client_secret=client_secret,
-        scopes=scopes,
-    )
-    creds.refresh(Request())
-    return creds
-
-
-def _get_service(api: str = 'docs', version: str = 'v1'):
-    """Build a Google API service client."""
-    credentials = _load_creds()
-    service = build(api, version, credentials=credentials)
-    return wrap_service(service, credentials) if api == 'docs' else service
-
 
 SUGGESTIONS_VIEW_MODE = 'SUGGESTIONS_INLINE'
 

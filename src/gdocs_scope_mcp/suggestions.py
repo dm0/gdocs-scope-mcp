@@ -12,6 +12,7 @@ from pydantic import Field
 
 from . import comments
 from .document_tabs import select
+from .errors import ToolFailureError
 from .models import EditFailedResponse
 from .suggestion_index import (
     STYLE_LEVELS,
@@ -24,7 +25,6 @@ from .suggestion_models import (
     SuggestionPost,
     SuggestionsReadResponse,
 )
-from .tool_errors import ToolFailureError
 
 SuggestionId = Annotated[
     str, Field(strict=True, min_length=1, max_length=2048)

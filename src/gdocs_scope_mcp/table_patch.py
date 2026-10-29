@@ -12,6 +12,7 @@ from bs4 import BeautifulSoup, Comment
 from pydantic import BaseModel, ConfigDict, Field
 
 from .code_reading import NATIVE_CODE_BOUNDARY
+from .errors import ToolFailureError
 from .models import EditFailedResponse
 from .revision_guards import MAX_ATTEMPTS, RevisionRaceError, submit
 from .table_insertion import convert_table, shifted_requests
@@ -22,7 +23,6 @@ from .table_snapshots import (
 )
 from .table_tokens import CellAddress, decode, fail
 from .text_indices import utf16_length
-from .tool_errors import ToolFailureError
 
 log = logging.getLogger(__name__)
 MAX_MARKDOWN = 100000

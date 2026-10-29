@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from gdocs_scope_mcp.disk_cache import DiskSnapshotCache
+from gdocs_scope_mcp.cache.disk import DiskSnapshotCache
 from gdocs_scope_mcp.settings import Settings
 
 MIB = 1024 * 1024

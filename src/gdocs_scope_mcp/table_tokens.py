@@ -7,8 +7,8 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from .errors import ToolFailureError
 from .models import EditFailedResponse
-from .tool_errors import ToolFailureError
 
 CellAddress = Annotated[
     str, Field(strict=True, pattern=r'^[A-Z]{1,5}[1-9][0-9]{0,5}$'),

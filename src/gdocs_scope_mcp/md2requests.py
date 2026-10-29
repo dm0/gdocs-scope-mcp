@@ -17,6 +17,7 @@ from rich.syntax import Syntax
 from .code_highlighting import code_shading, code_spans
 from .code_reading import block_marker
 from .entities import chip_input, insertion_request
+from .errors import ToolFailureError
 from .models import (
     EditFailedResponse,
     GoogleDocumentAlignment,
@@ -40,7 +41,6 @@ from .table_insertion import (
     unsupported_table,
 )
 from .text_indices import utf16_length
-from .tool_errors import ToolFailureError
 
 IMAGE_URI_MAX_BYTES = 2048
 

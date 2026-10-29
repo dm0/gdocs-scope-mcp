@@ -89,13 +89,11 @@ def change_prefix(document):
 @pytest.mark.parametrize('operation', ['search', 'batch', 'before', 'after',
                                        'delete', 'comment'])
 def test_independent_paragraph_change_replans_utf16(
-    operation, race_docs, monkeypatch,
+    operation, race_docs,
 ):
     """Retain the scoped target and rebuild its indices from the fresh read."""
     race_docs['change'] = change_prefix
     drive = MagicMock()
-    monkeypatch.setattr(docs_edit, 'build', lambda *_a, **_k: drive)
-    monkeypatch.setattr(docs_edit, '_load_creds', lambda: None)
     drive.comments().create().execute.return_value = {'id': 'comment'}
     drive.reset_mock()
     calls = {

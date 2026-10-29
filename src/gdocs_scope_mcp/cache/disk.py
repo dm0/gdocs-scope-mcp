@@ -12,8 +12,9 @@ from functools import lru_cache
 from filelock import FileLock
 from platformdirs import user_cache_path
 
-from .document_cache import Entry, SnapshotCache
-from .settings import get_settings
+from ..settings import get_settings
+from .memory import SnapshotCache
+from .types import Entry
 
 log = logging.getLogger(__name__)
 PAGE_SIZE = 4096

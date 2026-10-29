@@ -64,6 +64,7 @@ from .entities import (
     EntityDetails,
     EntityEditResponse,
 )
+from .google_api import credentials
 from .models import (
     AddCommentResponse,
     AppendSucceedResponse,
@@ -1651,7 +1652,7 @@ def docs_list(
         not a total. Follow next_page_token until null. Each call fetches one
         page; has_more is API continuation, not an estimate of remaining items.
     """
-    creds = docs_edit._load_creds()
+    creds = credentials.load_credentials()
     drive = build('drive', 'v3', credentials=creds)
 
     use_drive = (
@@ -1718,7 +1719,7 @@ def docs_create(title: str, initial_text: str = '') -> CreateDocumentResponse:
     -------
         A structured object with id, title, and webViewLink.
     """
-    creds = docs_edit._load_creds()
+    creds = credentials.load_credentials()
     service = build('docs', 'v1', credentials=creds)
     doc = service.documents().create(body={'title': title}).execute()
     doc_id = doc['documentId']

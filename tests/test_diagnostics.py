@@ -20,7 +20,9 @@ def test_server_info_keeps_startup_snapshot(tmp_path, monkeypatch):
     def unexpected_auth():
         raise AssertionError('server_info must not use Google credentials')
 
-    monkeypatch.setattr(server.docs_edit, '_load_creds', unexpected_auth)
+    monkeypatch.setattr(
+        server.credentials, 'load_credentials', unexpected_auth,
+    )
 
     async def check():
         async with Client(server.mcp) as client:

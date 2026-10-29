@@ -7,10 +7,10 @@ import uuid
 
 from .document_tabs import select
 from .entities import EntityDetails, EntityEditResponse, collect_entities
+from .errors import ToolFailureError
 from .models import EditFailedResponse
 from .revision_guards import revision_changed, uses_target_revision
 from .table_insertion import TableInsertionPlan
-from .tool_errors import ToolFailureError
 
 INSERT_ENTITY_KINDS = {'insertPerson', 'insertRichLink', 'insertDate',
                        'insertDropdown'}

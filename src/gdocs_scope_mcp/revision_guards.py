@@ -15,9 +15,9 @@ from googleapiclient.errors import HttpError
 from httplib2 import HttpLib2Error
 
 from .document_tabs import scope_requests
+from .errors import ToolFailureError
 from .models import EditFailedResponse
 from .settings import get_settings
-from .tool_errors import ToolFailureError
 
 MAX_ATTEMPTS = 3
 _active = ContextVar('document_edit', default=None)

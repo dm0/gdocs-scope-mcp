@@ -11,6 +11,7 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from typing_extensions import Self
 
+from .errors import ToolFailureError
 from .models import EditFailedResponse
 from .revision_guards import MAX_ATTEMPTS, RevisionRaceError, submit
 from .table_refs import Layout
@@ -23,7 +24,6 @@ from .table_style_state import (
     property_state,
 )
 from .table_tokens import CellAddress, coordinates, decode, fail
-from .tool_errors import ToolFailureError
 
 log = logging.getLogger(__name__)
 Points = Annotated[float, Field(strict=True, ge=0, le=10000,

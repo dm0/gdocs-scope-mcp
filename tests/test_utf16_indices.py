@@ -166,7 +166,7 @@ def test_non_bmp_edits_across_source_runs_preserve_neighbours(
     ],
 )
 def test_native_comment_uses_utf16_source_runs(
-    set_document_runs, mock_docs, monkeypatch, *, runs, anchor, expected_range,
+    set_document_runs, mock_docs, *, runs, anchor, expected_range,
 ):
     """Anchor comments to whole characters across source-run boundaries."""
     set_document_runs(runs)
@@ -180,8 +180,6 @@ def test_native_comment_uses_utf16_source_runs(
     drive.comments.return_value.create.return_value.execute.return_value = {
         'id': 'comment-id',
     }
-    monkeypatch.setattr(docs_edit, 'build', lambda *_args, **_kwargs: drive)
-    monkeypatch.setattr(docs_edit, '_load_creds', object)
 
     result = docs_edit.add_comment('example', 'Comment', anchor)
 

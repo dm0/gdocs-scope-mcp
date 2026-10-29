@@ -12,6 +12,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from .errors import ToolFailureError
 from .models import (
     EditFailedResponse,
     GoogleDocument,
@@ -25,7 +26,6 @@ from .table_tokens import (
     decode as decode_position,
     encode as encode_position,
 )
-from .tool_errors import ToolFailureError
 
 TableLimit = Annotated[int, Field(strict=True, ge=1, le=100)]
 CellLimit = Annotated[int, Field(strict=True, ge=1, le=200)]

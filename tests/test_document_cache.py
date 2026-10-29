@@ -11,8 +11,12 @@ from urllib.parse import urlencode
 
 import pytest
 
-from gdocs_scope_mcp import document_cache
-from gdocs_scope_mcp.document_cache import CachedService, SnapshotCache
+from gdocs_scope_mcp.cache import (
+    selection,
+    service as document_cache,
+)
+from gdocs_scope_mcp.cache.memory import SnapshotCache
+from gdocs_scope_mcp.cache.service import CachedService
 from gdocs_scope_mcp.settings import Settings
 
 
@@ -21,11 +25,12 @@ def setup_cache(monkeypatch, simple_document):
     """Provide deterministic native requests with observable full downloads."""
     clock = [0.0]
     store = SnapshotCache(clock=lambda: clock[0])
-    monkeypatch.setattr(document_cache, 'cache', store)
+    monkeypatch.setattr(selection, 'cache', store)
     settings = Settings(
         document_cache_enabled=True, document_cache_storage='memory',
     )
     monkeypatch.setattr(document_cache, 'get_settings', lambda: settings)
+    monkeypatch.setattr(selection, 'get_settings', lambda: settings)
     state = SimpleNamespace(
         document=simple_document,
         calls=[],
@@ -99,7 +104,7 @@ def test_hit_validates_access_and_isolates_mutations(setup_cache):
 
 
 def test_native_get_timing_separates_full_and_revision(setup_cache, caplog):
-    caplog.set_level(logging.INFO, logger=document_cache.__name__)
+    caplog.set_level(logging.INFO, logger='gdocs_scope_mcp.cache')
     setup_cache.read()
     setup_cache.read()
     messages = [r.message for r in caplog.records]
@@ -115,7 +120,7 @@ def test_native_get_timing_separates_full_and_revision(setup_cache, caplog):
 def test_native_get_timer_boundary_and_private_failure(
     monkeypatch, caplog, fails,
 ):
-    caplog.set_level(logging.INFO, logger=document_cache.__name__)
+    caplog.set_level(logging.INFO, logger='gdocs_scope_mcp.cache')
     ticks = iter([10.0, 10.75])
     monkeypatch.setattr(document_cache.time, 'perf_counter',
                         lambda: next(ticks))

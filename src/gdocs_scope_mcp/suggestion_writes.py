@@ -8,6 +8,7 @@ from http import HTTPStatus
 from googleapiclient.errors import HttpError
 
 from . import comments, suggestions
+from .errors import ToolFailureError
 from .md2requests import markdown_to_requests
 from .models import EditFailedResponse
 from .revision_guards import depend_on, guarded_edit, remember_snapshot, submit
@@ -19,7 +20,6 @@ from .suggestion_write_models import (
     SuggestResponse,
 )
 from .text_indices import utf16_length
-from .tool_errors import ToolFailureError
 
 CHANGE_FIELDS = {
     'created': 'createdSuggestionIds',

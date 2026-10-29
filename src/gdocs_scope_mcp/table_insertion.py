@@ -9,13 +9,13 @@ from dataclasses import dataclass, field
 
 from bs4 import NavigableString, Tag
 
+from .errors import ToolFailureError
 from .models import EditFailedResponse
 from .revision_guards import (
     RevisionRaceError,
     submit as guarded_submit,
 )
 from .text_indices import utf16_length
-from .tool_errors import ToolFailureError
 
 
 def unsupported_table(description: str) -> None:

@@ -8,16 +8,8 @@ from googleapiclient.errors import HttpError
 from mcp.types import CallToolResult
 from pydantic import ValidationError
 
+from .errors import ToolFailureError
 from .models import EditFailedResponse
-
-
-class ToolFailureError(ValueError):
-    """Carry an expected failure from backend code to the MCP boundary."""
-
-    def __init__(self, failure: EditFailedResponse):
-        """Keep recovery fields while retaining ValueError compatibility."""
-        super().__init__(failure.description)
-        self.failure = failure
 
 
 class ErrorToolResult(ToolResult):
