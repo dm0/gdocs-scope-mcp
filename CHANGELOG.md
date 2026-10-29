@@ -4,6 +4,76 @@ User-facing changes to `gdocs-scope-mcp` are listed in descending version order,
 starting with v0.3.0. The upstream 0.2.0 baseline is documented separately for
 provenance; it is not a release of this independent project.
 
+## [v0.6.0] - 2026-10-29
+
+### Added
+
+- Revision-validated native document snapshot caching, shared across MCP
+  processes and chats through a SQLite disk cache by default. Configurable
+  limits cover lifetime, entry count, serialized payload size and database
+  size; defaults are 300 seconds, 128 entries, 32 MiB of payloads and a 64 MiB
+  database. Process-local memory storage and complete disabling are available.
+- Automatic width fitting for unsized Markdown, HTML and locally uploaded
+  images in supported paged body paragraphs. Available width accounts for page
+  orientation, effective section margins and paragraph indents; native sizing
+  preserves image proportions. Explicit image dimensions take precedence.
+- `docs_suggestions_read` for scoped native proposal inspection, including
+  IDs, status, authors, summaries, source locations and paged replies.
+- `docs_suggest` for typed text replacement, before/after insertion, scoped
+  append, paragraph deletion and text-formatting proposals. Plans use native
+  indices and a single suggest-mode batch, preserve configured revision
+  policies, and reject overlapping or uncertain targets before writing.
+- `docs_suggestions_manage` for accepting, rejecting or deleting up to 50
+  explicit native proposal IDs. Decisions are preflighted together and return
+  per-ID outcomes, including already matching accepted/rejected states.
+
+### Changed
+
+- Ordinary document reads and outlines now show accepted content without
+  applying pending suggestions: proposed insertions are omitted, proposed
+  deletions retained and proposed formatting excluded. Suggestion metadata
+  distinguishes document-wide and selected-fragment changes from unknown
+  detection. Reading never accepts or rejects a proposal.
+- Dedicated table reads also use accepted content. Heading selectors and table
+  references are validated against native source structure; unmappable
+  selections fail explicitly, and unsafe references in document Markdown are
+  omitted with warnings. Writes continue using inline native coordinates.
+- Proposal creation and decisions require `commentUpdateState=ALL_SAVED` and
+  fresh native readback before reporting success. Missing IDs, failed saves
+  and uncertain outcomes are explicit failures and are never blindly replayed.
+  Existing editing tools retain direct-write behavior.
+- Default caching now persists native document content locally in the user's
+  platform cache directory. Cache identity includes the credential grant and
+  request options; hits are checked against Google's current revision, and
+  every attempted local Docs write invalidates cached snapshots. Configure
+  `document_cache_storage="memory"` or `document_cache_enabled=false` when
+  persistent storage is not wanted.
+
+### Fixed
+
+- Live tab-preservation checks tolerate rotation of temporary image download
+  URLs while continuing to verify content, structure and image properties.
+- Suggestion tests remove their pending proposals before deleting temporary
+  tabs, avoiding leftover unlocated open threads.
+
+### Limitations
+
+- Cache hits still require a revision request and credential handling; reduced
+  response size does not guarantee a comparable reduction in total latency.
+  Temporary journal and lock files are outside the database file size limit.
+- Automatic image width fitting is limited to supported single-column paged
+  body paragraphs. Pageless documents, table cells and unsupported layouts
+  retain Google's default image sizing.
+- Proposal creation initially targets ordinary body paragraphs and validated
+  text formatting. Table, image, chip and list proposal workflows and replies
+  are not supported. Pending changes in the target paragraph, unlocated open
+  threads or unknown proposal metadata require review before new proposals.
+- Suggested code insertions retain formatting but omit named-range code
+  markers with a warning, because native named ranges cannot be suggested.
+  Guarded proposal writes require an available native document revision.
+
+[v0.6.0]: https://github.com/dm0/gdocs-scope-mcp/compare/v0.5.0...v0.6.0
+
 ## [v0.5.0] - 2026-10-28
 
 ### Added
