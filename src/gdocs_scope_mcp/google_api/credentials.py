@@ -12,6 +12,8 @@ from pathlib import Path
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 
+from gdocs_scope_mcp.google_api.oauth import PublicClientCredentials
+
 log = logging.getLogger(__name__)
 
 STANDALONE_TOKEN_PATHS = [
@@ -102,25 +104,33 @@ def load_credentials():
         '_token_uri', 'https://oauth2.googleapis.com/token'
     )
     client_id = client_id or first_env(*CLIENT_ID_ENV_ALIASES)
-    client_secret = client_secret or first_env(*CLIENT_SECRET_ENV_ALIASES)
-    if not client_id and GOG_CREDENTIALS_PATH.exists():
+    public_client = token_data.get('auth_method') == 'pkce-public'
+    if public_client:
+        client_secret = None
+    else:
+        client_secret = client_secret or first_env(*CLIENT_SECRET_ENV_ALIASES)
+    if not client_id and not public_client and GOG_CREDENTIALS_PATH.exists():
         gog_creds = json.loads(GOG_CREDENTIALS_PATH.read_text())
         client_id = gog_creds.get('client_id')
         client_secret = gog_creds.get('client_secret')
-    if not client_id or not client_secret:
+    if not client_id:
         raise RuntimeError(
             'No OAuth client credentials found. Re-run gdocs-scope-mcp-auth '
             'to generate a self-contained token, '
-            f'or set {CLIENT_ID_ENV_VAR} and {CLIENT_SECRET_ENV_VAR} '
+            f'or set {CLIENT_ID_ENV_VAR} '
             '(legacy GOOGLE_DRIVE_MCP_* aliases also work).'
         )
     scopes = [
         s for s in token_data.get('scopes', [])
         if s not in ('email', 'openid', 'profile')
     ]
-    creds = Credentials(
+    credential_class = (
+        Credentials if client_secret else PublicClientCredentials
+    )
+    creds = credential_class(
         token=None, refresh_token=token_data['refresh_token'],
-        token_uri=token_uri, client_id=client_id, client_secret=client_secret,
+        token_uri=token_uri, client_id=client_id,
+        client_secret=client_secret or '',
         scopes=scopes,
     )
     creds.refresh(Request())

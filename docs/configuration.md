@@ -168,6 +168,12 @@ Token resolution checks the preferred token environment variables, the legacy
 accept the corresponding legacy `GOOGLE_DRIVE_MCP_CLIENT_ID` and
 `GOOGLE_DRIVE_MCP_CLIENT_SECRET` aliases. See [authentication](getting-started.md#3-authenticate).
 
+Desktop authorization uses PKCE S256. A custom client ID can be used without a
+secret; existing secret-bearing credentials remain supported. Tokens explicitly
+marked `pkce-public` ignore secret environment overrides during refresh. The
+authorization CLI can use a project-managed client once one is configured in
+the distribution; client settings do not change document-access scopes.
+
 ## Drive listing
 
 These environment variables affect `docs_list`; they are separate from JSON

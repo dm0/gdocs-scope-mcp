@@ -1,359 +1,237 @@
-"""
-Set up standalone OAuth credentials for Google Docs MCP.
-
-Works in three modes:
-  1. Local browser  — opens a browser on this machine (default)
-  2. Headless       -- prints a URL, you visit on any device, paste back the
-  redirect URL
-  3. Code exchange  — you already have an auth code, just exchange it
-
-Usage:
-    gdocs-scope-mcp-auth --credentials ~/credentials.json
-    gdocs-scope-mcp-auth --credentials ~/credentials.json --headless
-    gdocs-scope-mcp-auth --credentials ~/credentials.json --code "4/0Afr..."
-    GOOGLE_DOCS_MCP_CLIENT_ID=... GOOGLE_DOCS_MCP_CLIENT_SECRET=...
-    gdocs-scope-mcp-auth
-
-Get credentials.json:
-    https://console.cloud.google.com/
-    → APIs & Services → Credentials
-    → Create OAuth 2.0 Client ID → Desktop App → Download JSON
-
-Required APIs to enable in your project:
-    - Google Docs API
-    - Google Drive API
-"""
+"""Authorize the local Google Docs MCP client using Desktop OAuth and PKCE."""
 
 import argparse
 import json
 import os
 import sys
-import urllib.parse
-import urllib.request
+import time
 import webbrowser
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
+from urllib.parse import urlsplit
+
+from google.auth.exceptions import GoogleAuthError
+
+from gdocs_scope_mcp.google_api import oauth
 
 DEFAULT_TOKEN_PATH = Path.home() / '.google-docs-mcp' / 'token.json'
-
 SCOPES = [
-    # Core
     'https://www.googleapis.com/auth/documents',
     'https://www.googleapis.com/auth/drive',
     'https://www.googleapis.com/auth/drive.readonly',
-    # Existing Drive file permissions (access-mode changes are separate).
     'https://www.googleapis.com/auth/drive.file',
 ]
-
-REDIRECT_PORT = 14399
-REDIRECT_URI = f'http://127.0.0.1:{REDIRECT_PORT}/oauth2/callback'
 CLIENT_ID_ENV_VAR = 'GOOGLE_DOCS_MCP_CLIENT_ID'
 CLIENT_SECRET_ENV_VAR = 'GOOGLE_DOCS_MCP_CLIENT_SECRET'
 CLIENT_ID_ENV_ALIASES = (CLIENT_ID_ENV_VAR, 'GOOGLE_DRIVE_MCP_CLIENT_ID')
 CLIENT_SECRET_ENV_ALIASES = (
-    CLIENT_SECRET_ENV_VAR,
-    'GOOGLE_DRIVE_MCP_CLIENT_SECRET',
+    CLIENT_SECRET_ENV_VAR, 'GOOGLE_DRIVE_MCP_CLIENT_SECRET',
 )
 
 
-def _first_env(*names: str) -> str | None:
-    for name in names:
-        value = os.environ.get(name)
-        if value:
-            return value
-    return None
+def _first_env(*names):
+    return next((os.environ[name] for name in names if os.environ.get(name)),
+                None)
 
 
 def load_client_config(creds_path: Path) -> dict:
-    """Read OAuth client settings from a Google credentials file."""
+    """Read Desktop client settings; reject web application registrations."""
     raw = json.loads(creds_path.read_text())
-    # Google downloads credentials.json in {installed: {...}} or {web: {...}}
-    # wrapper
     if 'installed' in raw:
         return raw['installed']
-    if 'web' in raw:
-        return raw['web']
-    # Bare format (client_id / client_secret at root)
     if 'client_id' in raw:
         return raw
-    raise ValueError(
-        'credentials.json format not recognised. '
-        'Expected {installed: ...} or {web: ...} '
-        'from Google Cloud Console → Credentials → Download JSON.'
+    raise oauth.AuthorizationError(
+        'Use credentials for an OAuth Desktop app, not a Web application.'
     )
 
 
-def build_auth_url(client_id: str, state: str = 'auth') -> str:
-    """Build the consent URL for an offline OAuth authorization."""
-    params = {
-        'client_id': client_id,
-        'redirect_uri': REDIRECT_URI,
-        'response_type': 'code',
-        'scope': ' '.join(SCOPES),
-        'access_type': 'offline',
-        'prompt': 'consent',
-        'state': state,
-    }
-    return (
-        'https://accounts.google.com/o/oauth2/v2/auth?'
-        + urllib.parse.urlencode(params)
-    )
-
-
-def exchange_code(code: str, client_id: str, client_secret: str) -> dict:
-    """Exchange an auth code for tokens."""
-    data = urllib.parse.urlencode(
-        {
-            'code': code,
-            'client_id': client_id,
-            'client_secret': client_secret,
-            'redirect_uri': REDIRECT_URI,
-            'grant_type': 'authorization_code',
-        }
-    ).encode()
-    req = urllib.request.Request(
-        'https://oauth2.googleapis.com/token',
-        data=data,
-        headers={'Content-Type': 'application/x-www-form-urlencoded'},
-        method='POST',
-    )
-    with urllib.request.urlopen(req) as resp:
-        return json.loads(resp.read())
-
-
-def save_token(
-    token_response: dict, client_id: str, client_secret: str, out_path: Path
-):
-    """Save refresh credentials with owner-only file permissions."""
-    token_data = {
-        'client_id': client_id,
-        'client_secret': client_secret,
+def save_token(token_response, session, client_secret, out_path):
+    """Save refresh credentials without PKCE or identity material."""
+    data = {
+        'client_id': session.client_id,
         'refresh_token': token_response['refresh_token'],
-        'scopes': SCOPES,
+        'scopes': token_response.get(
+            'scope', ' '.join(session.scopes),
+        ).split(),
+        'token_uri': oauth.TOKEN_URI,
+        'auth_method': 'pkce-secret' if client_secret else 'pkce-public',
     }
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(json.dumps(token_data, indent=2))
-    out_path.chmod(0o600)
+    if client_secret:
+        data['client_secret'] = client_secret
+    oauth.write_private_json(out_path, data)
 
 
-class _CallbackHandler(BaseHTTPRequestHandler):
-    code = None
-    error = None
+class CallbackServer(HTTPServer):
+    """Bound accepted connections as well as the total authorization wait."""
 
-    def do_GET(self):
-        """Handle the local OAuth redirect and capture its code or error."""
-        parsed = urllib.parse.urlparse(self.path)
-        params = dict(urllib.parse.parse_qsl(parsed.query))
-        if 'code' in params:
-            _CallbackHandler.code = params['code']
-            self.send_response(200)
-            self.send_header('Content-Type', 'text/html')
+    def get_request(self):
+        """Limit a stalled local connection to the remaining session time."""
+        connection, address = super().get_request()
+        remaining = self.deadline - time.monotonic()
+        connection.settimeout(max(0.01, min(1, remaining)))
+        return connection, address
+
+
+def callback_handler(session, result):
+    """Create a per-attempt handler without shared callback state."""
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            """Validate redirects before accepting a code for exchange."""
+            if urlsplit(self.path).path != oauth.CALLBACK_PATH:
+                self.send_error(404)
+                return
+            try:
+                origin = session.redirect_uri.removesuffix(oauth.CALLBACK_PATH)
+                result['code'] = session.callback_code(origin + self.path)
+            except oauth.AuthorizationError as exc:
+                result['error'] = exc
+            self.send_response(400 if 'error' in result else 200)
+            self.send_header('Content-Type', 'text/plain; charset=utf-8')
+            self.send_header('Cache-Control', 'no-store')
             self.end_headers()
-            self.wfile.write(b"""
-                <html><body style="font-family:sans-serif;padding:40px">
-                <h2>&#10003; Authorised</h2>
-                <p>You can close this tab and return to the terminal.</p>
-                </body></html>
-            """)
-        else:
-            _CallbackHandler.error = params.get('error', 'unknown error')
-            self.send_response(400)
-            self.send_header('Content-Type', 'text/html')
-            self.end_headers()
-            self.wfile.write(
-                (
-                    f'<html><body>Error: {_CallbackHandler.error}'
-                    '</body></html>'
-                ).encode()
-            )
+            self.wfile.write(b'Return to the terminal to see the result.')
 
-    def log_message(self, *args):
-        """Suppress HTTP callback request logging."""
-        pass  # silence request logs
+        def log_message(self, *args):
+            """Never log callback URLs, authorization codes or state."""
+
+    return Handler
 
 
-def run_local_flow(client_id: str, client_secret: str, out_path: Path):
-    """Start local server, open browser, wait for callback."""
-    server = HTTPServer(('127.0.0.1', REDIRECT_PORT), _CallbackHandler)
-    auth_url = build_auth_url(client_id)
-
-    print('\nOpening browser for Google authorisation...')
-    print(f"If it doesn't open automatically, visit:\n\n  {auth_url}\n")
-    webbrowser.open(auth_url)
-
-    server.handle_request()  # blocks until one request arrives
-
-    if _CallbackHandler.error:
-        print(
-            f'\nAuthorisation failed: {_CallbackHandler.error}',
-            file=sys.stderr,
+def run_local_flow(client_id, client_secret, out_path, timeout):
+    """Open the browser and receive one validated loopback callback."""
+    result = {}
+    with CallbackServer(('127.0.0.1', 0), BaseHTTPRequestHandler) as server:
+        redirect = f'http://127.0.0.1:{server.server_port}{oauth.CALLBACK_PATH}'
+        session = oauth.AuthorizationSession.create(
+            client_id, redirect, SCOPES, timeout,
         )
-        sys.exit(1)
-    if not _CallbackHandler.code:
-        print('\nNo auth code received.', file=sys.stderr)
-        sys.exit(1)
-
-    tokens = exchange_code(_CallbackHandler.code, client_id, client_secret)
-    return save_token(tokens, client_id, client_secret, out_path)
-
-
-def run_headless_flow(client_id: str, client_secret: str, out_path: Path):
-    """Print URL, wait for user to paste the redirect URL back."""
-    auth_url = build_auth_url(client_id)
-
-    print('\n' + '=' * 60)
-    print('STEP 1: Open this URL in any browser (phone, laptop, etc.):')
-    print('=' * 60)
-    print(f'\n  {auth_url}\n')
-    print('=' * 60)
-    print('\nSTEP 2: After authorising, Google will redirect to a URL')
-    print('         starting with http://127.0.0.1:14399/oauth2/callback?...')
-    print('         Copy the FULL redirect URL and paste it here:\n')
-
-    redirect_url = input('Paste redirect URL: ').strip()
-
-    parsed = urllib.parse.urlparse(redirect_url)
-    params = dict(urllib.parse.parse_qsl(parsed.query))
-    code = params.get('code')
-    if not code:
-        # Maybe they pasted just the code
-        if redirect_url.startswith('4/'):
-            code = redirect_url
-        else:
-            print('\nCould not extract auth code from URL.', file=sys.stderr)
-            sys.exit(1)
-
-    tokens = exchange_code(code, client_id, client_secret)
-    return save_token(tokens, client_id, client_secret, out_path)
+        server.RequestHandlerClass = callback_handler(session, result)
+        server.deadline = time.monotonic() + timeout
+        url = session.authorization_url()
+        print('Open this URL in your system browser:\n' + url)
+        webbrowser.open(url)
+        while not result:
+            remaining = server.deadline - time.monotonic()
+            if remaining <= 0:
+                raise oauth.AuthorizationError('Authorization timed out.')
+            server.timeout = min(remaining, 1)
+            server.handle_request()
+        if 'error' in result:
+            raise result['error']
+    tokens = oauth.exchange_code(session, result['code'], client_secret)
+    save_token(tokens, session, client_secret, out_path)
 
 
-def run_code_exchange(
-    code: str, client_id: str, client_secret: str, out_path: Path
-):
-    """Exchange a code that was already obtained."""
-    tokens = exchange_code(code, client_id, client_secret)
-    return save_token(tokens, client_id, client_secret, out_path)
+def prepare_headless(client_id, path, timeout):
+    """Persist an attempt and print its URL for manual loopback completion."""
+    with HTTPServer(('127.0.0.1', 0), BaseHTTPRequestHandler) as server:
+        redirect = f'http://127.0.0.1:{server.server_port}{oauth.CALLBACK_PATH}'
+    session = oauth.AuthorizationSession.create(
+        client_id, redirect, SCOPES, timeout,
+    )
+    oauth.save_session(session, path)
+    print('Open this URL in your system browser:\n'
+          + session.authorization_url())
+    print('After consent, copy the complete loopback redirect URL, even if '
+          'the browser cannot connect. Keep the session file private.')
+    return session
+
+
+def run_headless_flow(client_id, client_secret, out_path, timeout, path):
+    """Retain PKCE state while the user pastes the complete redirect URL."""
+    prepare_headless(client_id, path, timeout)
+    try:
+        callback = input('Paste the full redirect URL: ').strip()
+        session, code = oauth.consume_session(path, callback)
+        tokens = oauth.exchange_code(session, code, client_secret)
+        save_token(tokens, session, client_secret, out_path)
+    finally:
+        path.unlink(missing_ok=True)
 
 
 def main():
-    """Run the command-line entry point for this module."""
-    parser = argparse.ArgumentParser(
-        description='Set up Google OAuth credentials for gdocs-scope-mcp',
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  # Normal (local browser opens automatically):
-  gdocs-scope-mcp-auth --credentials ~/credentials.json
-
-  # Or use env vars instead of a credentials file:
-  export GOOGLE_DOCS_MCP_CLIENT_ID=...
-  export GOOGLE_DOCS_MCP_CLIENT_SECRET=...
-  gdocs-scope-mcp-auth
-
-  # Headless / remote server (prints URL, paste back redirect):
-  gdocs-scope-mcp-auth --credentials ~/credentials.json --headless
-
-  # Already have an auth code:
-  gdocs-scope-mcp-auth --credentials ~/credentials.json --code "4/0Afr..."
-
-  # Custom token output path:
-  gdocs-scope-mcp-auth --credentials ~/credentials.json --out ~/my-token.json
-        """,
-    )
-    parser.add_argument(
-        '--credentials',
-        '-c',
-        help=(
-            'Path to credentials.json from Google Cloud Console '
-            '(OAuth 2.0 Client ID → Desktop App)'
-        ),
-    )
-    parser.add_argument(
-        '--client-id',
-        help=(
-            'OAuth client ID (alternative to --credentials file; '
-            f'defaults to ${CLIENT_ID_ENV_VAR} if set)'
-        ),
-    )
-    parser.add_argument(
-        '--client-secret',
-        help=(
-            'OAuth client secret (alternative to --credentials file; '
-            f'defaults to ${CLIENT_SECRET_ENV_VAR} if set)'
-        ),
-    )
-    parser.add_argument(
-        '--out',
-        '-o',
-        default=str(DEFAULT_TOKEN_PATH),
-        help=f'Output path for token file (default: {DEFAULT_TOKEN_PATH})',
-    )
-    parser.add_argument(
-        '--headless',
-        action='store_true',
-        help='Headless mode: print URL, paste back the redirect URL',
-    )
-    parser.add_argument(
-        '--code',
-        help='Exchange an existing auth code directly (skips browser flow)',
-    )
+    """Select a client and run a bounded, session-bound PKCE authorization."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--credentials', '-c', type=Path,
+                        help='Desktop OAuth credentials JSON')
+    parser.add_argument('--client-id', help='Custom Desktop OAuth client ID')
+    parser.add_argument('--client-secret',
+                        help='Optional secret for a custom legacy client')
+    parser.add_argument('--out', '-o', type=Path, default=DEFAULT_TOKEN_PATH)
+    modes = parser.add_mutually_exclusive_group()
+    modes.add_argument('--headless', action='store_true')
+    modes.add_argument('--prepare', action='store_true',
+                       help='Save a PKCE session and print its consent URL')
+    modes.add_argument('--callback-url', '--code', dest='callback_url',
+                       help='Complete redirect URL for a saved PKCE session; '
+                       'a bare authorization code is not accepted')
+    parser.add_argument('--session', type=Path,
+                        help='Private, single-use PKCE session file')
+    parser.add_argument('--timeout', type=int, default=oauth.DEFAULT_TIMEOUT,
+                        help='Authorization session lifetime in seconds')
     args = parser.parse_args()
+    if args.timeout <= 0:
+        parser.error('--timeout must be positive')
+    if (args.prepare or args.callback_url) and not args.session:
+        parser.error('--prepare and --callback-url require --session')
+    if args.session and not (
+        args.prepare or args.callback_url or args.headless
+    ):
+        parser.error('--session requires a headless or callback mode')
 
-    env_client_id = _first_env(*CLIENT_ID_ENV_ALIASES)
-    env_client_secret = _first_env(*CLIENT_SECRET_ENV_ALIASES)
-    client_id = args.client_id or env_client_id
-    client_secret = args.client_secret or env_client_secret
-
-    # Resolve credentials
-    if args.credentials:
-        creds_path = Path(args.credentials).expanduser()
-        if not creds_path.exists():
-            print(
-                f'Error: credentials file not found: {creds_path}',
-                file=sys.stderr,
-            )
-            sys.exit(1)
-        cfg = load_client_config(creds_path)
-        client_id = cfg['client_id']
-        client_secret = cfg['client_secret']
-    elif client_id and client_secret:
-        pass
-    else:
-        print(
-            'Error: provide --credentials, '
-            'both --client-id and --client-secret, '
-            f'or set both {CLIENT_ID_ENV_VAR} and {CLIENT_SECRET_ENV_VAR} '
-            '(legacy GOOGLE_DRIVE_MCP_* aliases also work)',
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-    out_path = Path(args.out).expanduser()
-
-    print(f'Token will be saved to: {out_path}')
-    print('Scopes: ' + ', '.join(SCOPES))
-
-    # Run the appropriate flow
-    if args.code:
-        run_code_exchange(
-            args.code, client_id, client_secret, out_path
-        )
-    elif args.headless:
-        run_headless_flow(client_id, client_secret, out_path)
-    else:
-        run_local_flow(client_id, client_secret, out_path)
-
-    print('\n✓ Authorisation successful')
-    print(f'✓ Token saved: {out_path}')
-    print()
-    print('Set this env var to use the token:')
-    print(f'  export GOOGLE_DOCS_MCP_TOKEN={out_path}')
-    print('  # Legacy alias still works: export GOOGLE_DRIVE_MCP_TOKEN=...')
-    print()
-    print('Or add to your MCP config:')
-    print(f"""  "env": {{
-    "GOOGLE_DOCS_MCP_TOKEN": "{out_path}"
-  }}""")
+    try:
+        client_id = args.client_id or _first_env(*CLIENT_ID_ENV_ALIASES)
+        secret = args.client_secret or _first_env(*CLIENT_SECRET_ENV_ALIASES)
+        if args.credentials:
+            config = load_client_config(args.credentials.expanduser())
+            client_id = config['client_id']
+            secret = config.get('client_secret')
+        if args.callback_url:
+            session, code = oauth.consume_session(args.session.expanduser(),
+                                                  args.callback_url)
+            if client_id and client_id != session.client_id:
+                raise oauth.AuthorizationError(  # noqa: TRY301
+                    'Session client mismatch.',
+                )
+            tokens = oauth.exchange_code(session, code, secret)
+            save_token(tokens, session, secret, args.out.expanduser())
+        else:
+            if not client_id:
+                client_id = oauth.PROJECT_CLIENT_ID
+                secret = None
+            if not client_id:
+                raise oauth.AuthorizationError(  # noqa: TRY301
+                    'No project client is configured. Provide --client-id '
+                    'or --credentials for a registered Desktop app.'
+                )
+            print('Scopes: ' + ', '.join(SCOPES))
+            path = (args.session.expanduser() if args.session else
+                    args.out.expanduser().with_suffix('.oauth-session.json'))
+            if args.prepare:
+                prepare_headless(client_id, path, args.timeout)
+                print(f'Session saved: {path}')
+                return
+            if args.headless:
+                run_headless_flow(client_id, secret, args.out.expanduser(),
+                                  args.timeout, path)
+            else:
+                run_local_flow(client_id, secret, args.out.expanduser(),
+                               args.timeout)
+    except oauth.AuthorizationError as exc:
+        print(str(exc), file=sys.stderr)
+        raise SystemExit(1) from None
+    except (OSError, KeyError, ValueError, GoogleAuthError) as exc:
+        print(f'Authorization failed ({type(exc).__name__}). '
+              'Check the Desktop client and session; start a new attempt.',
+              file=sys.stderr)
+        raise SystemExit(1) from None
+    except (KeyboardInterrupt, EOFError):
+        print('Authorization cancelled.', file=sys.stderr)
+        raise SystemExit(1) from None
+    print('✓ Authorisation successful')
+    print(f'✓ Token saved: {args.out.expanduser()}')
+    print(f'Set GOOGLE_DOCS_MCP_TOKEN={args.out.expanduser()}')
 
 
 if __name__ == '__main__':

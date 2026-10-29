@@ -47,10 +47,9 @@ uvx --from git+https://github.com/dm0/gdocs-scope-mcp \
   gdocs-scope-mcp-auth --credentials ~/credentials.json
 ```
 
-**Or use env vars instead of a credentials file:**
+**Or provide a Desktop client ID without a secret:**
 ```bash
 export GOOGLE_DOCS_MCP_CLIENT_ID="your-google-client-id"
-export GOOGLE_DOCS_MCP_CLIENT_SECRET="your-google-client-secret"
 
 uvx --from git+https://github.com/dm0/gdocs-scope-mcp \
   gdocs-scope-mcp-auth
@@ -64,19 +63,80 @@ uvx --from git+https://github.com/dm0/gdocs-scope-mcp \
 # Paste the full redirect URL back into the terminal
 ```
 
-**Already have an auth code:**
+**Complete authorization in a separate CLI invocation:**
 ```bash
 uvx --from git+https://github.com/dm0/gdocs-scope-mcp \
-  gdocs-scope-mcp-auth --credentials ~/credentials.json --code "4/0Afr..."
+  gdocs-scope-mcp-auth --client-id YOUR_DESKTOP_CLIENT_ID \
+  --prepare --session ~/.google-docs-mcp/pending-session.json
+
+# Open the printed URL, consent, then copy the FULL loopback redirect URL.
+uvx --from git+https://github.com/dm0/gdocs-scope-mcp \
+  gdocs-scope-mcp-auth --session ~/.google-docs-mcp/pending-session.json \
+  --callback-url 'http://127.0.0.1:PORT/oauth2/callback?code=...&state=...'
 ```
 
-`gdocs-scope-mcp-auth` resolves OAuth client credentials in this order:
+All modes use PKCE S256 and a fresh, independent state. Local browser mode
+binds only to `127.0.0.1` on an available port. The listener closes on success,
+failure, cancellation, or timeout (300 seconds by default; set `--timeout`).
+Use the system browser, not an embedded webview.
+
+Headless mode keeps the original verifier and state in a private session file.
+The default path is next to the output token, with suffix `.oauth-session.json`;
+override it with `--session`. The full redirect URL is required even if the
+browser cannot connect to that loopback address. Expired sessions cannot be
+completed. Completion consumes the session once, including on a rejected
+callback; interrupted interactive input deletes its session. An abandoned
+`--prepare` file can be deleted manually before starting again.
+
+The old `--code` option is an alias for `--callback-url`; a bare authorization
+code without its original PKCE session is rejected. Session files contain a
+verifier and must not be shared, logged or committed. Token files contain no
+verifier or state. On Windows, restrict their directory to your OS account;
+POSIX modes do not replace Windows ACLs.
+
+`gdocs-scope-mcp-auth` resolves the client in this order:
 
 1. `--credentials /path/to/credentials.json`
-2. `--client-id` and `--client-secret`
-3. `GOOGLE_DOCS_MCP_CLIENT_ID` and `GOOGLE_DOCS_MCP_CLIENT_SECRET`
+2. `--client-id`
+3. `GOOGLE_DOCS_MCP_CLIENT_ID` (or its legacy Drive alias)
+4. The project-managed Desktop client, when configured in the distribution
+
+This source snapshot has no registered project client configured yet. Until
+registration and live validation are complete, provide your own Desktop client.
+
+A secret is optional for a custom client (`--client-secret`, environment, or
+the credentials JSON); existing secret-bearing token files remain supported.
+For ID-only authorization, neither code exchange nor refresh sends
+`client_secret`. A failed exchange is reported without falling back to a flow
+without PKCE. Tokens marked `pkce-public` ignore ambient secret overrides when
+refreshed. Live acceptance of ID-only login and refresh must be checked against
+the actual registered Desktop client before distributing it as the default.
 
 Token is saved to `~/.google-docs-mcp/token.json` by default. Override with `--out /path/to/token.json`.
+
+### Project-managed client distribution
+
+Register a **Desktop app** client in the application's Google Cloud project,
+enable Docs API and Drive API, and configure the consent screen, audience and
+test users. The public client ID may be distributed in source; never commit a
+client secret or a user's token. Custom client overrides remain available.
+Registration is independent of where the MCP process runs.
+
+The project owner manages OAuth branding, production verification, quotas and
+client lifecycle. Multiple installations using the shared project consume its
+project-level API quotas, in addition to per-user limits. Use a separate
+development client/project when appropriate; changing the default client does
+not migrate existing user grants or refresh tokens.
+
+Publishing the consent screen and completing verification are separate steps.
+The current broad Drive scopes include restricted access, so public
+distribution requires reviewing Google's applicable verification requirements.
+PKCE does not change the scope classification. Selected-file access belongs to
+the separate Google Picker/access-mode work.
+
+See Google's [Desktop OAuth flow](https://developers.google.com/identity/protocols/oauth2/native-app),
+[production readiness](https://developers.google.com/identity/protocols/oauth2/production-readiness/overview),
+and [Drive scopes](https://developers.google.com/workspace/drive/api/guides/api-specific-auth).
 
 ### 4. Configure your MCP client
 

@@ -1,14 +1,18 @@
 """Verify profile-free authorization and legacy token compatibility."""
 
 import json
+import socket
 import stat
+from concurrent.futures import ThreadPoolExecutor
+from types import SimpleNamespace
 from unittest.mock import Mock
 from urllib.parse import parse_qs, urlparse
+from urllib.request import urlopen
 
 import pytest
 
 from gdocs_scope_mcp import auth_setup
-from gdocs_scope_mcp.google_api import credentials
+from gdocs_scope_mcp.google_api import credentials, oauth
 
 OWNER_READ_WRITE = 0o600
 
@@ -26,7 +30,10 @@ def document_scopes():
 
 def test_consent_requests_only_document_scopes(document_scopes):
     """New consent retains document access without requesting identity."""
-    query = parse_qs(urlparse(auth_setup.build_auth_url('client')).query)
+    session = oauth.AuthorizationSession.create(
+        'client', 'http://127.0.0.1:1234/oauth2/callback', document_scopes,
+    )
+    query = parse_qs(urlparse(session.authorization_url()).query)
     assert query['scope'][0].split() == document_scopes
 
 
@@ -38,42 +45,69 @@ def test_authorization_saves_token_without_identity(
     out = tmp_path / 'new' / 'token.json'
     args = ['gdocs-scope-mcp-auth', '--client-id', 'client',
             '--client-secret', 'secret', '--out', str(out)]
-    if mode == 'code':
-        args += ['--code', 'test-code']
-    elif mode == 'headless':
-        args += ['--headless']
-        monkeypatch.setattr('builtins.input', lambda _: (
-            auth_setup.REDIRECT_URI + '?code=test-code'
-        ))
-    else:
-        monkeypatch.setattr(auth_setup, 'HTTPServer', Mock())
-        monkeypatch.setattr(auth_setup.webbrowser, 'open', Mock())
-        monkeypatch.setattr(auth_setup._CallbackHandler, 'code', 'test-code')
-        monkeypatch.setattr(auth_setup._CallbackHandler, 'error', None)
-    monkeypatch.setattr(auth_setup.sys, 'argv', args)
-    response = Mock()
-    response.read.return_value = b'{"refresh_token": "refresh"}'
-    transport = Mock()
-    transport.return_value.__enter__ = Mock(return_value=response)
-    transport.return_value.__exit__ = Mock(return_value=False)
-    monkeypatch.setattr(auth_setup.urllib.request, 'urlopen', transport)
+    session_path = tmp_path / 'session.json'
 
-    auth_setup.main()
+    def callback_from_file(_):
+        data = json.loads(session_path.read_text())
+        return data['redirect_uri'] + '?code=test-code&state=' + data['state']
+
+    pool = ThreadPoolExecutor(max_workers=1)
+    requests = []
+
+    def browser(url):
+        query = parse_qs(urlparse(url).query)
+        callback = (query['redirect_uri'][0] + '?code=test-code&state='
+                    + query['state'][0])
+        requests.append(pool.submit(urlopen, callback, timeout=3))
+        return True
+
+    if mode == 'code':
+        auth_setup.prepare_headless('client', session_path, 300)
+        args += ['--code', callback_from_file(None),
+                 '--session', str(session_path)]
+    elif mode == 'headless':
+        args += ['--headless', '--session', str(session_path)]
+        monkeypatch.setattr('builtins.input', callback_from_file)
+    else:
+        monkeypatch.setattr(auth_setup.webbrowser, 'open', browser)
+    monkeypatch.setattr(auth_setup.sys, 'argv', args)
+    response = SimpleNamespace(status=200, data=json.dumps({
+        'refresh_token': 'refresh', 'access_token': 'access',
+    }).encode())
+    transport = Mock(return_value=response)
+    monkeypatch.setattr(oauth, 'Request', lambda: transport)
+    try:
+        auth_setup.main()
+    finally:
+        pool.shutdown(wait=True)
+    for request in requests:
+        request.result().close()
 
     transport.assert_called_once()
-    request = transport.call_args.args[0]
-    assert request.full_url == 'https://oauth2.googleapis.com/token'
-    assert parse_qs(request.data.decode())['code'] == ['test-code']
+    assert transport.call_args.args[0] == oauth.TOKEN_URI
+    body = parse_qs(transport.call_args.kwargs['body'].decode())
+    assert body['code'] == ['test-code']
+    assert body['code_verifier']
     assert json.loads(out.read_text()) == {
         'client_id': 'client', 'client_secret': 'secret',
         'refresh_token': 'refresh', 'scopes': document_scopes,
+        'token_uri': oauth.TOKEN_URI, 'auth_method': 'pkce-secret',
     }
     assert stat.S_IMODE(out.stat().st_mode) == OWNER_READ_WRITE
     output = capsys.readouterr().out
     assert 'Authorisation successful' in output
-    assert 'Scopes: ' + ', '.join(document_scopes) in output
+    if mode != 'code':
+        assert 'Scopes: ' + ', '.join(document_scopes) in output
     assert 'email' not in output
     assert 'appscript' not in output
+    assert body['code_verifier'][0] not in output
+    assert not session_path.exists()
+
+    # The listener must already be closed when the CLI returns.
+    redirect = urlparse(body['redirect_uri'][0])
+    with socket.socket() as probe:
+        probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        probe.bind(('127.0.0.1', redirect.port))
 
 
 @pytest.mark.parametrize('legacy', [False, True])
