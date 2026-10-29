@@ -8,6 +8,7 @@ import uuid
 
 import pytest
 
+from .native_snapshot_assertions import assert_tabs_unchanged
 from .test_live_table_identity import paragraph_text, table_probe  # noqa: F401
 
 
@@ -178,6 +179,7 @@ def test_live_image_layout(
                         native,
                     )
                     after = await probe.call(0, 'probe_tabs_document')
-                    assert after['tabs'] == before['tabs']
+                    assert_tabs_unchanged(before['tabs'], after['tabs'])
+                    probe.report['temporary_tab_removed'] = True
 
     asyncio.run(run())
