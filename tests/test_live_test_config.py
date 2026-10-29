@@ -2,7 +2,7 @@
 
 import pytest
 
-from gdocs_scope_mcp import docs_edit
+from gdocs_scope_mcp.google_api import clients
 
 
 @pytest.fixture(autouse=True)
@@ -11,7 +11,7 @@ def no_google_access(monkeypatch):
     def forbidden(*_args, **_kwargs):
         pytest.fail('Configuration checks must not access Google.')
 
-    monkeypatch.setattr(docs_edit, '_get_service', forbidden)
+    monkeypatch.setattr(clients, 'get_service', forbidden)
 
 
 @pytest.mark.parametrize('legacy_flag', [None, '1'])

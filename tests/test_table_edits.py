@@ -4,7 +4,10 @@ from copy import deepcopy
 
 import pytest
 
-from gdocs_scope_mcp import docs_edit
+from gdocs_scope_mcp.documents import (
+    editing as docs_edit,
+    parsing,
+)
 
 
 def cell_paragraphs(document):
@@ -104,7 +107,7 @@ def test_table_edits_use_original_paragraph_ranges(
 def test_table_rendering_does_not_extend_preceding_paragraph(table_document):
     """Keep one HTML table and separate editable source paragraphs."""
     expected = deepcopy(table_document)
-    tree = docs_edit._parse_document_tree(table_document)
+    tree = parsing.parse_document_tree(table_document)
     owner = tree.headings['owner']
     before = owner.paragraphs[1]
     source = expected['body']['content'][1]

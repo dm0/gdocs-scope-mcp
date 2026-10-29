@@ -2,7 +2,6 @@
 
 # Native fields and numeric examples are explicit API contracts.
 # ruff: noqa: D103, PLR2004
-
 import asyncio
 from copy import deepcopy
 from unittest.mock import MagicMock
@@ -10,9 +9,16 @@ from unittest.mock import MagicMock
 import pytest
 from fastmcp import Client
 
-from gdocs_scope_mcp import docs_edit, server, suggestions, table_read
-from gdocs_scope_mcp.document_tabs import select
-from gdocs_scope_mcp.suggestion_index import index_document
+from gdocs_scope_mcp import server
+from gdocs_scope_mcp.documents import (
+    editing as docs_edit,
+    reading,
+)
+from gdocs_scope_mcp.documents.tabs import select
+from gdocs_scope_mcp.google_api import clients
+from gdocs_scope_mcp.suggestions import reading as suggestions
+from gdocs_scope_mcp.suggestions.index import index_document
+from gdocs_scope_mcp.tables import reading as table_read
 from gdocs_scope_mcp.tool_errors import ToolFailureError
 
 from .test_revision_guards import api_error
@@ -49,7 +55,7 @@ def projections(monkeypatch, simple_document):
         return request
 
     service.documents().get.side_effect = get
-    monkeypatch.setattr(docs_edit, '_get_service', lambda *_args: service)
+    monkeypatch.setattr(clients, 'get_service', lambda *_args: service)
     state['service'] = service
     return state
 
@@ -61,7 +67,7 @@ def mark(document, paragraph=2, sid='proposal'):
 
 
 def test_no_proposals_uses_one_fetch_and_compact_notice(projections):
-    result = docs_edit.read('example')
+    result = reading.read('example')
     assert len(projections['calls']) == 1
     assert result.suggestions.document_has_pending is False
     assert result.suggestions.selected_content_has_pending is False
@@ -74,12 +80,12 @@ def test_clean_content_with_source_scope_metadata(projections):
     projections['inline']['body']['content'][2]['paragraph']['elements'][0][
         'textRun'
     ]['content'] = 'Proposed insertion\n'
-    read = docs_edit.read('example', ['parent'])
+    read = reading.read('example', ['parent'])
     assert 'Proposed insertion' not in read.sections[0].markdown
     assert 'Target phrase' in read.sections[0].markdown
     assert read.suggestions.selected_content_has_pending is True
     assert read.suggestions.suggestion_ids == ['proposal']
-    other = docs_edit.read('example', ['other'])
+    other = reading.read('example', ['other'])
     assert other.suggestions.document_has_pending is True
     assert other.suggestions.selected_content_has_pending is False
     assert not other.suggestions.suggestion_ids
@@ -88,7 +94,7 @@ def test_clean_content_with_source_scope_metadata(projections):
 def test_hidden_insertion_still_belongs_to_requested_subtree(projections):
     mark(projections['inline'])
     projections['preview']['body']['content'].pop(2)
-    result = docs_edit.read('example', ['parent'])
+    result = reading.read('example', ['parent'])
     assert result.suggestions.selected_content_has_pending is True
     assert 'Target phrase\n' not in result.sections[0].markdown
 
@@ -96,9 +102,9 @@ def test_hidden_insertion_still_belongs_to_requested_subtree(projections):
 def test_outline_uses_accepted_headings(projections):
     mark(projections['inline'], paragraph=3)
     projections['preview']['body']['content'].pop(3)
-    outline = docs_edit.get_tree('example')
+    outline = reading.get_tree('example')
     assert 'nested' not in [section.id for section in outline.sections]
-    result = docs_edit.read('example', ['nested'])
+    result = reading.read('example', ['nested'])
     assert result.code == 'HEADING_NOT_FOUND'
 
 
@@ -119,7 +125,7 @@ def test_revision_mismatch_retries_then_fails(projections):
     mark(projections['inline'])
     projections['preview']['revisionId'] = 'different'
     with pytest.raises(ToolFailureError) as error:
-        docs_edit.read('example')
+        reading.read('example')
     assert error.value.failure.code == 'EDIT_CONFLICT'
     assert len(projections['calls']) == 6
 
@@ -128,12 +134,12 @@ def test_missing_revision_and_permission_fallback_are_unknown(projections):
     mark(projections['inline'])
     del projections['inline']['revisionId']
     del projections['preview']['revisionId']
-    read = docs_edit.read('example')
+    read = reading.read('example')
     assert read.revision_id is None
     assert read.suggestions.document_has_pending is None
     assert read.suggestions.detection == 'unavailable'
     projections['inline'] = api_error('Not allowed to view suggestions', 403)
-    read = docs_edit.read('example')
+    read = reading.read('example')
     assert read.suggestions.selected_content_has_pending is None
 
 
@@ -141,7 +147,7 @@ def test_failed_projection_never_returns_inline_mixture(projections):
     mark(projections['inline'])
     projections['preview'] = api_error('Unavailable', 503)
     with pytest.raises(Exception, match='Unavailable'):
-        docs_edit.read('example')
+        reading.read('example')
 
 
 def test_text_and_paragraph_format_suggestions_are_detected(simple_document):
@@ -302,7 +308,7 @@ def test_text_only_table_proposals_keep_valid_native_refs(
     cell['content'][0]['paragraph']['elements'][0]['textRun']['content'] = (
         'inline proposal mixture\n'
     )
-    result = docs_edit.read('example')
+    result = reading.read('example')
     assert 'data-mcp-table-ref=' in ''.join(
         s.markdown for s in result.sections
     )
@@ -321,7 +327,7 @@ def test_structural_table_proposals_omit_unsafe_refs(
     table = deepcopy(projections['inline']['body']['content'][2])
     table['table']['suggestedInsertionIds'] = ['new-table']
     projections['inline']['body']['content'].insert(2, table)
-    result = docs_edit.read('example')
+    result = reading.read('example')
     markdown = ''.join(s.markdown for s in result.sections)
     assert '<table' in markdown
     assert 'data-mcp-table-ref=' not in markdown
@@ -430,7 +436,7 @@ def test_hidden_proposed_heading_does_not_cut_accepted_scope(projections):
     ] = 'HEADING_1'
     projections['preview']['body']['content'].pop(3)
     mark(inline, 4, 'body-change')
-    result = docs_edit.read('example', ['parent'])
+    result = reading.read('example', ['parent'])
     assert set(result.suggestions.suggestion_ids) == {
         'hidden-heading',
         'body-change',
@@ -442,11 +448,11 @@ def test_heading_identity_mismatch_is_not_silently_mapped(projections):
     projections['inline']['body']['content'][1]['paragraph']['elements'][0][
         'textRun'
     ]['content'] = 'A different native heading\n'
-    outline = docs_edit.get_tree('example')
+    outline = reading.get_tree('example')
     assert 'parent' in outline.suggestions.unavailable_heading_ids
-    result = docs_edit.read('example', ['parent'])
+    result = reading.read('example', ['parent'])
     assert result.code == 'TARGET_CHANGED'
-    whole = docs_edit.read('example')
+    whole = reading.read('example')
     assert whole.sections
     assert whole.suggestions.detection == 'partial'
 

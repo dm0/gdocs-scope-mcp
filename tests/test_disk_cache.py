@@ -2,7 +2,6 @@
 
 # Explicit byte budgets and fixture counts are part of these contracts.
 # ruff: noqa: D103, PLR2004
-
 import multiprocessing
 import sqlite3
 import time
@@ -11,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from gdocs_scope_mcp.disk_cache import DiskSnapshotCache
+from gdocs_scope_mcp.cache.disk import DiskSnapshotCache
 from gdocs_scope_mcp.settings import Settings
 
 MIB = 1024 * 1024

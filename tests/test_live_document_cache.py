@@ -2,7 +2,6 @@
 
 # Imported fixture names and numeric request counts are intentional.
 # ruff: noqa: F811, PLR2004
-
 import asyncio
 import time
 import uuid

@@ -2,7 +2,6 @@
 
 # Imported pytest fixtures are requested by name in tests.
 # ruff: noqa: F811
-
 import asyncio
 
 import pytest

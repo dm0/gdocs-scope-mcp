@@ -12,15 +12,18 @@ from urllib.parse import parse_qs, urlsplit
 from googleapiclient.errors import HttpError
 from googleapiclient.http import HttpRequest
 
-from gdocs_scope_mcp import (
-    comments,
-    docs_edit,
-    table_format,
-    table_insertion,
-    table_patch,
-    table_structure,
+from gdocs_scope_mcp import comments
+from gdocs_scope_mcp.documents import (
+    fetching,
 )
+from gdocs_scope_mcp.google_api import clients
+from gdocs_scope_mcp.rich_text import execution as table_insertion
 from gdocs_scope_mcp.server import mcp
+from gdocs_scope_mcp.tables import (
+    formatting as table_format,
+    patch as table_patch,
+    structure as table_structure,
+)
 from gdocs_scope_mcp.tool_logging import configure_logging
 
 ALLOWED = {
@@ -48,13 +51,13 @@ def _document_id() -> str:
 def probe_document() -> dict:
     """Read the single environment-selected document with native indices."""
     doc_id = _document_id()
-    return docs_edit._get_document(docs_edit._get_service(), doc_id)
+    return fetching.get_document(clients.get_service(), doc_id)
 
 
 @mcp.tool
 def probe_tabs_document() -> dict:
     """Read every tab only in the explicitly authorized test document."""
-    return docs_edit._get_service().documents().get(
+    return clients.get_service().documents().get(
         documentId=_document_id(), includeTabsContent=True,
         suggestionsViewMode='SUGGESTIONS_INLINE',
     ).execute()
@@ -64,8 +67,8 @@ def probe_tabs_document() -> dict:
 def probe_drive_freshness(tab_id: str, marker: str) -> dict:
     """Compare uncached Docs content with bracketing Drive metadata reads."""
     doc_id = _document_id()
-    docs = docs_edit._get_service().documents()
-    drive = docs_edit._get_service('drive', 'v3').files()
+    docs = clients.get_service().documents()
+    drive = clients.get_service('drive', 'v3').files()
     observations = {}
     origin = time.monotonic()
 
@@ -106,7 +109,7 @@ def probe_suggestions_document(
     if view not in {'SUGGESTIONS_INLINE', 'PREVIEW_SUGGESTIONS_ACCEPTED',
                     'PREVIEW_WITHOUT_SUGGESTIONS'}:
         raise ValueError('Unsupported suggestions projection')
-    service = docs_edit._get_service()
+    service = clients.get_service()
     if threads:
         if view != 'SUGGESTIONS_INLINE':
             raise ValueError('Threads require inline suggestions')
@@ -135,7 +138,7 @@ def probe_suggestions_batch(
         'targetRevisionId' if target else 'requiredRevisionId': revision,
     }
     try:
-        result = docs_edit._get_service().documents().batchUpdate(
+        result = clients.get_service().documents().batchUpdate(
             documentId=_document_id(),
             body={'requests': requests, 'writeControl': control},
         ).execute()
@@ -153,7 +156,7 @@ def probe_suggestions_batch(
 def probe_export_pdf() -> dict:
     """Export only the environment-authorized document for local visual QA."""
     doc_id = _document_id()
-    data = docs_edit._get_service('drive', 'v3').files().export(
+    data = clients.get_service('drive', 'v3').files().export(
         fileId=doc_id, mimeType='application/pdf',
     ).execute()
     if not isinstance(data, bytes) or not data.startswith(b'%PDF'):
@@ -175,7 +178,7 @@ def probe_batch(requests: list[dict], write_control: dict) -> dict:
     }):
         raise ValueError('Exactly one revision precondition required')
     try:
-        result = docs_edit._get_service().documents().batchUpdate(
+        result = clients.get_service().documents().batchUpdate(
             documentId=doc_id,
             body={'requests': requests, 'writeControl': write_control},
         ).execute()
@@ -231,7 +234,7 @@ def probe_get_measurements(reset: bool = False) -> dict:
 _gate_lock = threading.Lock()
 _release = threading.Event()
 _gate = {'armed': False, 'ready': False, 'kind': 'read'}
-_read = docs_edit._get_document
+_read = fetching.get_document
 _submit_table = table_insertion.guarded_submit
 _submit_patch = table_patch.submit
 _patch_fault = {'armed': False}
@@ -254,7 +257,7 @@ def _paused_read(service, doc_id, **kwargs):
     return document
 
 
-docs_edit._get_document = _paused_read
+fetching.get_document = _paused_read
 
 
 def _paused_table_submit(service, doc_id, requests, revision, **kwargs):

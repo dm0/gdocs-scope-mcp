@@ -13,7 +13,7 @@ from pydantic import (
 from pygments.styles import get_all_styles
 from typing_extensions import Self
 
-from .settings import Settings
+from gdocs_scope_mcp.settings import Settings
 
 NonemptyText = Annotated[str, Field(strict=True, min_length=1)]
 

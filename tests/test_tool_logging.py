@@ -1,5 +1,6 @@
 """Exercise logging around MCP calls without Google API access."""
 
+
 import asyncio
 import logging
 import re
@@ -8,7 +9,7 @@ from types import SimpleNamespace
 import pytest
 from fastmcp import Client, FastMCP
 
-from gdocs_scope_mcp.models import EditFailedResponse
+from gdocs_scope_mcp.contracts import EditFailedResponse
 from gdocs_scope_mcp.tool_logging import (
     LOG_LEVEL_ENV,
     LOGGER_NAME,

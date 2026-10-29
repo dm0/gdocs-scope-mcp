@@ -1,11 +1,13 @@
 """Check Markdown insertion after scoped anchors and the final paragraph."""
 
+
 import asyncio
 
 import pytest
 from fastmcp import Client
 
-from gdocs_scope_mcp import docs_edit, server
+from gdocs_scope_mcp import server
+from gdocs_scope_mcp.documents import editing as docs_edit
 
 
 @pytest.mark.parametrize(
@@ -92,7 +94,8 @@ def test_literal_after_bypasses_both_parsers(
         raise AssertionError('Literal insertion must not parse Markdown')
 
     monkeypatch.setattr(
-        'gdocs_scope_mcp.image_uploads.html_to_gpars', unexpected_call,
+        'gdocs_scope_mcp.rich_text.insertion.html_to_gpars',
+        unexpected_call,
     )
     result = docs_edit.insert_after(
         'example',

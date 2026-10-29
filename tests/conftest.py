@@ -14,18 +14,21 @@ import pytest
 from fastmcp import Client
 from fastmcp.client.transports import StdioTransport
 
-from gdocs_scope_mcp import docs_edit
 from gdocs_scope_mcp.diagnostics import capture_server_info
+from gdocs_scope_mcp.google_api import clients, credentials
 
 
 @pytest.fixture
 def isolated_mcp():
     """Provide a shared-session STDIO client tied to this checkout's source."""
     @asynccontextmanager
-    async def connect(log):
+    async def connect(log, *, probe=False):
         repo = Path(__file__).resolve().parents[1]
+        executable = 'fastmcp' if probe else 'gdocs-scope-mcp'
         transport = StdioTransport(
-            command=str(repo / '.venv/bin/gdocs-scope-mcp'), args=[],
+            command=str(repo / '.venv/bin' / executable),
+            args=(['run', str(repo / 'tests/probes/table_server.py'),
+                   '--transport', 'stdio'] if probe else []),
             cwd=str(repo), env=dict(os.environ), log_file=log,
             keep_alive=False,
         )
@@ -130,7 +133,8 @@ def mock_docs(monkeypatch, simple_document):
         simple_document
     )
     documents.batchUpdate.return_value.execute.return_value = {}
-    monkeypatch.setattr(docs_edit, '_get_service', lambda *_args: service)
+    monkeypatch.setattr(clients, 'build', lambda *_args, **_kwargs: service)
+    monkeypatch.setattr(credentials, 'load_credentials', object)
     return documents
 
 

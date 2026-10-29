@@ -1,6 +1,9 @@
 """Fit unsized images to supported paged body paragraph layouts."""
 
+
 import math
+
+from gdocs_scope_mcp.rich_text.models import InsertionImage
 
 
 def _points(dimension):
@@ -115,8 +118,6 @@ def paragraph_width(document, index, paragraph):
 
 def fit_images(requests, paragraphs, document, index):
     """Set only missing sizes; native Google computes aspect-ratio height."""
-    # Lazy imports keep the converter and execution planner independent.
-    from .md2requests import InsertionImage  # noqa: PLC0415
 
     images = (
         request['insertInlineImage']

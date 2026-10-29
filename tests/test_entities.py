@@ -2,7 +2,6 @@
 
 # Independent UTF-16 offsets and native payloads are deliberate expectations.
 # ruff: noqa: PLR2004
-
 import asyncio
 import json
 from copy import deepcopy
@@ -13,8 +12,11 @@ from bs4 import BeautifulSoup
 from fastmcp import Client
 from jsonschema import validate
 
-from gdocs_scope_mcp import docs_edit, server
-from gdocs_scope_mcp.md2requests import (
+from gdocs_scope_mcp import server
+from gdocs_scope_mcp.documents import (
+    reading,
+)
+from gdocs_scope_mcp.rich_text.compiler import (
     inserted_text_from_requests,
     markdown_to_requests,
 )
@@ -150,7 +152,7 @@ def test_converter_recreates_native_entities(
     """Copy semantics preserve properties, but never reuse the instance ID."""
     document, kind, _ = entity_document
     configure(mock_docs, document)
-    read = docs_edit.read('example')
+    read = reading.read('example')
     chip = BeautifulSoup(read.sections[0].markdown, 'html.parser').find(
         attrs={'data-mcp-entity': kind},
     )

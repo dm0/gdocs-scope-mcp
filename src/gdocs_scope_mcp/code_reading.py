@@ -1,5 +1,6 @@
 """Recover Markdown code from document markers and configurable formatting."""
 
+
 import json
 import re
 from collections.abc import Iterator
@@ -7,7 +8,7 @@ from itertools import pairwise
 from urllib.parse import quote, unquote
 from uuid import uuid4
 
-from .settings import get_settings
+from gdocs_scope_mcp.settings import get_settings
 
 MARKER_PREFIX = 'gdocs-scope-mcp:code:v1:'
 MAX_MARKER_LENGTH = 256

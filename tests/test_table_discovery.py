@@ -8,7 +8,11 @@ from bs4 import BeautifulSoup
 from fastmcp import Client
 from jsonschema import validate
 
-from gdocs_scope_mcp import docs_edit, server, table_read
+from gdocs_scope_mcp import server
+from gdocs_scope_mcp.documents import (
+    reading,
+)
+from gdocs_scope_mcp.tables import reading as table_read
 from gdocs_scope_mcp.text_indices import utf16_length
 from gdocs_scope_mcp.tool_errors import ToolFailureError
 
@@ -278,7 +282,7 @@ def test_nested_tables_have_distinct_html_and_parent_cell_refs(table_source):
     assert 'deep😀' in table_read.table_read('example', child.table_ref).rows[
         0].cells[0].markdown
     before = deepcopy(native)
-    read = docs_edit.read('example')
+    read = reading.read('example')
     markup = ''.join(s.markdown for s in read.sections)
     assert len(BeautifulSoup(markup, 'html.parser').find_all('table')) == 2  # noqa: PLR2004
     assert native == before

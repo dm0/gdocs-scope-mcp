@@ -1,5 +1,6 @@
 """Translate tool failures into structured MCP errors."""
 
+
 from http import HTTPStatus
 
 from fastmcp.tools.base import ToolResult
@@ -8,16 +9,8 @@ from googleapiclient.errors import HttpError
 from mcp.types import CallToolResult
 from pydantic import ValidationError
 
-from .models import EditFailedResponse
-
-
-class ToolFailureError(ValueError):
-    """Carry an expected failure from backend code to the MCP boundary."""
-
-    def __init__(self, failure: EditFailedResponse):
-        """Keep recovery fields while retaining ValueError compatibility."""
-        super().__init__(failure.description)
-        self.failure = failure
+from gdocs_scope_mcp.contracts import EditFailedResponse
+from gdocs_scope_mcp.errors import ToolFailureError
 
 
 class ErrorToolResult(ToolResult):

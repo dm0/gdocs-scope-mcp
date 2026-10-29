@@ -7,15 +7,19 @@ from unittest.mock import MagicMock
 import pytest
 
 from gdocs_scope_mcp import (
-    docs_edit,
     revision_guards as guards,
 )
-from gdocs_scope_mcp.image_uploads import rich_insertion_requests
-from gdocs_scope_mcp.md2requests import (
+from gdocs_scope_mcp.documents import (
+    editing as docs_edit,
+)
+from gdocs_scope_mcp.rich_text.compiler import (
     inserted_text_from_requests,
     markdown_to_requests,
 )
-from gdocs_scope_mcp.table_insertion import InsertionTable, TableInsertionPlan
+from gdocs_scope_mcp.rich_text.execution import TableInsertionExecution
+from gdocs_scope_mcp.rich_text.insertion import rich_insertion_requests
+from gdocs_scope_mcp.rich_text.models import InsertionTable
+from gdocs_scope_mcp.rich_text.plans import TableInsertionPlan
 from gdocs_scope_mcp.tool_errors import ToolFailureError
 
 MARKDOWN = ('| **Name** | Value |\n| :--- | ---: |\n'
@@ -138,7 +142,7 @@ def test_native_positions_styles_and_surrounding_content(newline_before, gap):
     source = f'Intro😀\n\n{MARKDOWN}\n\nOutro'
     plan = markdown_to_requests(source, native.start,
                                 newline_before=newline_before)
-    plan.execute(native.service, 'test')
+    TableInsertionExecution(plan).execute(native.service, 'test')
     result = native.document()
     table = result['body']['content'][0]['table']
     values = [[cell['content'][0]['paragraph']['elements'][0][
@@ -169,7 +173,7 @@ def test_adjacent_tables_empty_cells_and_eof(newline_before):
     table = '| A | B |\n| --- | --- |\n| | |'
     plan = markdown_to_requests(f'{table}\n\n{table}', native.start,
                                 newline_before=newline_before)
-    plan.execute(native.service, 'test')
+    TableInsertionExecution(plan).execute(native.service, 'test')
     expected_tables = 2
     assert len(native.tables) == expected_tables
     assert native.buffer.endswith('\n'.encode('utf-16-le'))
@@ -228,7 +232,7 @@ def test_failure_reports_partial_result_without_retries():
     )
     plan = markdown_to_requests(MARKDOWN, native.start)
     with pytest.raises(ToolFailureError) as failure:
-        plan.execute(native.service, 'test')
+        TableInsertionExecution(plan).execute(native.service, 'test')
     assert 'Earlier stages' in failure.value.failure.description
     assert failure.value.failure.code == 'PARTIAL_WRITE'
     assert failure.value.failure.committed_batches == 1
@@ -248,7 +252,7 @@ def test_table_stages_stay_required_in_target_mode(monkeypatch):
         """Exercise real stage submission with an active target-mode call."""
         guards.remember_snapshot(native.document())
         plan = markdown_to_requests(MARKDOWN, native.start)
-        plan.execute(native.service, 'test', '0')
+        TableInsertionExecution(plan).execute(native.service, 'test', '0')
     execute()
     # NativeBuffer asserts requiredRevisionId for every submitted stage.
     assert len(native.tables) == 1
@@ -277,7 +281,7 @@ def test_inline_images_use_native_cell_positions():
         '| A | B |\n| --- | --- |\n'
         '| 😀![x](https://example.com/x.png)**tail** | next |', native.start,
     )
-    plan.execute(native.service, 'test')
+    TableInsertionExecution(plan).execute(native.service, 'test')
     styles = [text for request, text in native.styles
               if request.get('updateTextStyle', {}).get('textStyle', {}).get(
                   'bold')]
@@ -318,7 +322,7 @@ def test_html_table_preserves_inline_styles_and_alignment():
     )
     native = NativeBuffer()
     plan.start = native.start
-    plan.execute(native.service, 'test')
+    TableInsertionExecution(plan).execute(native.service, 'test')
     assert any(text == 'under' and request.get('updateTextStyle', {}).get(
         'textStyle', {}).get('underline')
         for request, text in native.styles)
@@ -338,7 +342,7 @@ def test_cell_soft_breaks_preserve_whitespace_styles_and_indices(tag, html):
     )
     native = NativeBuffer(gap=3)
     plan = markdown_to_requests(markup, native.start)
-    plan.execute(native.service, 'test')
+    TableInsertionExecution(plan).execute(native.service, 'test')
     table = native.document()['body']['content'][0]['table']
     row = table['tableRows'][-1]['tableCells']
     values = [cell['content'][0]['paragraph']['elements'][0]['textRun'][
@@ -360,7 +364,9 @@ def test_borders_apply_to_all_new_tables_only(borders, empty):
     markup = ('<table><tr><td></td></tr></table>' if empty else MARKDOWN)
     native = NativeBuffer()
     plan = markdown_to_requests(markup + '\n\n' + markup, native.start)
-    plan.execute(native.service, 'test', table_borders=borders)
+    TableInsertionExecution(plan).execute(
+        native.service, 'test', table_borders=borders,
+    )
     assert len(native.table_styles) == len(native.tables)
     sides = {'borderTop', 'borderBottom', 'borderLeft', 'borderRight'}
     for operation in native.table_styles:

@@ -13,7 +13,11 @@ from googleapiclient.errors import HttpError
 from httplib2 import Response
 from jsonschema import validate
 
-from gdocs_scope_mcp import docs_edit, server
+from gdocs_scope_mcp import server
+from gdocs_scope_mcp.google_api import (
+    clients,
+    credentials as google_credentials,
+)
 from gdocs_scope_mcp.tool_logging import LOGGER_NAME
 
 from .native_comment_fixtures import comment_thread, wire_native_comments
@@ -98,9 +102,8 @@ def contract_api(monkeypatch, mock_docs, simple_document):
         'id': 'reply-id',
         'content': 'Reply body',
     }
-    monkeypatch.setattr(server, 'build', lambda *_args, **_kwargs: api)
-    monkeypatch.setattr(docs_edit, 'build', lambda *_args, **_kwargs: api)
-    monkeypatch.setattr(docs_edit, '_load_creds', object)
+    monkeypatch.setattr(clients, 'build', lambda *_args, **_kwargs: api)
+    monkeypatch.setattr(google_credentials, 'load_credentials', object)
     wire_native_comments(mock_docs, simple_document)
     return api
 
@@ -593,7 +596,7 @@ def test_unsupported_replace_all_returns_structured_mcp_error(
     get_service = MagicMock(
         side_effect=AssertionError('Unexpected API access'),
     )
-    monkeypatch.setattr(docs_edit, '_get_service', get_service)
+    monkeypatch.setattr(clients, 'get_service', get_service)
 
     tool, response = call_tool(
         'docs_search_replace',
@@ -693,7 +696,7 @@ def test_expired_credentials_have_authentication_guidance(monkeypatch):
     def expired():
         raise RefreshError('private-token-details')
 
-    monkeypatch.setattr(docs_edit, '_get_service', lambda *_args: expired())
+    monkeypatch.setattr(clients, 'get_service', lambda *_args: expired())
     _, response = call_tool(
         'docs_resolve_comment',
         {'doc_id': 'example', 'comment_id': 'comment-id'},
@@ -922,7 +925,7 @@ def test_invalid_tool_constraints_fail_before_api_access(
 ):
     """Reject invalid ranges, empty anchors, and incomplete replacements."""
     credentials = MagicMock()
-    monkeypatch.setattr(docs_edit, '_load_creds', credentials)
+    monkeypatch.setattr(google_credentials, 'load_credentials', credentials)
     if name != 'docs_list':
         arguments = {'doc_id': 'example', **arguments}
     _, response = call_tool(name, arguments, raise_on_error=False)
@@ -959,7 +962,7 @@ def test_entire_batch_is_validated_before_credentials(
 ):
     """An invalid later item prevents reads and writes for earlier items."""
     credentials = MagicMock()
-    monkeypatch.setattr(docs_edit, '_load_creds', credentials)
+    monkeypatch.setattr(google_credentials, 'load_credentials', credentials)
     tool, response = call_tool('docs_batch_replace', {
         'doc_id': 'example',
         'replacements': [
@@ -1015,7 +1018,7 @@ def test_input_types_and_empty_searches_fail_before_credentials(
 ):
     """Protect both insertion sides and distinguish integers from booleans."""
     credentials = MagicMock()
-    monkeypatch.setattr(docs_edit, '_load_creds', credentials)
+    monkeypatch.setattr(google_credentials, 'load_credentials', credentials)
     _, response = call_tool(name, {
         **({'doc_id': 'example'} if name != 'docs_list' else {}),
         **arguments,

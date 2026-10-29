@@ -2,14 +2,17 @@
 
 # Imported fixtures keep names; explicit dimensions are contract examples.
 # ruff: noqa: D103, PLR2004, F811
-
 from copy import deepcopy
 
 import pytest
 
-from gdocs_scope_mcp import docs_edit
+from gdocs_scope_mcp.documents import (
+    editing as docs_edit,
+)
 from gdocs_scope_mcp.image_layout import fit_images, paragraph_width
-from gdocs_scope_mcp.md2requests import gpars_to_requests, html_to_gpars
+from gdocs_scope_mcp.rich_text.compiler import gpars_to_requests
+from gdocs_scope_mcp.rich_text.execution import TableInsertionExecution
+from gdocs_scope_mcp.rich_text.parsing import html_to_gpars
 
 from .test_revision_guards import race_docs  # noqa: F401
 from .test_table_insertion import NativeBuffer
@@ -220,7 +223,8 @@ def test_body_images_around_table_and_cell_fallback(paged):
               f'<p>after <img src="{URI}"></p>')
     paragraphs = html_to_gpars(markup, native.start)
     plan = gpars_to_requests(paragraphs)
-    plan.execute(native.service, 'test', size_images=lambda requests, group:
+    TableInsertionExecution(plan).execute(
+        native.service, 'test', size_images=lambda requests, group:
                  fit_images(requests, group, paged, 1))
     sizes = [r['insertInlineImage'].get('objectSize')
              for batch in native.batches for r in batch

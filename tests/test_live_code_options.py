@@ -5,8 +5,11 @@ import json
 import uuid
 from pathlib import Path
 
-from gdocs_scope_mcp import docs_edit
 from gdocs_scope_mcp.code_reading import MARKER_PREFIX
+from gdocs_scope_mcp.documents import (
+    fetching,
+)
+from gdocs_scope_mcp.google_api import clients
 
 
 def _code_range_ids(document):
@@ -22,8 +25,8 @@ def test_live_named_range_switch(live_test_doc, isolated_mcp, monkeypatch):
     log = Path('/tmp/gdocs-scope-mcp-code-option-named.log')
     report = {}
     marker = 'OPTION_' + uuid.uuid4().hex
-    service = docs_edit._get_service()
-    baseline = _code_range_ids(docs_edit._get_document(service, live_test_doc))
+    service = clients.get_service()
+    baseline = _code_range_ids(fetching.get_document(service, live_test_doc))
     code = f'{marker} = 1\nreturn {marker}'
 
     async def run():
@@ -32,7 +35,7 @@ def test_live_named_range_switch(live_test_doc, isolated_mcp, monkeypatch):
             await client.call_tool('docs_append', {
                 'doc_id': live_test_doc, 'text': f'```python\n{code}\n```',
             })
-        native = docs_edit._get_document(service, live_test_doc)
+        native = fetching.get_document(service, live_test_doc)
         added = _code_range_ids(native)
         assert len(added - baseline) == 1
         monkeypatch.setenv('GOOGLE_DOCS_MCP_CODE_BLOCK_NAMED_RANGES', 'false')
@@ -50,7 +53,7 @@ def test_live_named_range_switch(live_test_doc, isolated_mcp, monkeypatch):
                 'doc_id': live_test_doc,
                 'text': f'After {marker}\n\n```python\n{marker}_new = 2\n```',
             })
-        assert _code_range_ids(docs_edit._get_document(
+        assert _code_range_ids(fetching.get_document(
             service, live_test_doc,
         )) == added
         report['checks_passed'] = True
@@ -66,8 +69,8 @@ def test_live_native_code_insertion_capability(live_test_doc, isolated_mcp):
     marker = 'NATIVE_PROBE_' + uuid.uuid4().hex
     log = Path('/tmp/gdocs-scope-mcp-code-native-insertion-probe.log')
     report = {}
-    service = docs_edit._get_service()
-    before = docs_edit._get_document(service, live_test_doc)
+    service = clients.get_service()
+    before = fetching.get_document(service, live_test_doc)
 
     async def run():
         async with isolated_mcp(log) as (client, info):
@@ -78,7 +81,7 @@ def test_live_native_code_insertion_capability(live_test_doc, isolated_mcp):
                 'rich': False,
             })
             assert not result.is_error
-            native = docs_edit._get_document(service, live_test_doc)
+            native = fetching.get_document(service, live_test_doc)
             texts = [''.join(e.get('textRun', {}).get('content', '')
                              for e in item.get('paragraph', {}).get(
                                  'elements', []))

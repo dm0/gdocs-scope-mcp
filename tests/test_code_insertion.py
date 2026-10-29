@@ -1,16 +1,17 @@
 """Verify literal code, UTF-16 font ranges and surrounding prose."""
 
+
 import asyncio
 
 import pytest
 from fastmcp import Client
 
 from gdocs_scope_mcp import server
-from gdocs_scope_mcp.md2requests import (
+from gdocs_scope_mcp.documents.native_models import GoogleDocumentTextStyle
+from gdocs_scope_mcp.rich_text.compiler import (
     inserted_text_from_requests,
     markdown_to_requests,
 )
-from gdocs_scope_mcp.models import GoogleDocumentTextStyle
 
 CODE_FONT = 'Roboto Mono'
 INLINE_COLOR = {'color': {'rgbColor': {

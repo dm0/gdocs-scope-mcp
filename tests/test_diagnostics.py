@@ -1,5 +1,6 @@
 """Verify startup identity through a real in-process MCP connection."""
 
+
 import asyncio
 import os
 from importlib.metadata import version
@@ -8,6 +9,7 @@ from fastmcp import Client
 
 from gdocs_scope_mcp import server
 from gdocs_scope_mcp.diagnostics import capture_server_info
+from gdocs_scope_mcp.google_api import credentials
 
 
 def test_server_info_keeps_startup_snapshot(tmp_path, monkeypatch):
@@ -20,7 +22,9 @@ def test_server_info_keeps_startup_snapshot(tmp_path, monkeypatch):
     def unexpected_auth():
         raise AssertionError('server_info must not use Google credentials')
 
-    monkeypatch.setattr(server.docs_edit, '_load_creds', unexpected_auth)
+    monkeypatch.setattr(
+        credentials, 'load_credentials', unexpected_auth,
+    )
 
     async def check():
         async with Client(server.mcp) as client:

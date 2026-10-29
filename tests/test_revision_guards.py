@@ -9,7 +9,12 @@ import pytest
 from googleapiclient.errors import HttpError
 from httplib2 import Response
 
-from gdocs_scope_mcp import docs_edit, revision_guards
+from gdocs_scope_mcp import comments, revision_guards
+from gdocs_scope_mcp.documents import (
+    editing as docs_edit,
+    parsing,
+)
+from gdocs_scope_mcp.google_api import clients
 from gdocs_scope_mcp.text_indices import utf16_length
 from gdocs_scope_mcp.tool_errors import (
     ToolFailureError,
@@ -66,7 +71,7 @@ def race_docs(monkeypatch, simple_document):
         return native_batch()
 
     documents.batchUpdate.return_value.execute.side_effect = write
-    monkeypatch.setattr(docs_edit, '_get_service', lambda *_args: service)
+    monkeypatch.setattr(clients, 'get_service', lambda *_args: service)
     monkeypatch.setattr(revision_guards.time, 'sleep', lambda _delay: None)
     state['documents'] = documents
     return state
@@ -89,13 +94,11 @@ def change_prefix(document):
 @pytest.mark.parametrize('operation', ['search', 'batch', 'before', 'after',
                                        'delete', 'comment'])
 def test_independent_paragraph_change_replans_utf16(
-    operation, race_docs, monkeypatch,
+    operation, race_docs,
 ):
     """Retain the scoped target and rebuild its indices from the fresh read."""
     race_docs['change'] = change_prefix
     drive = MagicMock()
-    monkeypatch.setattr(docs_edit, 'build', lambda *_a, **_k: drive)
-    monkeypatch.setattr(docs_edit, '_load_creds', lambda: None)
     drive.comments().create().execute.return_value = {'id': 'comment'}
     drive.reset_mock()
     calls = {
@@ -112,7 +115,7 @@ def test_independent_paragraph_change_replans_utf16(
             'test', 'Target phrase', 'new', heading_id='parent', rich=False,
         ),
         'delete': lambda: docs_edit.delete_paragraph('test', 'Target phrase'),
-        'comment': lambda: docs_edit.add_comment(
+        'comment': lambda: comments.add_comment(
             'test', 'Review', 'Target phrase',
         ),
     }
@@ -234,7 +237,7 @@ def test_target_deletion_is_structured(race_docs):
 def test_tree_parsing_preserves_snapshot(simple_document):
     """Model flattening must not destroy the native dependency snapshot."""
     before = deepcopy(simple_document)
-    docs_edit._parse_document_tree(simple_document)
+    parsing.parse_document_tree(simple_document)
     assert simple_document == before
 
 
@@ -320,7 +323,7 @@ def test_lost_native_comment_response_is_not_replayed(mock_docs):
     """An unknown native comment write is never replayed."""
     mock_docs.batchUpdate.return_value.execute.side_effect = TimeoutError()
     with pytest.raises(ToolFailureError) as caught:
-        docs_edit.add_comment('test', 'review', 'Target phrase')
+        comments.add_comment('test', 'review', 'Target phrase')
     assert caught.value.failure.code == 'WRITE_OUTCOME_UNKNOWN'
     assert caught.value.failure.committed_batches == 0
     mock_docs.batchUpdate.assert_called_once()

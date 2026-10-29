@@ -2,16 +2,19 @@
 
 # Imported pytest fixtures are requested by name.
 # ruff: noqa: F811
-
 import pytest
 from googleapiclient.errors import HttpError
 from httplib2 import Response
 from pydantic import TypeAdapter
 
-from gdocs_scope_mcp import table_read, table_snapshots, table_structure
-from gdocs_scope_mcp.table_grid import Grid
-from gdocs_scope_mcp.table_refs import Layout
-from gdocs_scope_mcp.table_tokens import decode, encode
+from gdocs_scope_mcp.tables import (
+    reading as table_read,
+    snapshots as table_snapshots,
+    structure as table_structure,
+)
+from gdocs_scope_mcp.tables.grid import Grid
+from gdocs_scope_mcp.tables.refs import Layout
+from gdocs_scope_mcp.tables.tokens import decode, encode
 from gdocs_scope_mcp.tool_errors import ToolFailureError
 
 from .test_table_discovery import call, table_source  # noqa: F401
@@ -284,7 +287,7 @@ def test_unsupported_initial_transform_fails_before_write(source, mock_docs,
     # Bypass display-model requirements for deliberately unsupported payloads.
     layout = Layout(source)
     ref = encode(layout.reference(layout.entries[0]))
-    from gdocs_scope_mcp.table_grid import merge_state  # noqa: PLC0415
+    from gdocs_scope_mcp.tables.grid import merge_state  # noqa: PLC0415
     grid = Grid(layout.entries[0])
     token = decode(ref, 'table', 'example').model_copy(update={
         'kind': 'base', 'expires': 9999999999, 'fields': ['merge'],

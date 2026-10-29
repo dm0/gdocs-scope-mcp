@@ -13,7 +13,7 @@ import pytest
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaIoBaseUpload
 
-from gdocs_scope_mcp import docs_edit
+from gdocs_scope_mcp.google_api import clients
 
 EXPECTED_HTML_POINTS = 24
 
@@ -25,8 +25,8 @@ def test_temporary_drive_url_survives_source_deletion(
     evidence = Path('/tmp/gdocs-scope-mcp-drive-probe.json')
     log = Path('/tmp/gdocs-scope-mcp-drive-probe.log')
     report = {'attempts': []}
-    drive = docs_edit._get_service('drive', 'v3')
-    docs = docs_edit._get_service('docs', 'v1')
+    drive = clients.get_service('drive', 'v3')
+    docs = clients.get_service('docs', 'v1')
     file_id = None
     permission_id = None
     marker = 'DRIVE_IMAGE_PROBE_' + uuid.uuid4().hex
@@ -124,8 +124,8 @@ def test_local_image_uploads_through_all_tools(
     """Exercise opt-in uploads, native readback and automatic deletion."""
     path = tmp_path / 'local image 🦷.png'
     path.write_bytes(image_png)
-    drive = docs_edit._get_service('drive', 'v3')
-    docs = docs_edit._get_service('docs', 'v1')
+    drive = clients.get_service('drive', 'v3')
+    docs = clients.get_service('docs', 'v1')
     evidence = Path('/tmp/gdocs-scope-mcp-local-images.json')
     log = Path('/tmp/gdocs-scope-mcp-local-images.log')
     report = {'operations': []}

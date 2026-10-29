@@ -1,5 +1,6 @@
 """Load editing and formatting settings from JSON and environment."""
 
+
 import os
 from collections.abc import Iterator
 from contextlib import contextmanager

@@ -1,5 +1,6 @@
 """Verify native comment persistence, permissions and pagination."""
 
+
 from copy import deepcopy
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -9,7 +10,8 @@ import pytest
 from googleapiclient.errors import HttpError
 from httplib2 import Response
 
-from gdocs_scope_mcp import auth_setup, docs_edit, revision_guards
+from gdocs_scope_mcp import auth_setup, revision_guards
+from gdocs_scope_mcp.google_api import credentials as google_credentials
 
 from .native_comment_fixtures import comment_thread, wire_native_comments
 from .test_table_discovery import call
@@ -386,10 +388,10 @@ def test_existing_token_with_script_scopes_still_loads(monkeypatch):
     before = deepcopy(old)
     credentials = MagicMock()
     constructor = MagicMock(return_value=credentials)
-    monkeypatch.setattr(docs_edit, '_load_token', lambda: old)
-    monkeypatch.setattr(docs_edit, 'Credentials', constructor)
-    monkeypatch.setattr(docs_edit, 'Request', lambda: None)
-    assert docs_edit._load_creds() is credentials
+    monkeypatch.setattr(google_credentials, 'load_token', lambda: old)
+    monkeypatch.setattr(google_credentials, 'Credentials', constructor)
+    monkeypatch.setattr(google_credentials, 'Request', lambda: None)
+    assert google_credentials.load_credentials() is credentials
     assert old == before
     assert constructor.call_args.kwargs['scopes'] == old['scopes']
     credentials.refresh.assert_called_once()

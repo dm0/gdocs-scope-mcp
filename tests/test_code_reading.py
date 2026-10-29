@@ -8,10 +8,13 @@ import mistune
 import pytest
 from pydantic import ValidationError
 
-from gdocs_scope_mcp import docs_edit
 from gdocs_scope_mcp.code_reading import block_marker, code_span
-from gdocs_scope_mcp.md2requests import markdown_to_requests
-from gdocs_scope_mcp.models import GoogleDocument
+from gdocs_scope_mcp.documents import (
+    editing as docs_edit,
+    parsing,
+)
+from gdocs_scope_mcp.documents.native_models import GoogleDocument
+from gdocs_scope_mcp.rich_text.compiler import markdown_to_requests
 from gdocs_scope_mcp.settings import Settings, get_settings
 from gdocs_scope_mcp.text_indices import utf16_length
 from gdocs_scope_mcp.tool_errors import ToolFailureError
@@ -71,7 +74,7 @@ def code_document():
 
 def render(doc):
     """Exercise the same hierarchy renderer used by docs_read."""
-    tree = docs_edit._parse_document_tree(deepcopy(doc))
+    tree = parsing.parse_document_tree(deepcopy(doc))
     return ''.join(section.subtree_markdown() for section in tree.sections)
 
 

@@ -1,13 +1,14 @@
 """Exercise local conversion and section targeting without Google API calls."""
 
+
 import pytest
 
-from gdocs_scope_mcp.md2requests import markdown_to_html
-from gdocs_scope_mcp.models import (
+from gdocs_scope_mcp.documents.models import (
     DocumentParagraph,
     DocumentSection,
     DocumentTree,
 )
+from gdocs_scope_mcp.rich_text.parsing import markdown_to_html
 
 
 @pytest.fixture

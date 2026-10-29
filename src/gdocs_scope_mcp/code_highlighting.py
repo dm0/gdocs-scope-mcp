@@ -1,5 +1,6 @@
 """Map Pygments tokens to native text styles without rewriting source text."""
 
+
 from collections.abc import Iterable
 
 from pygments.lexers import get_lexer_by_name
@@ -7,7 +8,7 @@ from pygments.styles import get_style_by_name
 from pygments.token import Token
 from pygments.util import ClassNotFound
 
-from .models import (
+from gdocs_scope_mcp.documents.native_models import (
     GoogleDocumentColor,
     GoogleDocumentOptionalColor,
     GoogleDocumentRgbColor,
@@ -15,7 +16,7 @@ from .models import (
     GoogleDocumentTextStyle,
     GoogleDocumentWeightedFontFamily,
 )
-from .settings import get_code_settings
+from gdocs_scope_mcp.settings import get_code_settings
 
 
 def native_color(value: str) -> GoogleDocumentOptionalColor:

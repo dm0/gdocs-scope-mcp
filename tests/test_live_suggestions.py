@@ -1,12 +1,13 @@
 """Record native suggestion capabilities without exposing production tools."""
 
+
 # Imported fixtures keep pytest names; response counts are API contracts.
 # ruff: noqa: F811
 
 import asyncio
 import uuid
 
-from gdocs_scope_mcp.suggestion_index import index_document
+from gdocs_scope_mcp.suggestions.index import index_document
 
 from .native_snapshot_assertions import assert_tabs_unchanged
 from .test_live_table_identity import paragraph_text, table_probe  # noqa: F401

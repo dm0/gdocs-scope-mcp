@@ -1,5 +1,6 @@
 """Verify formatting conflicts and explicit native field masks."""
 
+
 # Imported pytest fixtures are requested by name in dependent fixtures/tests.
 # ruff: noqa: F811
 
@@ -9,8 +10,12 @@ import pytest
 from googleapiclient.errors import HttpError
 from httplib2 import Response
 
-from gdocs_scope_mcp import table_format, table_read, table_snapshots
-from gdocs_scope_mcp.table_format import FormatChanges
+from gdocs_scope_mcp.tables import (
+    formatting as table_format,
+    reading as table_read,
+    snapshots as table_snapshots,
+)
+from gdocs_scope_mcp.tables.formatting import FormatChanges
 from gdocs_scope_mcp.tool_errors import ToolFailureError
 
 from .test_table_discovery import call, table_source  # noqa: F401

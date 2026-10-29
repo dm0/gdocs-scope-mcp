@@ -1,5 +1,6 @@
 """Capture process identity and the package's source snapshot at startup."""
 
+
 import hashlib
 import os
 import platform

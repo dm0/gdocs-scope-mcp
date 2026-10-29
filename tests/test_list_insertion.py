@@ -1,12 +1,14 @@
 """Replay list operations against an independent UTF-16 document buffer."""
 
+
 import asyncio
 
 import pytest
 from fastmcp import Client
 
-from gdocs_scope_mcp import docs_edit, server
-from gdocs_scope_mcp.md2requests import (
+from gdocs_scope_mcp import server
+from gdocs_scope_mcp.documents import editing as docs_edit
+from gdocs_scope_mcp.rich_text.compiler import (
     inserted_text_from_requests,
     markdown_to_requests,
 )

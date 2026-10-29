@@ -1,5 +1,6 @@
 """Compare native tab snapshots without temporary image download URLs."""
 
+
 from copy import deepcopy
 
 

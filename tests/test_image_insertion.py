@@ -1,5 +1,6 @@
 """Verify native Markdown/HTML images with independent UTF-16 replay."""
 
+
 import asyncio
 import json
 
@@ -9,11 +10,11 @@ from fastmcp import Client
 from googleapiclient.errors import HttpError
 
 from gdocs_scope_mcp import server
-from gdocs_scope_mcp.md2requests import (
-    html_to_gpars,
+from gdocs_scope_mcp.rich_text.compiler import (
     inserted_text_from_requests,
     markdown_to_requests,
 )
+from gdocs_scope_mcp.rich_text.parsing import html_to_gpars
 
 URI = 'https://example.com/image.png?x=1&y=2'
 OTHER_URI = 'https://example.com/second.jpg'
