@@ -28,7 +28,6 @@ def build_full_text_map(
     return ''.join(parts), text_map
 
 
-
 def full_text_pos_to_doc_index(
     pos: int, text_map: list[tuple[int, int, str]], *, end: bool = False,
 ) -> int:
@@ -44,7 +43,6 @@ def full_text_pos_to_doc_index(
     raise ValueError(
         f'Position {pos} is not within any text run in the document.'
     )
-
 
 
 def full_text_range_to_doc_indices(
@@ -71,4 +69,3 @@ def full_text_range_to_doc_indices(
             ),
         ))
     return doc_start, doc_end
-

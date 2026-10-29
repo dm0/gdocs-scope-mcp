@@ -14,15 +14,12 @@ HEADING_LEVELS = {
 }
 
 
-
 HEADING_ORDER = dict(zip(HEADING_LEVELS.keys(), range(len(HEADING_LEVELS))))
-
 
 
 HEADING_ORDER_COMPACT = dict(
     zip(HEADING_LEVELS.values(), range(len(HEADING_LEVELS)))
 )
-
 
 
 class GoogleDocumentGlyphType(Enum):
@@ -38,7 +35,6 @@ class GoogleDocumentGlyphType(Enum):
     ROMAN = 'ROMAN'
 
 
-
 class GoogleDocumentBaselineOffset(Enum):
     # The text's baseline offset is inherited from the parent.
     """Enumerate normal, superscript, and subscript baselines."""
@@ -50,7 +46,6 @@ class GoogleDocumentBaselineOffset(Enum):
     SUPERSCRIPT = 'SUPERSCRIPT'
     # The text is vertically offset downwards (subscript).
     SUBSCRIPT = 'SUBSCRIPT'
-
 
 
 class GoogleDocumentNamedStyleType(Enum):
@@ -85,7 +80,6 @@ class GoogleDocumentNamedStyleType(Enum):
         return list(GoogleDocumentNamedStyleType)[level - 1]
 
 
-
 class GoogleDocumentAlignment(Enum):
     """Enumerate paragraph alignment values from the Docs API."""
 
@@ -94,4 +88,3 @@ class GoogleDocumentAlignment(Enum):
     CENTER = 'CENTER'
     END = 'END'
     JUSTIFIED = 'JUSTIFIED'
-

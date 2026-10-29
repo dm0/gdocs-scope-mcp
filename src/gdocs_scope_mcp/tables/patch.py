@@ -1,7 +1,6 @@
 """Replace Markdown cells with selective snapshots and strict atomic writes."""
 
 # Reuse the service boundary and rich converter without import cycles.
-# ruff: noqa: PLC0415
 import logging
 import re
 import time
@@ -19,10 +18,9 @@ from gdocs_scope_mcp.revision_guards import (
     RevisionRaceError,
     submit,
 )
-from gdocs_scope_mcp.rich_text.table_insertion import (
-    convert_table,
-    shifted_requests,
-)
+from gdocs_scope_mcp.rich_text.cells import convert_table, shifted_requests
+from gdocs_scope_mcp.rich_text.parsing import markdown_to_html
+from gdocs_scope_mcp.tables.fetching import _fetch
 from gdocs_scope_mcp.tables.snapshots import (
     resolve_cells,
     validate_baseline,
@@ -79,7 +77,6 @@ class PatchResponse(BaseModel):
 
 def compile_cell(markdown):
     """Validate inline Markdown and reuse the table-cell converter."""
-    from gdocs_scope_mcp.rich_text.compiler import markdown_to_html
     if any(ord(c) < 32 and c not in '\t\r\n\v' for c in markdown):  # noqa: PLR2004
         fail('INVALID_ARGUMENT', 'Unsupported control character in cell text.')
     if any(0xd800 <= ord(c) <= 0xdfff for c in markdown):  # noqa: PLR2004
@@ -199,7 +196,6 @@ def plan_requests(document, available, compiled):
 def patch(doc_id, table_ref, base_token, changes, *, tab_id=None):
     """Revalidate the original expected state after each confirmed CAS race."""
 
-    from gdocs_scope_mcp.tables.fetching import _fetch
     table = decode(table_ref, 'table', doc_id)
     baseline = decode(base_token, 'base', doc_id)
     cells = [change.address for change in changes]

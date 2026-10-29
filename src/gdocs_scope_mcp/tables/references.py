@@ -36,13 +36,11 @@ def _fail(code, description, action=None):
     ))
 
 
-
 def _digest(value):
     """Hash canonical native data or cursor options without a process cache."""
     return hashlib.sha256(json.dumps(
         value, ensure_ascii=True, sort_keys=True, separators=(',', ':'),
     ).encode()).hexdigest()
-
 
 
 class _Token(BaseModel):
@@ -62,7 +60,6 @@ class _Token(BaseModel):
     tab: str | None = None
 
 
-
 def _encode(token):
     """Use versioned, portable opaque references with a corruption checksum."""
     if isinstance(token, Token):
@@ -71,7 +68,6 @@ def _encode(token):
     data = json.dumps(payload, sort_keys=True, separators=(',', ':')).encode()
     encoded = base64.urlsafe_b64encode(data).decode().rstrip('=')
     return 'gdt1.' + encoded + '.' + hashlib.sha256(data).hexdigest()[:16]
-
 
 
 def _unpack(value):
@@ -88,7 +84,6 @@ def _unpack(value):
     return _Token.model_validate_json(data)
 
 
-
 def _decode(value, kind, doc_id):
     """Reject malformed, mismatched and wrong-kind tokens before API access."""
     if kind in {'table', 'cell'}:
@@ -103,13 +98,11 @@ def _decode(value, kind, doc_id):
     return token
 
 
-
 def _check_revision(token, document):
     """Reject stale references without reusing an old structural path."""
     require_matching_tab(token.tab, document.get('_mcp_tab_id'))
     if token.revision != document['revisionId']:
         _fail('STALE_REFERENCE', 'The reference revision is not current.')
-
 
 
 def _require_revision(document):
@@ -121,7 +114,6 @@ def _require_revision(document):
               'revision, which this read did not return.',
               'Verify edit access: Google returns revision IDs only to '
               'editors. Refresh the document after access is corrected.')
-
 
 
 def _table_token(document, entry, kind='table', *, layout=None, **updates):
@@ -144,7 +136,6 @@ def _table_token(document, entry, kind='table', *, layout=None, **updates):
                   fingerprint=_digest(entry.item), **updates)
 
 
-
 def reference_map(document):
     """Supply HTML table references without any document writes."""
     entries = _tables(document)
@@ -153,4 +144,3 @@ def reference_map(document):
     layout = Layout(document)
     return {entry.item['startIndex']: _encode(layout.reference(entry))
             for entry in entries}
-

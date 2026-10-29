@@ -33,7 +33,6 @@ class DocumentOutlineItem(BaseModel):
         return HEADING_ORDER_COMPACT.get(self.level, len(HEADING_LEVELS))
 
 
-
 class DocumentParagraph(BaseModel):
     """Retain a paragraph with source indices and rendered content."""
 
@@ -48,7 +47,6 @@ class DocumentParagraph(BaseModel):
     )
 
 
-
 class SearchResult(BaseModel):
     """Locate matched text within its paragraph and heading section."""
 
@@ -56,7 +54,6 @@ class SearchResult(BaseModel):
     section: 'DocumentSection'
     start_index: int
     end_index: int
-
 
 
 class DocumentSection(DocumentOutlineItem):
@@ -179,7 +176,6 @@ class DocumentSection(DocumentOutlineItem):
         )
 
 
-
 class DocumentBase(BaseModel):
     """Store document identity and revision metadata."""
 
@@ -192,7 +188,6 @@ class DocumentBase(BaseModel):
     tab_title: str | None = None
 
 
-
 class TabInfo(BaseModel):
     """Expose a flat tab hierarchy suitable for explicit agent selection."""
 
@@ -203,14 +198,12 @@ class TabInfo(BaseModel):
     index: int
 
 
-
 class DocumentOutline(DocumentBase):
     """Document outline"""
 
     sections: Sequence[DocumentOutlineItem] = []
     tabs: list[TabInfo] = Field(default_factory=list)
     suggestions: SuggestionNotice = Field(default_factory=SuggestionNotice)
-
 
 
 class DocumentTree(DocumentBase):
@@ -268,7 +261,6 @@ class DocumentTree(DocumentBase):
         return ''.join([child.subtree_text() for child in self.sections])
 
 
-
 class DocumentReadSection(BaseModel):
     """Identify a returned subtree or the document preamble."""
 
@@ -279,7 +271,6 @@ class DocumentReadSection(BaseModel):
         description='Markdown including nested subsections and heading ID '
         'anchors; preamble content contains no heading root.',
     )
-
 
 
 class DocumentSubset(DocumentBase):
@@ -316,4 +307,3 @@ class DocumentSubset(DocumentBase):
             'not all document tabs. See tab_count for other tabs.'
         ),
     ] = False
-

@@ -1,9 +1,9 @@
 """Validate native merge/unmerge intent and never reconstruct cell contents."""
 
 # Reuse the normal fetch boundary without import cycles.
-# ruff: noqa: PLC0415
 import logging
 
+from gdocs_scope_mcp.tables.fetching import _fetch
 from gdocs_scope_mcp.tables.grid import Grid, content_direction, merge_state
 from gdocs_scope_mcp.tables.refs import Layout, section
 from gdocs_scope_mcp.tables.tokens import coordinates, encode, fail
@@ -111,7 +111,6 @@ def refreshed_reference(doc_id, token, revision):
     Return a receipt requesting rediscovery instead of guessing another table,
     failing with zero committed batches, or repeating the transformation.
     """
-    from gdocs_scope_mcp.tables.fetching import _fetch
     try:
         document = _fetch(doc_id, tab_id=token.tab)
         if not revision or document['revisionId'] != revision or (

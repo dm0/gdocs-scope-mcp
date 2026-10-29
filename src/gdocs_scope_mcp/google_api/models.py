@@ -22,12 +22,10 @@ class DocumentListItem(BaseModel):
     web_view_link: Annotated[str | None, Field(alias='webViewLink')] = None
 
 
-
 class ListDocumentsResponse(ListingPage):
     """Return a typed document list and the number of returned items."""
 
     documents: list[DocumentListItem]
-
 
 
 class CreateDocumentResponse(BaseModel):
@@ -38,4 +36,3 @@ class CreateDocumentResponse(BaseModel):
     id: str
     title: str
     web_view_link: Annotated[str, Field(alias='webViewLink')]
-

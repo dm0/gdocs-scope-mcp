@@ -7,7 +7,7 @@ import pytest
 from fastmcp import Client
 
 from gdocs_scope_mcp import server
-from gdocs_scope_mcp.rich_text.table_insertion import TableInsertionPlan
+from gdocs_scope_mcp.rich_text.execution import TableInsertionExecution
 
 
 def call(tool, extra):
@@ -44,7 +44,7 @@ def test_border_input_reaches_table_executor(tool, extra, expected,
         assert callable(size_images)
         calls.append(table_borders)
 
-    monkeypatch.setattr(TableInsertionPlan, 'execute', execute)
+    monkeypatch.setattr(TableInsertionExecution, 'execute', execute)
     result = call(tool, extra)
     assert not result.is_error
     assert calls == [expected]

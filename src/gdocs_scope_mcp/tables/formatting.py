@@ -1,7 +1,6 @@
 """Apply explicit table styles with property-level optimistic concurrency."""
 
 # Share the native service/read boundary without module import cycles.
-# ruff: noqa: PLC0415
 import logging
 import time
 from copy import deepcopy
@@ -18,6 +17,7 @@ from gdocs_scope_mcp.revision_guards import (
     RevisionRaceError,
     submit,
 )
+from gdocs_scope_mcp.tables.fetching import _fetch
 from gdocs_scope_mcp.tables.refs import Layout
 from gdocs_scope_mcp.tables.snapshots import resolve_cells, validate_baseline
 from gdocs_scope_mcp.tables.style_state import (
@@ -323,7 +323,6 @@ def plan(document, entry, changes, available):
 def format_table(doc_id, table_ref, base_token, changes, *, tab_id=None):
     """Recheck properties and commit one strictly guarded style batch."""
 
-    from gdocs_scope_mcp.tables.fetching import _fetch
     table = decode(table_ref, 'table', doc_id)
     baseline = decode(base_token, 'base', doc_id)
     required = requirements(changes, baseline)

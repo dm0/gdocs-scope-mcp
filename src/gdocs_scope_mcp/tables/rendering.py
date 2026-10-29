@@ -13,4 +13,3 @@ def _model(document):
     return GoogleDocument.model_validate(deepcopy({
         **document, 'table_refs': reference_map(document),
     }))
-

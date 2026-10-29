@@ -53,12 +53,10 @@ def inline_object_to_markdown(self, doc) -> str:
     return f'![{embedded_obj.title or ""}]({img_props.content_uri})'
 
 
-
 def inline_object_to_text(self, doc) -> str:
     """Render this element as plain text using document metadata."""
     embedded_obj = self.inline_object_properties.embedded_object
     return embedded_obj.title or ''
-
 
 
 def structural_element_to_markdown(self, doc) -> str:
@@ -66,11 +64,9 @@ def structural_element_to_markdown(self, doc) -> str:
     return ''
 
 
-
 def structural_element_to_text(self, doc) -> str:
     """Render this element as plain text using document metadata."""
     return ''
-
 
 
 def text_style_format_string(self) -> str:
@@ -104,7 +100,6 @@ def text_style_format_string(self) -> str:
     return template
 
 
-
 def text_run_to_markdown(self, doc) -> str:
     """Render this element as Markdown using document metadata."""
     content = self.content.replace('\u000b', '  \n')
@@ -123,11 +118,9 @@ def text_run_to_markdown(self, doc) -> str:
     )
 
 
-
 def text_run_to_text(self, doc) -> str:
     """Render this element as plain text using document metadata."""
     return self.content.replace('\u000b', '\n')
-
 
 
 def horizontal_rule_to_markdown(self, doc) -> str:
@@ -135,11 +128,9 @@ def horizontal_rule_to_markdown(self, doc) -> str:
     return '\n---\n'
 
 
-
 def horizontal_rule_to_text(self, doc) -> str:
     """Render this element as plain text using document metadata."""
     return '\n---\n'
-
 
 
 def inline_object_element_to_markdown(self, doc) -> str:
@@ -147,11 +138,9 @@ def inline_object_element_to_markdown(self, doc) -> str:
     return doc.inline_objects[self.inline_object_id].to_markdown(doc)
 
 
-
 def inline_object_element_to_text(self, doc) -> str:
     """Render this element as plain text using document metadata."""
     return doc.inline_objects[self.inline_object_id].to_text(doc)
-
 
 
 def smart_chip_to_markdown(self, doc) -> str:
@@ -159,11 +148,9 @@ def smart_chip_to_markdown(self, doc) -> str:
     return chip_html(self.type, self.identity, self.properties)
 
 
-
 def smart_chip_to_text(self, doc) -> str:
     """Expose the native label for display, never for source mapping."""
     return chip_label(self.type, self.properties)
-
 
 
 def paragraph_to_markdown(self, doc) -> str:  # noqa: PLR0911
@@ -219,12 +206,10 @@ def paragraph_to_markdown(self, doc) -> str:  # noqa: PLR0911
     return f'{text}\n\n'
 
 
-
 def paragraph_to_text(self, doc) -> str:
     """Render this element as plain text using document metadata."""
     text = ''.join([el.to_text(doc) for el in self.elements])
     return f'{text}\n\n'
-
 
 
 def table_cell_to_markdown(self, doc) -> str:
@@ -238,11 +223,9 @@ def table_cell_to_markdown(self, doc) -> str:
     return f'<td{row_span}{col_span}>{content.rstrip()}</td>'
 
 
-
 def table_cell_to_text(self, doc) -> str:
     """Render this element as plain text using document metadata."""
     return ''.join([el.to_text(doc) for el in self.content])
-
 
 
 def table_row_to_markdown(self, doc) -> str:
@@ -251,12 +234,10 @@ def table_row_to_markdown(self, doc) -> str:
     return f'<tr>{cells}</tr>'
 
 
-
 def table_row_to_text(self, doc) -> str:
     """Render this element as plain text using document metadata."""
     cells = ' | '.join([cell.to_text(doc) for cell in self.table_cells])
     return f'| {cells} |'
-
 
 
 def table_to_markdown(self, doc) -> str:
@@ -269,11 +250,9 @@ def table_to_markdown(self, doc) -> str:
     return f'<table{attribute}>{rows}</table>'
 
 
-
 def table_to_text(self, doc) -> str:
     """Render this element as plain text using document metadata."""
     return '\n'.join([row.to_text(doc) for row in self.table_rows])
-
 
 
 def body_to_markdown(self, doc) -> str:
@@ -281,11 +260,9 @@ def body_to_markdown(self, doc) -> str:
     return ''.join([el.to_markdown(doc) for el in self.content])
 
 
-
 def body_to_text(self, doc) -> str:
     """Render this element as plain text using document metadata."""
     return ''.join([el.to_text(doc) for el in self.content])
-
 
 
 def to_markdown(self) -> str:
@@ -293,8 +270,6 @@ def to_markdown(self) -> str:
     return self.body.to_markdown(self)
 
 
-
 def to_text(self) -> str:
     """Render this element as plain text using document metadata."""
     return self.body.to_text(self)
-

@@ -21,4 +21,3 @@ def get_document(service, doc_id: str, *, tab_id=None) -> dict:
     return remember_snapshot(select(
         document, tab_id if tab_id is not None else pinned_tab(),
     ))
-

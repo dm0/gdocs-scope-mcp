@@ -3,7 +3,7 @@
 
 import math
 
-from gdocs_scope_mcp.rich_text.compiler import InsertionImage
+from gdocs_scope_mcp.rich_text.models import InsertionImage
 
 
 def _points(dimension):

@@ -69,7 +69,6 @@ class InsertSucceedResponse(DocumentEditReceipt):
     anchor_preview_truncated: bool
 
 
-
 class AppendSucceedResponse(DocumentEditReceipt):
     """Describe appended content without exposing Google API requests."""
 
@@ -120,7 +119,6 @@ class AppendSucceedResponse(DocumentEditReceipt):
     ]
 
 
-
 class ReplaceSucceedResponse(DocumentEditReceipt):
     """Result of successful text replacement request"""
 
@@ -164,7 +162,6 @@ class ReplaceSucceedResponse(DocumentEditReceipt):
     preview_truncated: bool
 
 
-
 class DeleteParagraphResponse(DocumentEditReceipt):
     """Report deleted paragraphs using bounded text previews."""
 
@@ -198,7 +195,6 @@ class DeleteParagraphResponse(DocumentEditReceipt):
     ]
 
 
-
 class BatchReplaceChange(BaseModel):
     """Describe one replacement while preserving the existing with field."""
 
@@ -219,7 +215,6 @@ class BatchReplaceChange(BaseModel):
     replacement_preview_truncated: bool
 
 
-
 class BatchReplaceResponse(DocumentEditReceipt):
     """Report the changes applied by one replacement batch."""
 
@@ -234,4 +229,3 @@ class BatchReplaceResponse(DocumentEditReceipt):
         bool, Field(description='Whether changes omits entries after the '
                     'first 100 previews; applied remains the total')
     ]
-

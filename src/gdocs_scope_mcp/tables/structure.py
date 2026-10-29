@@ -1,7 +1,6 @@
 """Change table geometry with checked positions and protected deletions."""
 
 # Share the native API boundary without module import cycles.
-# ruff: noqa: PLC0415
 import logging
 import time
 from copy import deepcopy
@@ -16,6 +15,7 @@ from gdocs_scope_mcp.revision_guards import (
     submit,
 )
 from gdocs_scope_mcp.tables.deletion_state import deletion_state
+from gdocs_scope_mcp.tables.fetching import _fetch
 from gdocs_scope_mcp.tables.merge import prepare, refreshed_reference
 from gdocs_scope_mcp.tables.refs import Layout
 from gdocs_scope_mcp.tables.snapshots import resolve_cells, validate_baseline
@@ -234,7 +234,6 @@ def plan(document, table_token, operation):
 def apply_structure(doc_id, table_ref, base_token, operation, *, tab_id=None):
     """Recheck the original footprint and commit one strictly guarded batch."""
 
-    from gdocs_scope_mcp.tables.fetching import _fetch
     token = decode(table_ref, 'table', doc_id)
     baseline = decode(base_token, 'base', doc_id)
     validate_baseline(token, baseline, [], baseline.fields, subset=True)

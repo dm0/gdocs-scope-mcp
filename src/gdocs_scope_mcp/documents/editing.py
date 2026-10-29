@@ -29,10 +29,10 @@ from __future__ import annotations
 
 import logging
 import re
-from contextlib import nullcontext
 
 from gdocs_scope_mcp.documents import fetching, parsing, targeting
 from gdocs_scope_mcp.google_api import clients
+from gdocs_scope_mcp.rich_text.insertion import insert_content
 
 # isort: split
 from gdocs_scope_mcp.contracts import (
@@ -48,25 +48,13 @@ from gdocs_scope_mcp.documents.receipts import (
     ReplaceSucceedResponse,
 )
 from gdocs_scope_mcp.entities import collect_entities
-from gdocs_scope_mcp.entity_edit import (
-    INSERT_ENTITY_KINDS,
-    validate_insertions,
-)
 from gdocs_scope_mcp.errors import ToolFailureError
-from gdocs_scope_mcp.image_layout import fit_images
 from gdocs_scope_mcp.revision_guards import (
     depend_on,
     guarded_edit,
-    insertion_context,
     require_native_precondition,
     submit,
 )
-from gdocs_scope_mcp.rich_text.compiler import inserted_text_from_requests
-from gdocs_scope_mcp.rich_text.image_uploads import (
-    PreparedInsertion,
-    rich_insertion_requests,
-)
-from gdocs_scope_mcp.rich_text.table_insertion import TableInsertionPlan
 from gdocs_scope_mcp.text_indices import utf16_length
 
 log = logging.getLogger(__name__)
@@ -78,45 +66,17 @@ log = logging.getLogger(__name__)
 SUGGESTIONS_VIEW_MODE = 'SUGGESTIONS_INLINE'
 
 
-
-
-
-
 # ---------------------------------------------------------------------------
 # Document structure helpers
 # ---------------------------------------------------------------------------
 
 
-
-
-
-
-
-
 # def _paragraph_to_md(item: dict[str, ]):
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 # ---------------------------------------------------------------------------
 # Core operations
 # ---------------------------------------------------------------------------
-
-
-
-
-
-
 
 
 # Preserve the public positional calling convention.
@@ -297,56 +257,6 @@ def search_replace(  # noqa: PLR0911, PLR0917
     )
 
 
-def _insert_content(
-    service, doc_id: str, text: str, index: int, *, rich: bool,
-    newline_before: bool = True, upload_local_images: bool = False,
-    required_revision: str | None = None,
-    table_borders: bool = True,
-    tab_id: str | None = None,
-    document: dict | None = None,
-) -> tuple[str, int, int, list[str]]:
-    """Apply a validated insertion within the temporary-image lifecycle."""
-    if rich:
-        context = rich_insertion_requests(
-            text, index, newline_before=newline_before,
-            upload_local_images=upload_local_images,
-            drive_factory=lambda: clients.get_service('drive', 'v3'),
-            validate_requests=lambda requests: validate_insertions(
-                service, doc_id, requests, required_revision, tab_id=tab_id,
-            ),
-        )
-    else:
-        literal = '\n' + text if newline_before else text + '\n'
-        context = nullcontext(PreparedInsertion([{'insertText': {
-            'location': {'index': index}, 'text': literal,
-        }}]))
-    with insertion_context(context, index) as prepared:
-        if rich:
-            validate_insertions(service, doc_id, prepared.requests,
-                                required_revision, tab_id=tab_id)
-        inserted = inserted_text_from_requests(prepared.requests)
-        if isinstance(prepared.requests, TableInsertionPlan):
-            prepared.requests.execute(
-                service, doc_id, required_revision,
-                table_borders=table_borders,
-                tab_id=tab_id,
-                size_images=(lambda requests, paragraphs: fit_images(
-                    requests, paragraphs, document or {}, index,
-                )),
-            )
-            requests = list(prepared.requests.iter_requests())
-        else:
-            requests = prepared.requests
-            if rich:
-                fit_images(
-                    requests, prepared.paragraphs, document or {}, index,
-                )
-            submit(service, doc_id, requests, required_revision)
-    return (inserted, sum('insertInlineImage' in r for r in requests),
-            sum(bool(INSERT_ENTITY_KINDS.intersection(r)) for r in requests),
-            prepared.cleanup_pending)
-
-
 @guarded_edit
 def insert_after(
     doc_id: str,
@@ -399,7 +309,7 @@ def insert_after(
 
     (
         inserted_text, image_count, entity_count, cleanup_pending,
-    ) = _insert_content(
+    ) = insert_content(
         service, doc_id, text, insert_index, rich=rich,
         upload_local_images=upload_local_images,
         required_revision=doc.get('revisionId'),
@@ -479,7 +389,7 @@ def insert_before(
 
     (
         inserted_text, image_count, entity_count, cleanup_pending,
-    ) = _insert_content(
+    ) = insert_content(
         service, doc_id, text, insert_index, rich=rich, newline_before=False,
         upload_local_images=upload_local_images,
         required_revision=doc.get('revisionId'),
@@ -621,7 +531,7 @@ def append(
 
     (
         inserted_text, image_count, entity_count, cleanup_pending,
-    ) = _insert_content(
+    ) = insert_content(
         service, doc_id, text, insert_index, rich=rich,
         upload_local_images=upload_local_images,
         required_revision=doc.get('revisionId'),

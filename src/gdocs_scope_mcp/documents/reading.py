@@ -29,7 +29,6 @@ def tabs_list(doc_id):
     return discover(document)
 
 
-
 def read(
     doc_id: str, heading_ids: list[str] | None = None,
     *, tab_id: str | None = None,
@@ -96,7 +95,6 @@ def read(
     )
 
 
-
 def get_tree(doc_id: str, *, tab_id=None) -> DocumentOutline:
     """
     Fetch a Google Doc and return structured representation.
@@ -121,7 +119,6 @@ def get_tree(doc_id: str, *, tab_id=None) -> DocumentOutline:
     )
 
 
-
 def get_full_tree(doc_id: str, *, tab_id=None) -> DocumentTree:
     """
     Fetch a Google Doc and return structured representation.
@@ -130,4 +127,3 @@ def get_full_tree(doc_id: str, *, tab_id=None) -> DocumentTree:
     doc = fetching.get_document(service, doc_id, tab_id=tab_id)
 
     return parsing.parse_document_tree(doc)
-

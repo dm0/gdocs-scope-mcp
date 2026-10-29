@@ -14,10 +14,8 @@ from gdocs_scope_mcp import server
 from gdocs_scope_mcp.documents import (
     editing as docs_edit,
 )
-from gdocs_scope_mcp.rich_text.compiler import (
-    markdown_to_html,
-    markdown_to_requests,
-)
+from gdocs_scope_mcp.rich_text.compiler import markdown_to_requests
+from gdocs_scope_mcp.rich_text.parsing import markdown_to_html
 
 
 @dataclass

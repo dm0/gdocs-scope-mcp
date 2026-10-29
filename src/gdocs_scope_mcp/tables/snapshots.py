@@ -1,7 +1,6 @@
 """Validate operation-specific expectations at checked table/cell positions."""
 
 # Share the native read boundary without an import cycle.
-# ruff: noqa: PLC0415
 import time
 from copy import deepcopy
 from typing import Any
@@ -9,17 +8,20 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from gdocs_scope_mcp.documents.native_models import GoogleDocumentTableCell
+from gdocs_scope_mcp.revision_guards import _normalized
 from gdocs_scope_mcp.settings import get_settings
 from gdocs_scope_mcp.tables.deletion_state import deletion_state
+from gdocs_scope_mcp.tables.fetching import _fetch
+from gdocs_scope_mcp.tables.geometry import _geometry
 from gdocs_scope_mcp.tables.grid import Grid, merge_state
 from gdocs_scope_mcp.tables.refs import Layout
+from gdocs_scope_mcp.tables.rendering import _model
 from gdocs_scope_mcp.tables.style_state import property_state, property_value
 from gdocs_scope_mcp.tables.tokens import address, decode, digest, encode, fail
 
 
 def cell_state(document, cell):
     """Separate content/styles from absolute cell positions."""
-    from gdocs_scope_mcp.revision_guards import _normalized
     content, text_styles, paragraph_styles, shape = [], [], [], []
     kinds, list_ids = set(), set()
     for item in cell.get('content', []):
@@ -105,7 +107,6 @@ def validate_baseline(table, baseline, cells, fields, *, subset=False):
 
 def resolve_cells(document, table, selected, *, merged=False):
     """Resolve current positions only after checking structural guards."""
-    from gdocs_scope_mcp.tables.geometry import _geometry
     entry = Layout(document).resolve(table)
     if merged:
         grid = Grid(entry)
@@ -151,8 +152,6 @@ def validate_states(document, baseline, available):
 def snapshot(doc_id, table_ref, cells, fields, base_token=None, *,
              tab_id=None):
     """Resolve a checked position and validate selected dependencies."""
-    from gdocs_scope_mcp.tables.fetching import _fetch
-    from gdocs_scope_mcp.tables.rendering import _model
     table = decode(table_ref, 'table', doc_id)
     requested = sorted(set(fields))
     if 'merge' in requested and requested != ['merge']:

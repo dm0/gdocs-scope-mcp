@@ -50,17 +50,13 @@ class EditFailedResponse(BaseModel):
     )
 
 
-
 SHORT_PREVIEW_LIMIT = 80
-
 
 
 TEXT_PREVIEW_LIMIT = 200
 
 
-
 RECEIPT_ITEM_LIMIT = 100
-
 
 
 TruncatedStr80 = Annotated[
@@ -72,7 +68,6 @@ TruncatedStr80 = Annotated[
 ]
 
 
-
 TruncatedStr200 = Annotated[
     str,
     PlainSerializer(
@@ -80,7 +75,6 @@ TruncatedStr200 = Annotated[
     ),
     Field(json_schema_extra={'maxLength': TEXT_PREVIEW_LIMIT}),
 ]
-
 
 
 class DocumentEditReceipt(BaseModel):
@@ -97,9 +91,7 @@ class DocumentEditReceipt(BaseModel):
     ] = None
 
 
-
 APPEND_PREVIEW_LIMIT = TEXT_PREVIEW_LIMIT
-
 
 
 class ListingPage(BaseModel):
@@ -120,4 +112,3 @@ class ListingPage(BaseModel):
     def has_more(self) -> bool:
         """Derive continuation from the API token rather than item count."""
         return bool(self.next_page_token)
-

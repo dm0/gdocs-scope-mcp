@@ -42,13 +42,11 @@ class GoogleDocumentRepresentableBase(BaseModel, populate_by_name=True):
         pass
 
 
-
 class GoogleDocumentImageProperties(BaseModel, populate_by_name=True):
     """Store source and content URLs for an embedded image."""
 
     content_uri: Annotated[str | None, Field(alias='contentUri')] = None
     source_uri: Annotated[str | None, Field(alias='sourceUri')] = None
-
 
 
 class GoogleDocumentEmbeddedObject(BaseModel, populate_by_name=True):
@@ -61,14 +59,12 @@ class GoogleDocumentEmbeddedObject(BaseModel, populate_by_name=True):
     ] = None
 
 
-
 class GoogleDocumentInlineObjectProperties(BaseModel, populate_by_name=True):
     """Wrap the embedded object associated with an inline object."""
 
     embedded_object: Annotated[
         GoogleDocumentEmbeddedObject, Field(alias='embeddedObject')
     ]
-
 
 
 class GoogleDocumentInlineObject(GoogleDocumentRepresentableBase):
@@ -91,7 +87,6 @@ class GoogleDocumentInlineObject(GoogleDocumentRepresentableBase):
         return rendering.inline_object_to_text(self, doc)
 
 
-
 class GoogleDocumentNestingLevel(BaseModel, populate_by_name=True):
     """Describe the glyph format at one list nesting level."""
 
@@ -102,7 +97,6 @@ class GoogleDocumentNestingLevel(BaseModel, populate_by_name=True):
     ] = GoogleDocumentGlyphType.GLYPH_TYPE_UNSPECIFIED
 
 
-
 class GoogleDocumentListProperties(BaseModel, populate_by_name=True):
     """Store glyph settings for each list nesting level."""
 
@@ -111,14 +105,12 @@ class GoogleDocumentListProperties(BaseModel, populate_by_name=True):
     ]
 
 
-
 class GoogleDocumentList(BaseModel, populate_by_name=True):
     """Represent a list referenced by paragraph bullet metadata."""
 
     list_properties: Annotated[
         GoogleDocumentListProperties, Field(alias='listProperties')
     ]
-
 
 
 class GoogleDocumentStructuralElement(GoogleDocumentRepresentableBase):
@@ -142,12 +134,10 @@ class GoogleDocumentStructuralElement(GoogleDocumentRepresentableBase):
         return 0
 
 
-
 class GoogleDocumentLink(BaseModel, populate_by_name=True):
     """Represent an external URL attached to text."""
 
     url: str | None = None  # The only supported link type - external
-
 
 
 class GoogleDocumentWeightedFontFamily(BaseModel, populate_by_name=True):
@@ -155,7 +145,6 @@ class GoogleDocumentWeightedFontFamily(BaseModel, populate_by_name=True):
 
     font_family: Annotated[str, Field(alias='fontFamily')]
     weight: int | None = None
-
 
 
 class GoogleDocumentRgbColor(BaseModel):
@@ -166,19 +155,16 @@ class GoogleDocumentRgbColor(BaseModel):
     blue: float = 0
 
 
-
 class GoogleDocumentColor(BaseModel, populate_by_name=True):
     """Wrap the native RGB color representation."""
 
     rgb_color: Annotated[GoogleDocumentRgbColor, Field(alias='rgbColor')]
 
 
-
 class GoogleDocumentOptionalColor(BaseModel):
     """Represent a native color or an unset/transparent color."""
 
     color: GoogleDocumentColor | None = None
-
 
 
 class GoogleDocumentTextStyle(BaseModel, populate_by_name=True):
@@ -210,7 +196,6 @@ class GoogleDocumentTextStyle(BaseModel, populate_by_name=True):
         return rendering.text_style_format_string(self)
 
 
-
 class GoogleDocumentTextRun(GoogleDocumentStructuralElement):
     """Represent a contiguous text run and its inline formatting."""
 
@@ -239,7 +224,6 @@ class GoogleDocumentTextRun(GoogleDocumentStructuralElement):
         return utf16_length(self.content)
 
 
-
 class GoogleDocumentHorizontalRule(GoogleDocumentStructuralElement):
     """Represent a horizontal rule within a paragraph."""
 
@@ -255,7 +239,6 @@ class GoogleDocumentHorizontalRule(GoogleDocumentStructuralElement):
     def to_text(self, doc: 'GoogleDocument') -> str:
         """Render this element as plain text using document metadata."""
         return rendering.horizontal_rule_to_text(self, doc)
-
 
 
 class GoogleDocumentInlineObjectElement(GoogleDocumentStructuralElement):
@@ -274,14 +257,12 @@ class GoogleDocumentInlineObjectElement(GoogleDocumentStructuralElement):
         return rendering.inline_object_element_to_text(self, doc)
 
 
-
 class GoogleDocumentShading(BaseModel, populate_by_name=True):
     """Represent a paragraph's full-width background fill."""
 
     background_color: Annotated[
         GoogleDocumentOptionalColor | None, Field(alias='backgroundColor'),
     ] = None
-
 
 
 class GoogleDocumentSmartChip(GoogleDocumentStructuralElement, extra='allow'):
@@ -332,7 +313,6 @@ class GoogleDocumentSmartChip(GoogleDocumentStructuralElement, extra='allow'):
         return self.end_index - self.start_index
 
 
-
 class GoogleDocumentParagraphStyle(BaseModel, populate_by_name=True):
     """Store a paragraph heading ID, named style, and alignment."""
 
@@ -347,14 +327,12 @@ class GoogleDocumentParagraphStyle(BaseModel, populate_by_name=True):
     )
 
 
-
 class GoogleDocumentBullet(BaseModel, populate_by_name=True):
     """Link a paragraph to a list and its nesting level."""
 
     list_id: Annotated[str, Field(alias='listId')]
     nesting_level: Annotated[int, Field(alias='nestingLevel')] = 0
     text_style: Annotated[GoogleDocumentTextStyle, Field(alias='textStyle')]
-
 
 
 def _unnest_paragraph_element(data: dict) -> dict:
@@ -371,7 +349,6 @@ def _unnest_paragraph_element(data: dict) -> dict:
             **inner_payload}
 
 
-
 GoogleDocumentParagraphElement = Annotated[
     Annotated[
         GoogleDocumentTextRun
@@ -383,7 +360,6 @@ GoogleDocumentParagraphElement = Annotated[
     ],
     BeforeValidator(_unnest_paragraph_element),
 ]
-
 
 
 class GoogleDocumentParagraph(GoogleDocumentStructuralElement):
@@ -408,7 +384,6 @@ class GoogleDocumentParagraph(GoogleDocumentStructuralElement):
         return sum([len(el) for el in self.elements])
 
 
-
 def _unnest_document_content(data: dict) -> dict:
     kinds = {'paragraph', 'table'}
     present_kinds = kinds.intersection(data.keys())
@@ -419,7 +394,6 @@ def _unnest_document_content(data: dict) -> dict:
         kind = 'base'
         inner_payload = {}
     return {'type': kind, **data, **inner_payload}
-
 
 
 GoogleDocumentContent = Annotated[
@@ -435,13 +409,11 @@ GoogleDocumentContent = Annotated[
 ]
 
 
-
 class GoogleDocumentTableCellStyle(BaseModel, populate_by_name=True):
     """Store row and column spans for a table cell."""
 
     row_span: Annotated[int, Field(alias='rowSpan')] = 1
     column_span: Annotated[int, Field(alias='columnSpan')] = 1
-
 
 
 class GoogleDocumentTableCell(GoogleDocumentStructuralElement):
@@ -463,7 +435,6 @@ class GoogleDocumentTableCell(GoogleDocumentStructuralElement):
         return rendering.table_cell_to_text(self, doc)
 
 
-
 class GoogleDocumentTableRow(GoogleDocumentStructuralElement):
     """Represent the cells in one table row."""
 
@@ -478,7 +449,6 @@ class GoogleDocumentTableRow(GoogleDocumentStructuralElement):
     def to_text(self, doc: 'GoogleDocument') -> str:
         """Render this element as plain text using document metadata."""
         return rendering.table_row_to_text(self, doc)
-
 
 
 class GoogleDocumentTable(GoogleDocumentStructuralElement):
@@ -500,7 +470,6 @@ class GoogleDocumentTable(GoogleDocumentStructuralElement):
         return rendering.table_to_text(self, doc)
 
 
-
 class GoogleDocumentBody(GoogleDocumentRepresentableBase):
     """Represent the ordered structural elements of a document body."""
 
@@ -513,7 +482,6 @@ class GoogleDocumentBody(GoogleDocumentRepresentableBase):
     def to_text(self, doc: 'GoogleDocument') -> str:
         """Render this element as plain text using document metadata."""
         return rendering.body_to_text(self, doc)
-
 
 
 class GoogleDocument(BaseModel, populate_by_name=True):
@@ -560,4 +528,3 @@ class GoogleDocument(BaseModel, populate_by_name=True):
     def to_text(self) -> str:
         """Render this element as plain text using document metadata."""
         return rendering.to_text(self)
-

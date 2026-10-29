@@ -381,7 +381,6 @@ def mutate(
     return result
 
 
-
 from gdocs_scope_mcp.revision_guards import (
     depend_on,
     guarded_edit,

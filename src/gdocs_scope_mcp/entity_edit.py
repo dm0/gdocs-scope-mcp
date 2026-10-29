@@ -16,7 +16,7 @@ from gdocs_scope_mcp.revision_guards import (
     revision_changed,
     uses_target_revision,
 )
-from gdocs_scope_mcp.rich_text.table_insertion import TableInsertionPlan
+from gdocs_scope_mcp.rich_text.plans import TableInsertionPlan
 
 INSERT_ENTITY_KINDS = {'insertPerson', 'insertRichLink', 'insertDate',
                        'insertDropdown'}

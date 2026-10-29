@@ -19,7 +19,6 @@ class CommentMutationReceipt(DocumentEditReceipt):
     comment_update_state: Literal['ALL_SAVED'] = 'ALL_SAVED'
 
 
-
 class AddCommentResponse(CommentMutationReceipt):
     """Report a native anchored comment without auxiliary metadata writes."""
 
@@ -29,7 +28,6 @@ class AddCommentResponse(CommentMutationReceipt):
     at_index: Annotated[int, Field(description='Google Docs API anchor index; '
                                  'diagnostic only')]
     comment_content: str
-
 
 
 class ReplyCommentResponse(CommentMutationReceipt):
@@ -42,7 +40,6 @@ class ReplyCommentResponse(CommentMutationReceipt):
     content: str | None
 
 
-
 class ResolveCommentResponse(CommentMutationReceipt):
     """Confirm resolution of a document comment."""
 
@@ -53,14 +50,12 @@ class ResolveCommentResponse(CommentMutationReceipt):
     reply_id: str
 
 
-
 class ReopenCommentResponse(CommentMutationReceipt):
     """Confirm reopening through a native action post."""
 
     scope: Literal['comment'] = 'comment'
     resolved: Literal[False] = False
     reply_id: str
-
 
 
 class EditCommentResponse(CommentMutationReceipt):
@@ -71,13 +66,11 @@ class EditCommentResponse(CommentMutationReceipt):
     content: str
 
 
-
 class DeleteCommentReplyResponse(CommentMutationReceipt):
     """Identify a deleted ordinary reply; action posts cannot be deleted."""
 
     scope: Literal['comment'] = 'comment'
     reply_id: str
-
 
 
 class DeleteCommentResponse(CommentMutationReceipt):
@@ -88,7 +81,6 @@ class DeleteCommentResponse(CommentMutationReceipt):
     comment_id: str
 
 
-
 class CommentRange(BaseModel):
     """Return native anchor bounds for inspection, never as edit selectors."""
 
@@ -96,7 +88,6 @@ class CommentRange(BaseModel):
     segment_id: str | None = None
     start_index: int | None = None
     end_index: int | None = None
-
 
 
 class CommentPost(BaseModel):
@@ -109,7 +100,6 @@ class CommentPost(BaseModel):
     created: str = ''
     updated: str = ''
     action: str | None = None
-
 
 
 class DocumentComment(BaseModel):
@@ -131,7 +121,6 @@ class DocumentComment(BaseModel):
     created: str
 
 
-
 class ReadCommentsResponse(ListingPage):
     """Return comments from the fetched page with a count of included items."""
 
@@ -139,4 +128,3 @@ class ReadCommentsResponse(ListingPage):
     document_id: str
     revision_id: str | None
     page_kind: Literal['threads', 'replies'] = 'threads'
-

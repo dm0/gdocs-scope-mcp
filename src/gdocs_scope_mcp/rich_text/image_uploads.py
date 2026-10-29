@@ -5,7 +5,6 @@ import logging
 import uuid
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass, field
 from http import HTTPStatus
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
@@ -14,25 +13,14 @@ from bs4 import BeautifulSoup
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaIoBaseUpload
 
-from gdocs_scope_mcp.rich_text.compiler import (
-    _image_failure,
-    gpars_to_requests,
-    html_to_gpars,
-    markdown_to_html,
-)
-from gdocs_scope_mcp.rich_text.table_insertion import TableInsertionPlan
+from gdocs_scope_mcp.rich_text.compiler import gpars_to_requests
+from gdocs_scope_mcp.rich_text.parsing import html_to_gpars, markdown_to_html
+from gdocs_scope_mcp.rich_text.plans import TableInsertionPlan
+from gdocs_scope_mcp.rich_text.preparation import PreparedInsertion
+from gdocs_scope_mcp.rich_text.validation import _image_failure
 
 logger = logging.getLogger('gdocs_scope_mcp')
 MAX_LOCAL_IMAGE_BYTES = 50_000_000
-
-
-@dataclass
-class PreparedInsertion:
-    """Keep planned requests and report uploads left behind after cleanup."""
-
-    requests: list[dict] | TableInsertionPlan
-    cleanup_pending: list[str] = field(default_factory=list)
-    paragraphs: list = field(default_factory=list)
 
 
 def _local_image(uri: str) -> tuple[Path, bytes, str] | None:
@@ -108,22 +96,12 @@ def _remove_upload(drive, file_id: str, permission_id: str | None) -> bool:
 
 
 @contextmanager
-def rich_insertion_requests(
+def staged_local_images(
     text: str, start: int, *, newline_before: bool = True,
-    upload_local_images: bool = False, drive_factory: Callable,
+    drive_factory: Callable,
     validate_requests: Callable | None = None,
 ) -> Iterator[PreparedInsertion]:
     """Validate the edit, stage local images, and always attempt cleanup."""
-    if not upload_local_images:
-        paragraphs = html_to_gpars(markdown_to_html(text), start)
-        prepared = PreparedInsertion(
-            gpars_to_requests(paragraphs, newline_before=newline_before),
-            paragraphs=paragraphs,
-        )
-        if validate_requests:
-            validate_requests(prepared.requests)
-        yield prepared
-        return
     soup = BeautifulSoup(markdown_to_html(text), 'html.parser')
     sources = {}
     for image in soup.find_all('img'):

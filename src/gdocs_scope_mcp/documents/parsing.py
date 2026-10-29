@@ -27,7 +27,6 @@ class TextRun:
     end: int  # Document index (exclusive)
 
 
-
 @dataclass
 class Paragraph:
     """Store source indices and plain text for an editable paragraph."""
@@ -37,7 +36,6 @@ class Paragraph:
     start: int  # Start of paragraph including leading newline-like element
     end: int  # End of paragraph (exclusive)
     runs: list[TextRun]
-
 
 
 def extract_paragraphs(doc: dict) -> list[Paragraph]:
@@ -78,7 +76,6 @@ def extract_paragraphs(doc: dict) -> list[Paragraph]:
     return paragraphs
 
 
-
 def paragraph_text_map(elements: list[dict]) -> list[tuple[int, int, str]]:
     """Keep original run positions while omitting non-text display elements."""
     text_map = []
@@ -89,7 +86,6 @@ def paragraph_text_map(elements: list[dict]) -> list[tuple[int, int, str]]:
             text_map.append((offset, element['startIndex'], text))
             offset += len(text)
     return text_map
-
 
 
 def table_source_paragraphs(table: dict) -> list[DocumentParagraph]:
@@ -113,7 +109,6 @@ def table_source_paragraphs(table: dict) -> list[DocumentParagraph]:
                 elif 'table' in item:
                     paragraphs.extend(table_source_paragraphs(item['table']))
     return paragraphs
-
 
 
 def parse_document_tree(doc: dict) -> DocumentTree:
@@ -213,4 +208,3 @@ def parse_document_tree(doc: dict) -> DocumentTree:
         document_id=google_doc.document_id,
         tab_id=doc.get('_mcp_tab_id'), tab_title=doc.get('_mcp_tab_title'),
     )
-

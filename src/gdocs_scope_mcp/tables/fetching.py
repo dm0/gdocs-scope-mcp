@@ -14,4 +14,3 @@ def _fetch(doc_id, tab_id=None):
     ))
     _require_revision(document)
     return document
-

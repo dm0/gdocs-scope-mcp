@@ -10,7 +10,6 @@ def _text(item):
                    for e in item.get('paragraph', {}).get('elements', []))
 
 
-
 @dataclass
 class _Table:
     """Keep a native structural path private to the current snapshot."""
@@ -19,7 +18,6 @@ class _Table:
     path: list[int]
     headings: list[tuple[int, str, str]]
     parent_cell: tuple[list[int], int, int] | None = None
-
 
 
 def _tables(document):
@@ -45,7 +43,6 @@ def _tables(document):
                                     [*current, r, c], headings,
                                     (current, r, c))
     return list(walk(document.get('body', {}).get('content', []), [], []))
-
 
 
 def _geometry(entry):
@@ -104,6 +101,4 @@ def _geometry(entry):
     return result, valid
 
 
-
 MAX_GRID_AREA = 100_000
-

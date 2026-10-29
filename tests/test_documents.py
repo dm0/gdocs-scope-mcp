@@ -8,7 +8,7 @@ from gdocs_scope_mcp.documents.models import (
     DocumentSection,
     DocumentTree,
 )
-from gdocs_scope_mcp.rich_text.compiler import markdown_to_html
+from gdocs_scope_mcp.rich_text.parsing import markdown_to_html
 
 
 @pytest.fixture

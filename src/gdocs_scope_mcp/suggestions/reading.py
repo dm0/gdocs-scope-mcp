@@ -1,7 +1,6 @@
 """Read accepted-content projections and inspect native suggestion threads."""
 
 # Authentication and tree parsing are shared lazily with the edit backend.
-# ruff: noqa: PLC0415
 from dataclasses import dataclass
 from http import HTTPStatus
 from typing import Annotated, NoReturn
@@ -26,6 +25,7 @@ from gdocs_scope_mcp.suggestions.models import (
     SuggestionPost,
     SuggestionsReadResponse,
 )
+from gdocs_scope_mcp.tables.references import reference_map
 
 SuggestionId = Annotated[
     str, Field(strict=True, min_length=1, max_length=2048)
@@ -159,7 +159,6 @@ def _heading_mapping(source, document):
 
 def table_references(view):
     """Expose projected table refs only when native meaning is unchanged."""
-    from gdocs_scope_mcp.tables.references import reference_map
 
     if not view.document.get('revisionId'):
         return {}, ['Table references require edit access and a revision ID.']

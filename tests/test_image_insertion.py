@@ -11,10 +11,10 @@ from googleapiclient.errors import HttpError
 
 from gdocs_scope_mcp import server
 from gdocs_scope_mcp.rich_text.compiler import (
-    html_to_gpars,
     inserted_text_from_requests,
     markdown_to_requests,
 )
+from gdocs_scope_mcp.rich_text.parsing import html_to_gpars
 
 URI = 'https://example.com/image.png?x=1&y=2'
 OTHER_URI = 'https://example.com/second.jpg'

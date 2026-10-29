@@ -1,7 +1,6 @@
 """Read checked table positions and revision-bound pages without writes."""
 
 # Reuse the existing OAuth boundary without a docs_edit import cycle.
-# ruff: noqa: PLC0415
 from copy import deepcopy
 from typing import Annotated, Literal
 
@@ -13,6 +12,7 @@ from gdocs_scope_mcp.documents.native_models import (
     GoogleDocumentTableCell,
 )
 from gdocs_scope_mcp.google_api import clients
+from gdocs_scope_mcp.suggestions.reading import fetch, table_references
 from gdocs_scope_mcp.tables.geometry import (
     _geometry,
     _tables,
@@ -43,26 +43,9 @@ PREVIEW_LIMIT = 200
 NESTED_REF_LIMIT = 20
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 def _read_fetch(doc_id, tab_id=None):
     """Read accepted cells while keeping write/snapshot fetches native."""
 
-    from gdocs_scope_mcp.suggestions.reading import fetch, table_references
     view = fetch(clients.get_service(), doc_id, tab_id)
     _require_revision(view.document)
     _, warnings = table_references(view)
@@ -72,18 +55,6 @@ def _read_fetch(doc_id, tab_id=None):
               'Read the tab with docs_read and inspect proposals using '
               'docs_suggestions_read before using table references.')
     return view.document
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 class TableSnapshot(BaseModel):
@@ -169,10 +140,6 @@ class TableReadResponse(ListingPage):
     table: TableSummary
     total_cells: int
     rows: list[TableRowRead]
-
-
-
-
 
 
 def _summary(document, entry, model, layout=None):
