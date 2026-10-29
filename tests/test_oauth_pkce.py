@@ -265,8 +265,9 @@ def test_headless_cancellation_removes_session(monkeypatch, tmp_path):
 
 @pytest.mark.parametrize('source', ['project', 'json', 'env', 'cli', 'file'])
 def test_client_selection_precedence(source, monkeypatch, tmp_path):
-    """Explicit clients override defaults without requiring a secret."""
+    """Custom IDs never inherit the shared Desktop client's secret."""
     monkeypatch.setattr(oauth, 'PROJECT_CLIENT_ID', 'project')
+    monkeypatch.setattr(oauth, 'PROJECT_CLIENT_SECRET', 'project-secret')
     for name in (*auth_setup.CLIENT_ID_ENV_ALIASES,
                  *auth_setup.CLIENT_SECRET_ENV_ALIASES):
         monkeypatch.delenv(name, raising=False)
@@ -287,7 +288,49 @@ def test_client_selection_precedence(source, monkeypatch, tmp_path):
     run = Mock()
     monkeypatch.setattr(auth_setup, 'run_local_flow', run)
     auth_setup.main()
-    assert run.call_args.args[:2] == (source, None)
+    expected_secret = 'project-secret' if source == 'project' else None
+    assert run.call_args.args[:2] == (source, expected_secret)
+
+
+@pytest.mark.parametrize('callback', [False, True])
+@pytest.mark.parametrize('client', ['project', 'custom'])
+@pytest.mark.parametrize('ambient_secret', [None, 'custom-secret'])
+def test_client_pair_for_local_and_saved_session(
+    callback, client, ambient_secret, monkeypatch, tmp_path,
+):
+    """Saved sessions use their originating pair, never another client's."""
+    monkeypatch.setattr(oauth, 'PROJECT_CLIENT_ID', 'project')
+    monkeypatch.setattr(oauth, 'PROJECT_CLIENT_SECRET', 'shared')
+    for name in (*auth_setup.CLIENT_ID_ENV_ALIASES,
+                 *auth_setup.CLIENT_SECRET_ENV_ALIASES):
+        monkeypatch.delenv(name, raising=False)
+    if ambient_secret:
+        monkeypatch.setenv('GOOGLE_DOCS_MCP_CLIENT_SECRET', ambient_secret)
+    args = ['auth', '--out', str(tmp_path / 'token.json')]
+    if callback:
+        session = oauth.AuthorizationSession.create(
+            client, 'http://127.0.0.1:12345/oauth2/callback', ['scope'], 300,
+        )
+        monkeypatch.setattr(oauth, 'consume_session',
+                            lambda *_args: (session, 'code'))
+        args += ['--callback-url', 'callback', '--session', 'session.json']
+        exchange = Mock(return_value={'refresh_token': 'refresh'})
+        monkeypatch.setattr(oauth, 'exchange_code', exchange)
+    else:
+        if client == 'custom':
+            args += ['--client-id', client]
+        run = Mock()
+        monkeypatch.setattr(auth_setup, 'run_local_flow', run)
+    monkeypatch.setattr(auth_setup.sys, 'argv', args)
+    auth_setup.main()
+    expected = 'shared' if client == 'project' else ambient_secret
+    if callback:
+        assert exchange.call_args.args[2] == expected
+        token = json.loads((tmp_path / 'token.json').read_text())
+        assert token['client_id'] == client
+        assert token.get('client_secret') == expected
+    else:
+        assert run.call_args.args[:2] == (client, expected)
 
 
 def test_cli_default_output_follows_xdg(monkeypatch, tmp_path):

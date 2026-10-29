@@ -179,10 +179,10 @@ not the token directory. Existing token files are not moved or rewritten.
 OAuth client overrides accept the corresponding legacy `GOOGLE_DRIVE_MCP_CLIENT_ID` and
 `GOOGLE_DRIVE_MCP_CLIENT_SECRET` aliases. See [authentication](getting-started.md#3-authenticate).
 
-Desktop authorization uses PKCE S256. Authorize with a Desktop credentials
-JSON using `gdocs-scope-mcp-auth --credentials /path/to/credentials.json`.
-Selecting a client ID alone does not supply its client secret. The bundled
-project client requires a secret, which is not included in the distribution.
+Desktop authorization uses PKCE S256. Run `gdocs-scope-mcp-auth` to authorize
+with the bundled Desktop client ID and matching secret. These shared Desktop
+credentials are included in the source and installed package; user tokens are
+private and are never included. A custom client ID never inherits the bundled secret.
 For a custom client, provide the matching secret in its credentials JSON or
 through `GOOGLE_DOCS_MCP_CLIENT_SECRET` together with an explicit client ID.
 Existing token files retain their client credentials; changing settings does

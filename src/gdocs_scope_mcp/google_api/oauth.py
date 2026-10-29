@@ -21,7 +21,9 @@ from google.oauth2.credentials import Credentials
 TOKEN_URI = 'https://oauth2.googleapis.com/token'
 CALLBACK_PATH = '/oauth2/callback'
 DEFAULT_TIMEOUT = 300
-# Public Desktop client ID; no client secret is distributed.
+# Shared Desktop client credentials are public application identifiers.
+# They do not grant access to user data; user tokens must remain private.
+PROJECT_CLIENT_SECRET = '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'
 PROJECT_CLIENT_ID = (
     '988487172113-bf649u95noqubdtn4jcvrlfdmd37sii5.apps.googleusercontent.com'
 )

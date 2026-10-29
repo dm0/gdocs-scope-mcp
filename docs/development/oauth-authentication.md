@@ -46,8 +46,8 @@ Live checks on 2026-10-29 used the registered project Desktop client:
 
 The saved token had owner-only permissions and contained a refresh token but
 no access token, so each fresh process had to refresh before reading. Existing
-user credentials were not replaced. The client secret, credentials JSON and
-test token remained outside the repository. These checks establish
+user credentials were not replaced. The credentials JSON and test token
+remained outside the repository. These initial checks establish
 compatibility for the supplied client with its secret, not general acceptance
 of ID-only Desktop authorization.
 
@@ -59,9 +59,13 @@ installed entry points passed; installed-wheel discovery exposed 32 MCP tools.
 
 ## Distribution considerations
 
-The bundled client ID alone cannot complete authorization for the registered
-project client. Local credentials JSON is the verified setup. Distribution of
-a shared client secret is not implemented; do not commit one to the repository.
+The package distributes the shared Desktop client ID and matching secret in
+`google_api/oauth.py`, including installations directly from Git through uv.
+The Desktop pair is public application configuration, not a user credential.
+Never commit user refresh/access tokens or confidential Web client credentials.
+PKCE remains enabled. Custom IDs never inherit the bundled secret, and an
+explicit credentials JSON supplies its own pair. Existing token files retain
+their originating client.
 
 The project owner manages branding, consent, verification, quotas and client
 lifecycle. Publishing the consent screen and completing verification are

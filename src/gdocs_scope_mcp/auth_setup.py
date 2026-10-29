@@ -157,7 +157,7 @@ def main():
                         help='Desktop OAuth credentials JSON')
     parser.add_argument('--client-id', help='Custom Desktop OAuth client ID')
     parser.add_argument('--client-secret',
-                        help='Optional secret for a custom legacy client')
+                        help='Matching secret for a custom Desktop client')
     parser.add_argument('--out', '-o', type=Path, default=default_token_path(),
                         help='Token output path (default: %(default)s)')
     modes = parser.add_mutually_exclusive_group()
@@ -196,12 +196,18 @@ def main():
                 raise oauth.AuthorizationError(  # noqa: TRY301
                     'Session client mismatch.',
                 )
+            if (session.client_id == oauth.PROJECT_CLIENT_ID
+                    and not args.credentials):
+                secret = (secret or oauth.PROJECT_CLIENT_SECRET
+                          if client_id else oauth.PROJECT_CLIENT_SECRET)
             tokens = oauth.exchange_code(session, code, secret)
             save_token(tokens, session, secret, args.out.expanduser())
         else:
             if not client_id:
                 client_id = oauth.PROJECT_CLIENT_ID
-                secret = None
+                secret = oauth.PROJECT_CLIENT_SECRET
+            elif client_id == oauth.PROJECT_CLIENT_ID and not args.credentials:
+                secret = secret or oauth.PROJECT_CLIENT_SECRET
             if not client_id:
                 raise oauth.AuthorizationError(  # noqa: TRY301
                     'No project client is configured. Provide --client-id '
