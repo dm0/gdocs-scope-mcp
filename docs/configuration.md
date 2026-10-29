@@ -176,15 +176,17 @@ Token resolution checks the preferred token environment variables, the legacy
 the XDG path unless `--out` is supplied. Empty or relative `XDG_CONFIG_HOME`
 values are ignored. Changing `GOOGLE_DOCS_MCP_CONFIG` selects the settings file,
 not the token directory. Existing token files are not moved or rewritten.
-OAuth client overrides
-accept the corresponding legacy `GOOGLE_DRIVE_MCP_CLIENT_ID` and
+OAuth client overrides accept the corresponding legacy `GOOGLE_DRIVE_MCP_CLIENT_ID` and
 `GOOGLE_DRIVE_MCP_CLIENT_SECRET` aliases. See [authentication](getting-started.md#3-authenticate).
 
-Desktop authorization uses PKCE S256. A custom client ID can be used without a
-secret; existing secret-bearing credentials remain supported. Tokens explicitly
-marked `pkce-public` ignore secret environment overrides during refresh. The
-authorization CLI can use a project-managed client once one is configured in
-the distribution; client settings do not change document-access scopes.
+Desktop authorization uses PKCE S256. Authorize with a Desktop credentials
+JSON using `gdocs-scope-mcp-auth --credentials /path/to/credentials.json`.
+Selecting a client ID alone does not supply its client secret. The bundled
+project client requires a secret, which is not included in the distribution.
+For a custom client, provide the matching secret in its credentials JSON or
+through `GOOGLE_DOCS_MCP_CLIENT_SECRET` together with an explicit client ID.
+Existing token files retain their client credentials; changing settings does
+not switch their OAuth client or document-access permissions.
 
 ## Drive listing
 

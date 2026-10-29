@@ -4,146 +4,158 @@
 
 ## Installation and authentication
 
-### 1. Run directly from GitHub
+### 1. Install
 
-```bash
-uvx --from git+https://github.com/dm0/gdocs-scope-mcp gdocs-scope-mcp
-```
-
-That command downloads the package, creates an isolated environment, installs dependencies, and runs the `gdocs-scope-mcp` entry point.
-
-No PyPI release is required. `uvx` can execute the tool straight from the GitHub repository.
-
-To pin to a branch, tag, or commit, add a ref to the URL:
-
-```bash
-uvx --from git+https://github.com/dm0/gdocs-scope-mcp@main gdocs-scope-mcp
-```
-
-If you prefer a persistent local install instead of `uvx`, use:
+Install the server and authorization CLI with [uv](https://docs.astral.sh/uv/):
 
 ```bash
 uv tool install git+https://github.com/dm0/gdocs-scope-mcp
-# Installs both gdocs-scope-mcp and gdocs-scope-mcp-auth.
 ```
+
+This installs `gdocs-scope-mcp` and `gdocs-scope-mcp-auth`. To install a specific
+version, append a Git tag or commit to the repository URL:
+
+```bash
+uv tool install git+https://github.com/dm0/gdocs-scope-mcp@TAG_OR_COMMIT
+```
+
+Alternatively, run either command without a persistent installation:
+
+```bash
+uvx --from git+https://github.com/dm0/gdocs-scope-mcp gdocs-scope-mcp-auth --help
+```
+
+The examples below use the installed commands. With `uvx`, prefix each command
+with `uvx --from git+https://github.com/dm0/gdocs-scope-mcp`.
 
 ### 2. Create a Google Cloud OAuth app
 
-1. Go to [console.cloud.google.com](https://console.cloud.google.com/)
-2. Create a project (or select an existing one)
-3. Enable these APIs (**APIs & Services → Library**):
-   - **Google Docs API**
-   - **Google Drive API**
-4. Go to **APIs & Services → Credentials**
-5. Click **Create Credentials → OAuth 2.0 Client ID**
-6. Application type: **Desktop App**
-7. Download the JSON file
+Use your own Desktop OAuth credentials to authorize the server:
+
+1. Open [Google Cloud Console](https://console.cloud.google.com/) and select or
+   create a project.
+2. Under **APIs & Services → Library**, enable **Google Docs API** and
+   **Google Drive API**.
+3. Open **Google Auth Platform → Branding** and complete the setup with your
+   app name, support email and developer contact email.
+4. Choose **External** if you need to sign in with accounts outside a single
+   Workspace organization. While the app is in **Testing**, add the account
+   you will use under **Audience → Test users**.
+5. Under **Data Access**, add the permissions listed in [Scopes](#scopes).
+6. Under **Clients → Create client**, select **Desktop app**. For an MCP client
+   used by AI agents, select **Use this client for an AI-powered agent** when
+   the option is available.
+7. Download the credentials JSON and store it outside your source repository,
+   for example as `~/credentials.json`.
+
+Use a Desktop client rather than a Web application client. See Google's
+[consent setup](https://developers.google.com/workspace/guides/configure-oauth-consent)
+and [client creation guide](https://developers.google.com/workspace/guides/create-credentials#desktop-app)
+for details.
 
 ### 3. Authenticate
 
-**Normal — browser opens automatically:**
+Run:
+
 ```bash
-uvx --from git+https://github.com/dm0/gdocs-scope-mcp \
-  gdocs-scope-mcp-auth --credentials ~/credentials.json
+gdocs-scope-mcp-auth --credentials ~/credentials.json
 ```
 
-**Or provide a Desktop client ID without a secret:**
-```bash
-export GOOGLE_DOCS_MCP_CLIENT_ID="your-google-client-id"
+Your system browser opens. Sign in with an account that can access your
+documents and approve the requested permissions. Return to the terminal and
+check for **Authorisation successful** and the saved token path.
 
-uvx --from git+https://github.com/dm0/gdocs-scope-mcp \
-  gdocs-scope-mcp-auth
+New tokens are saved to `$XDG_CONFIG_HOME/gdocs-scope-mcp/token.json`, or
+`~/.config/gdocs-scope-mcp/token.json` when `XDG_CONFIG_HOME` is unset, empty or
+relative. To choose another location:
+
+```bash
+gdocs-scope-mcp-auth --credentials ~/credentials.json --out /absolute/path/token.json
 ```
 
-**Headless / remote server — no browser on device:**
-```bash
-uvx --from git+https://github.com/dm0/gdocs-scope-mcp \
-  gdocs-scope-mcp-auth --credentials ~/credentials.json --headless
-# Prints a URL → open on any device (phone, laptop, etc.)
-# Paste the full redirect URL back into the terminal
+Keep the credentials JSON and token file private. On Unix, token files are
+written with owner-only permissions. On Windows, restrict access to their
+directory using your account's file permissions.
+
+### 4. Configure your MCP client
+
+Add a STDIO server entry to your MCP client's configuration. Use the absolute
+token path printed by the authorization command:
+
+```json
+{
+  "mcpServers": {
+    "gdocs-scope": {
+      "command": "gdocs-scope-mcp",
+      "env": {
+        "GOOGLE_DOCS_MCP_TOKEN": "/absolute/path/to/token.json"
+      }
+    }
+  }
+}
 ```
 
-**Complete authorization in a separate CLI invocation:**
-```bash
-uvx --from git+https://github.com/dm0/gdocs-scope-mcp \
-  gdocs-scope-mcp-auth --client-id YOUR_DESKTOP_CLIENT_ID \
-  --prepare --session ~/.config/gdocs-scope-mcp/pending-session.json
+If the client cannot find the executable, use its absolute path. To launch
+directly from GitHub instead, replace `command` and add `args`:
 
-# Open the printed URL, consent, then copy the FULL loopback redirect URL.
-uvx --from git+https://github.com/dm0/gdocs-scope-mcp \
-  gdocs-scope-mcp-auth --session ~/.config/gdocs-scope-mcp/pending-session.json \
+```json
+{
+  "command": "uvx",
+  "args": ["--from", "git+https://github.com/dm0/gdocs-scope-mcp", "gdocs-scope-mcp"]
+}
+```
+
+For a local checkout, replace the Git URL with its absolute directory path.
+Keep the same `env` entry pointing to your token. Restart or reconnect the MCP
+server after changing the configuration, then ask your agent to list documents
+or read one that your Google account can access.
+
+## Authorize without a local browser
+
+For a remote host or terminal without a browser:
+
+```bash
+gdocs-scope-mcp-auth --credentials ~/credentials.json --headless
+```
+
+Open the printed URL in a browser, sign in and approve access. Copy the
+**complete redirect URL** from the address bar and paste it into the terminal.
+The browser may display a connection error for `127.0.0.1`; the URL is still
+the value you need to copy. Do not share it or the pending session file.
+
+To start and finish authorization in separate CLI invocations:
+
+```bash
+gdocs-scope-mcp-auth --credentials ~/credentials.json \
+  --prepare --session /absolute/path/pending-session.json
+
+# After approving access, replace the URL below with the full redirect URL.
+gdocs-scope-mcp-auth --credentials ~/credentials.json \
+  --session /absolute/path/pending-session.json \
   --callback-url 'http://127.0.0.1:PORT/oauth2/callback?code=...&state=...'
 ```
 
-All modes use PKCE S256 and a fresh, independent state. Local browser mode
-binds only to `127.0.0.1` on an available port. The listener closes on success,
-failure, cancellation, or timeout (300 seconds by default; set `--timeout`).
-Use the system browser, not an embedded webview.
+Use the same credentials JSON for both commands. Sessions expire after
+300 seconds by default; pass `--timeout SECONDS` when starting an attempt to
+allow more time. Each session can be completed only once. After an expired or
+failed attempt, start again. Delete an abandoned pending session file before
+reusing its path.
 
-Headless mode keeps the original verifier and state in a private session file.
-The default path is next to the output token, with suffix `.oauth-session.json`;
-override it with `--session`. The full redirect URL is required even if the
-browser cannot connect to that loopback address. Expired sessions cannot be
-completed. Completion consumes the session once, including on a rejected
-callback; interrupted interactive input deletes its session. An abandoned
-`--prepare` file can be deleted manually before starting again.
+The legacy `--code` option accepts the same complete URL as `--callback-url`.
+A bare code without its original session is not supported.
 
-The old `--code` option is an alias for `--callback-url`; a bare authorization
-code without its original PKCE session is rejected. Session files contain a
-verifier and must not be shared, logged or committed. Token files contain no
-verifier or state. On Windows, restrict their directory to your OS account;
-POSIX modes do not replace Windows ACLs.
+## Choose a different OAuth client
 
-`gdocs-scope-mcp-auth` resolves the client in this order:
+The authorization CLI selects the client in this order:
 
 1. `--credentials /path/to/credentials.json`
 2. `--client-id`
-3. `GOOGLE_DOCS_MCP_CLIENT_ID` (or its legacy Drive alias)
+3. `GOOGLE_DOCS_MCP_CLIENT_ID` (or `GOOGLE_DRIVE_MCP_CLIENT_ID`)
 4. `client_id` in the JSON settings file
-5. The project-managed Desktop client
+5. The bundled project client ID
 
-The distribution includes the project's public Desktop client ID. Run
-`gdocs-scope-mcp-auth` without client options to use it. While its Google Cloud
-project is in Testing, the account used for consent must be an allowed test user.
-
-A secret is optional for a custom client (`--client-secret`, environment, or
-the credentials JSON); existing secret-bearing token files remain supported.
-For ID-only authorization, neither code exchange nor refresh sends
-`client_secret`. A failed exchange is reported without falling back to a flow
-without PKCE. Tokens marked `pkce-public` ignore ambient secret overrides when
-refreshed. Live acceptance of ID-only login and refresh must be checked against
-the actual registered Desktop client before distributing it as the default.
-
-Live verification on 2026-10-29 reached the loopback callback successfully,
-but Google rejected the bundled client's PKCE code exchange with
-`client_secret is missing.` No token was obtained, and secretless refresh
-could not be tested. ID-only onboarding for this client is therefore not ready
-for release. A custom client may supply its secret locally; the application
-does not automatically retry with one or distribute a secret.
-
-A subsequent live test using that client's locally supplied Desktop
-credentials JSON succeeded with PKCE and `client_secret`. The resulting
-owner-only token file stored a refresh token, without an access token. Two
-separate isolated STDIO server processes each refreshed access and successfully
-read the authorized development document. This verifies login, API access and
-refresh after process restart with the supplied secret; it does not establish
-secretless compatibility. The credentials JSON and token remained outside the
-repository, and existing user credentials were not replaced.
-
-PKCE remains useful when Google requires a Desktop client secret: the shared
-client secret cannot be kept confidential inside a distributed desktop app,
-whereas each authorization attempt has a fresh verifier. A captured code alone
-cannot be exchanged without that verifier. PKCE does not protect a refresh
-token that has already been stolen; token storage still needs protection.
-
-New tokens are saved to `$XDG_CONFIG_HOME/gdocs-scope-mcp/token.json`, falling
-back to `~/.config/gdocs-scope-mcp/token.json` when `XDG_CONFIG_HOME` is absent,
-empty or relative. Override the authorization output with `--out` and point
-the server at that file with `GOOGLE_DOCS_MCP_TOKEN`.
-The session examples above assume the default XDG directory.
-
-The CLI and server share the JSON settings path (including
-`GOOGLE_DOCS_MCP_CONFIG`). To override the built-in client, add:
+For example, add this to `~/.config/gdocs-scope-mcp/config.json`, or the file
+selected by `GOOGLE_DOCS_MCP_CONFIG`:
 
 ```json
 {
@@ -151,128 +163,61 @@ The CLI and server share the JSON settings path (including
 }
 ```
 
-Existing tokens retain their originating client ID; changing the setting does
-not migrate a refresh token to another client. The server uses configuration
-only when a token file contains no client ID. Legacy default token files in
-`~/.google-docs-mcp/` and `~/.google-drive-mcp/` remain readable after the new
-default location is checked. No old token files are moved or rewritten.
+Selecting an ID does not provide its client secret. For clients that require
+one, use their credentials JSON, or supply the matching secret through
+`GOOGLE_DOCS_MCP_CLIENT_SECRET` together with an explicit client ID. The bundled
+client ID alone is not sufficient for authorization; use the credentials-based
+setup above.
 
-### Project-managed client distribution
+Changing the configured client ID does not update an existing token's client.
+To switch clients, authorize again and configure the MCP server to use the
+new token file. See [configuration](configuration.md#auth-environment-variables)
+for all authentication settings.
 
-Register a **Desktop app** client in the application's Google Cloud project,
-enable Docs API and Drive API, and configure the consent screen, audience and
-test users. The public client ID may be distributed in source; never commit a
-client secret or a user's token. Custom client overrides remain available.
-Registration is independent of where the MCP process runs.
+## Troubleshooting authorization
 
-The project owner manages OAuth branding, production verification, quotas and
-client lifecycle. Multiple installations using the shared project consume its
-project-level API quotas, in addition to per-user limits. Use a separate
-development client/project when appropriate; changing the default client does
-not migrate existing user grants or refresh tokens.
-
-Publishing the consent screen and completing verification are separate steps.
-The current broad Drive scopes include restricted access, so public
-distribution requires reviewing Google's applicable verification requirements.
-PKCE does not change the scope classification. Selected-file access belongs to
-the separate Google Picker/access-mode work.
-
-See Google's [Desktop OAuth flow](https://developers.google.com/identity/protocols/oauth2/native-app),
-[production readiness](https://developers.google.com/identity/protocols/oauth2/production-readiness/overview),
-and [Drive scopes](https://developers.google.com/workspace/drive/api/guides/api-specific-auth).
-
-### 4. Configure your MCP client
-
-**Claude Desktop** (`~/Library/Application Support/Claude/claude_desktop_config.json`):
-```json
-{
-  "mcpServers": {
-    "gdocs-scope": {
-      "command": "uvx",
-      "args": ["--from", "git+https://github.com/dm0/gdocs-scope-mcp", "gdocs-scope-mcp"],
-      "env": {
-        "GOOGLE_DOCS_MCP_TOKEN": "/Users/you/.config/gdocs-scope-mcp/token.json"
-      }
-    }
-  }
-}
-```
-
-**OpenClaw** (gateway config):
-```json
-{
-  "mcp": {
-    "servers": {
-      "gdocs-scope": {
-        "command": "uvx",
-        "args": ["--from", "git+https://github.com/dm0/gdocs-scope-mcp", "gdocs-scope-mcp"],
-        "env": {
-          "GOOGLE_DOCS_MCP_TOKEN": "/home/you/.config/gdocs-scope-mcp/token.json"
-        }
-      }
-    }
-  }
-}
-```
-
-## Local checkout client configuration
-
-```json
-{
-  "mcpServers": {
-    "gdocs-scope": {
-      "command": "uvx",
-      "args": ["--from", "/absolute/path/to/gdocs-scope-mcp", "gdocs-scope-mcp"],
-      "env": {
-        "GOOGLE_DOCS_MCP_TOKEN": "/Users/you/.config/gdocs-scope-mcp/token.json"
-      }
-    }
-  }
-}
-```
+| Problem | What to do |
+|---|---|
+| Google requires `client_secret` | Run again with the matching Desktop credentials JSON. PKCE does not remove Google's requirement for that client. |
+| Your account cannot authorize a Testing app | Add that account to the Cloud project's **Audience → Test users**. |
+| Session expired or state mismatch | Start a new attempt and use the complete redirect URL from that attempt. |
+| The browser did not open | Open the printed URL manually, or use `--headless`. |
+| The server uses an old account or client | Check `GOOGLE_DOCS_MCP_TOKEN`, then restart the MCP server. |
 
 ## Migrating from google-docs-mcp
 
-Install this repository and update your MCP launch command to `gdocs-scope-mcp`.
-Authenticate with `gdocs-scope-mcp-auth`.
-The old `google-docs-mcp` and `google-drive-mcp` CLI aliases are not installed,
-so this project can coexist with the original package.
+Install this repository and change your MCP launch command to
+`gdocs-scope-mcp`. The old `google-docs-mcp` and `google-drive-mcp` executable
+aliases are not installed, so the packages can coexist.
 
-Existing `GOOGLE_DOCS_MCP_*` settings, legacy `GOOGLE_DRIVE_MCP_*` aliases,
-and reading the legacy token path `~/.google-docs-mcp/token.json` are retained.
-Existing credentials can be reused without re-authenticating just for the rename.
+Existing credentials can be reused. Explicit token environment variables take
+precedence over default locations. If no explicit token path is set, the server
+checks the new XDG location first, followed by `~/.google-docs-mcp/token.json`
+and `~/.google-drive-mcp/token.json`. Existing files are not moved or rewritten.
+Legacy `GOOGLE_DRIVE_MCP_*` environment aliases remain supported.
 
 ## Scopes
 
-The auth setup requests these scopes:
+The authorization command requests these permissions:
 
-| Scope | Purpose |
-|-------|---------|
+| Scope | Permission |
+|-------|------------|
 | `https://www.googleapis.com/auth/documents` | Read and write Google Docs |
-| `https://www.googleapis.com/auth/drive` | Access Drive files |
-| `https://www.googleapis.com/auth/drive.readonly` | Read Drive file metadata |
-| `https://www.googleapis.com/auth/drive.file` | Per-file Drive access |
+| `https://www.googleapis.com/auth/drive` | View and manage Drive files |
+| `https://www.googleapis.com/auth/drive.readonly` | View and download Drive files |
+| `https://www.googleapis.com/auth/drive.file` | Access files created by or granted to the application |
 
----
+New authorizations do not request identity scopes (`openid`, `email`, `profile`)
+or Apps Script scopes. Existing tokens with these permissions remain usable.
+Updating the application does not revoke previously granted access.
 
-New authorizations request neither identity scopes (`openid`, `email`,
-`profile`) nor Apps Script scopes. Authorization does not fetch account profile
-data, store an email address, or require identity data to report success.
-Native comments use the Docs API. Configurable per-file access is separate work.
+To replace an older grant with the current permissions:
 
-Existing token files, including those with identity scopes and an `email` field,
-remain usable without modification. Changing requested scopes does not revoke
-previously granted permissions. To obtain a fresh grant without identity scopes:
-
-1. Remove this application's access in your
+1. Remove the application's access in
    [Google Account connections](https://myaccount.google.com/connections).
-   This interrupts other clients using the same application grant.
-2. Run the updated `gdocs-scope-mcp-auth` command with your OAuth client settings
-   and the intended `--out` token path, then complete consent again.
-3. Restart MCP processes using that token file so they load the new credentials.
+   This also interrupts other clients using the same application grant.
+2. Run `gdocs-scope-mcp-auth` again with your credentials JSON and intended
+   output path.
+3. Restart MCP processes using the new token file.
 
 Deleting a local token file alone does not revoke the Google Account grant.
-
-See [configuration](configuration.md#auth-environment-variables) for token and
-OAuth environment variables, [development](development.md) for a source
-checkout, and [native comment tools](tools/comments.md) for comment workflows.

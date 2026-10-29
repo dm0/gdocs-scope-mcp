@@ -10,6 +10,7 @@ arguments, examples and supported behavior, start with the [document tools](../t
 
 | Document | Contents | Verification |
 | --- | --- | --- |
+| [Desktop OAuth](oauth-authentication.md) | PKCE sessions, credential compatibility and distribution limitations | [Live verification](oauth-authentication.md#verification) |
 | [Concurrent edits](../concurrent-edits.md) | Revision policies, dependencies, retries, atomicity and unknown write outcomes | [Tests and reproduction](../concurrent-edits.md#verification) |
 | [Table references](../table-references.md) | Checked positions, structural inventories, selective expectations and structural operations | [Tests and reproduction](../table-references.md#verification) |
 | [Native comments](native-comments.md) | Native anchors, post operations, save-state validation and migration | [Verification](native-comments.md#verification) |
