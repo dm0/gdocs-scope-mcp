@@ -1,4 +1,4 @@
-# Reading suggestions
+# Suggestions
 
 [README](../../README.md) · [Document tools](documents.md) · [Result contracts](../protocol.md)
 
@@ -96,14 +96,129 @@ Thread inspection requires permission to read native suggestions; a permission
 error is not an empty list. The tool uses fresh native thread reads, so replies
 are not served from the document snapshot cache.
 
+## docs_suggest
+
+```text
+docs_suggest(doc_id, operation, *, tab_id=None, heading_id=None,
+             expected_revision_id=None)
+```
+
+Create one native proposal operation per call, using a discriminated JSON
+object in `operation`. The complete generated plan is preflighted and sent in
+one atomic Docs batch with `writeControl.writeMode="SUGGEST"`. A logical
+operation can produce several native suggestion IDs; never assume one ID per
+call or API request.
+
+| `operation` value | Required fields | Optional fields |
+|---|---|---|
+| `replace` | `find`, `text` | `occurrence=1` |
+| `insert_before`, `insert_after` | `anchor`, `text` | `occurrence=1`, `rich=True` |
+| `append` | `text` | `rich=True` |
+| `delete_paragraph` | `anchor` | `occurrence=1` |
+| `format_text` | `find`, `style` | `occurrence=1` |
+
+Anchors are literal and case-sensitive. Occurrences start at 1; replace-all and
+regex matching are not supported. `delete_paragraph` selects one anchor match,
+not every matching paragraph. Replacement text is literal, and an empty string
+proposes deletion of the match. Text matching cannot include a paragraph's
+terminating newline; use paragraph deletion for that operation. The mandatory
+final body newline is retained.
+
+Insertions create separate paragraphs. Rich insertion supports Markdown
+paragraphs, headings, emphasis, links, inline code, and formatted code blocks.
+It uses configured formatting defaults. Plain insertion (`rich=False`) treats
+its text literally. Tables, images (including local uploads), chips and list
+requests are rejected before any upload or write. Code-block named ranges
+cannot be suggested: the planner omits those markers, retains code formatting
+and returns an explicit warning. It never creates markers as direct edits.
+
+`format_text.style` accepts `bold`, `italic`, `underline` and `strikethrough`
+booleans. Supply at least one flag; `false` proposes removing that formatting.
+This is text formatting, not general named-style management.
+
+Targets must be ordinary body paragraphs, excluding table cells, lists and
+paragraphs containing non-text entities or objects. An existing proposal in the
+target paragraph causes `EDIT_CONFLICT`, including formatting or inherited
+changes. Unlocated open threads or unknown native proposal metadata also block
+creation: inspect/decide them first. Known proposals in other paragraphs/tabs
+are allowed. Paragraph deletion also guards the next paragraph when it removes
+their separating break. Matching uses native source text only after validating
+that its paragraph is free of proposals; preview offsets and summaries are
+never used as mutation coordinates.
+
+Omitting `tab_id` selects the first tab. `heading_id` scopes matching and
+append to its accepted heading subtree; unmappable heading boundaries fail.
+Writes require a usable native revision ID, even where a viewer can read a
+clean projection. Required mode can replan an unchanged target after a confirmed
+revision rejection; target mode delegates concurrent merging to Google.
+`expected_revision_id` forces strict matching in either configuration.
+
+```python
+proposal = docs_suggest(
+    doc_id='...', heading_id='heading-from-outline',
+    operation={'operation': 'replace', 'find': 'old wording',
+               'text': 'proposed wording'},
+)
+docs_suggest(
+    doc_id='...',
+    operation={'operation': 'format_text', 'find': 'Important',
+               'style': {'bold': True}},
+)
+```
+
+Receipts report `changes.created`, `updated`, `deleted`, `accepted` and
+`rejected` native IDs, source tab/heading, operation, current readback revision
+and warnings. Creation requires `ALL_SAVED` and a fresh native thread read
+confirming the returned created/updated IDs are open. A missing ID, unconfirmed
+save state or failed readback is an explicit uncertain/partial failure, never
+an automatic replay. A no-change formatting request may not create a proposal;
+if Google omits usable IDs, inspect current state before issuing another call.
+
+## docs_suggestions_manage
+
+```text
+docs_suggestions_manage(doc_id, action, suggestion_ids, *,
+                        expected_revision_id=None)
+```
+
+`action` is `accept`, `reject` or `delete`; `suggestion_ids` contains 1–50 unique
+native IDs obtained from dedicated reading or a proposal receipt. These IDs are
+document-wide, so there is no tab or heading parameter. Preflight covers the
+entire list: missing/deleted IDs, unknown statuses, or already decided IDs
+incompatible with the action reject the batch without sending any decisions.
+An already accepted/rejected proposal matching the requested action returns
+`outcome="already_decided"` without another write. Delete is initially limited
+to open proposals; a missing ID is not silently considered successfully deleted.
+
+Pending decisions are sent in one guarded atomic batch in direct `EDIT` mode.
+Success requires `ALL_SAVED`, matching response IDs and native readback of each
+decision. Per-ID results include `action`, `outcome` and resulting `status`.
+An entirely already-decided call has `comment_update_state=null`; a saved batch
+has `ALL_SAVED`. Required-mode retries reject changed proposal state. Target
+mode retains Google's collaboration semantics; use `expected_revision_id` when
+the caller requires a strict document revision. Unknown/partial outcomes are
+never replayed automatically.
+
+Accepting requires edit access; rejecting requires edit access or authorship;
+deleting requires authorship. Google checks these permissions, and a 403 retains
+action-specific guidance. Deleting an owned open proposal removes its proposed
+changes too; it does not accept them. Replies and generated summary editing are
+outside the initial scope.
+
+```python
+docs_suggestions_read(doc_id='...', suggestion_id='native-suggestion-id')
+docs_suggestions_manage(doc_id='...', action='accept',
+                        suggestion_ids=['native-suggestion-id'])
+```
+
 ## Editing boundaries
 
 Existing edit tools still make direct edits. They resolve indices using native
 `SUGGESTIONS_INLINE` data, never the accepted-content projection. Ordinary
 Markdown is not a review diff and does not embed pending `<ins>`/`<del>` markup
 that a rich insertion might silently turn into accepted text or strikethrough.
-Creating and managing suggestions is tracked separately in
-[#43](https://github.com/dm0/gdocs-scope-mcp/issues/43).
+Use the dedicated tools above when proposals are intended; there is no global
+edit/suggest switch or write-mode argument on existing direct-edit tools.
 
 ## Verification
 
@@ -119,3 +234,21 @@ GDOCS_SCOPE_MCP_LIVE_TEST_DOC=YOUR_TEST_DOCUMENT_ID uv run --locked pytest -q te
 Sanitized evidence and stderr are written under
 `/tmp/gdocs-scope-mcp-table-probe-suggestion-reading.*`. Both subprocesses and
 the temporary tab are cleaned up.
+
+`tests/test_suggestion_writes.py` additionally covers typed plans, unsupported
+content, overlap protection, source tab scoping, paragraph boundaries, revision
+policies, decision preflight, permissions, save failures, readback and uncertain
+outcomes. Public creation/decisions are verified through isolated MCP processes
+in both required and target modes:
+
+```bash
+GDOCS_SCOPE_MCP_LIVE_TEST_DOC=YOUR_TEST_DOCUMENT_ID uv run --locked pytest -q tests/test_live_suggestion_writes.py
+```
+
+The tests delete pending proposals before deleting their temporary tabs:
+deleting a tab alone can leave unlocated OPEN threads. Existing unrelated
+threads are preserved. Evidence and stderr use
+`/tmp/gdocs-scope-mcp-table-probe-suggestion-writes-{required,target}.*`.
+Editor/author behavior is live-verified; other-user/commenter-only permissions
+and partial-save fault injection are covered only by API contracts/offline
+tests, not live multi-account experiments.
