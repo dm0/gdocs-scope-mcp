@@ -121,6 +121,21 @@ could not be tested. ID-only onboarding for this client is therefore not ready
 for release. A custom client may supply its secret locally; the application
 does not automatically retry with one or distribute a secret.
 
+A subsequent live test using that client's locally supplied Desktop
+credentials JSON succeeded with PKCE and `client_secret`. The resulting
+owner-only token file stored a refresh token, without an access token. Two
+separate isolated STDIO server processes each refreshed access and successfully
+read the authorized development document. This verifies login, API access and
+refresh after process restart with the supplied secret; it does not establish
+secretless compatibility. The credentials JSON and token remained outside the
+repository, and existing user credentials were not replaced.
+
+PKCE remains useful when Google requires a Desktop client secret: the shared
+client secret cannot be kept confidential inside a distributed desktop app,
+whereas each authorization attempt has a fresh verifier. A captured code alone
+cannot be exchanged without that verifier. PKCE does not protect a refresh
+token that has already been stolen; token storage still needs protection.
+
 New tokens are saved to `$XDG_CONFIG_HOME/gdocs-scope-mcp/token.json`, falling
 back to `~/.config/gdocs-scope-mcp/token.json` when `XDG_CONFIG_HOME` is absent,
 empty or relative. Override the authorization output with `--out` and point
