@@ -34,8 +34,9 @@ events for tags are excluded. A same-repository branch push followed by a PR
 can produce separate runs. No package publishing, releases, or branch-protection
 changes are performed.
 
-The Ubuntu 24.04 matrix covers Python 3.10 (the declared minimum) and 3.14
-(current stable). Both jobs install runtime and development dependencies from
+The Ubuntu 24.04 matrix covers every stable minor version from Python 3.10
+(the declared minimum) through 3.14: 3.10, 3.11, 3.12, 3.13, and 3.14.
+Each job installs runtime and development dependencies from
 `uv.lock`, run the complete offline suite including architecture/MCP contract
 checks, build wheel and sdist, and verify isolated installations of both.
 Checkout fetches full history and tags for setuptools-scm version discovery.
@@ -61,7 +62,7 @@ uv build
 uv run --locked python .github/scripts/check_artifacts.py dist
 ```
 
-Use `UV_PYTHON=3.10` or `UV_PYTHON=3.14` to select the matrix interpreter. For
+Use `UV_PYTHON=3.10` through `UV_PYTHON=3.14` to select a matrix interpreter. For
 parallel local runs, set `UV_PROJECT_ENVIRONMENT=.venv-ci/3.10` or
 `.venv-ci/3.14` consistently on all uv commands for that run. These are separate
 environments for this checkout; do not borrow another checkout's environment.

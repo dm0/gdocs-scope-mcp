@@ -21,8 +21,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Declared minimum and current stable Python; no prereleases.
-        python: ['3.10', '3.14']
+        # Every stable minor from the declared minimum through Python 3.14.
+        python: ['3.10', '3.11', '3.12', '3.13', '3.14']
     env:
       UV_PYTHON: ${{ matrix.python }}
       UV_VERSION: '0.12.18'
