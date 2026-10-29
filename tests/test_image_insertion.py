@@ -25,7 +25,9 @@ def test_image_paragraph_diagnostic_rendering():
     paragraphs = html_to_gpars(f'<p>Before <img src="{URI}"> after</p>')
     paragraph = next(p for p in paragraphs if len(p))
     assert paragraph.to_text(None) == 'Before \ufffc after\n\n'
-    assert paragraph.to_markdown(None) == f'Before ![](<{URI}>) after\n\n'
+    assert paragraph.to_markdown(None) == (
+        f'Before&#32;![](<{URI}>)&#32;after\n\n'
+    )
 
 
 def call(operation, arguments):

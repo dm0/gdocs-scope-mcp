@@ -32,6 +32,24 @@ class PresentationState(BaseModel):
     table_refs: dict[int, str] = Field(default_factory=dict)
 
 
+# Character references survive both Markdown and raw HTML table parsing.
+# Escape per character so even independently styled runs cannot form syntax.
+_LITERAL_PUNCTUATION = str.maketrans({
+    char: f'&#{ord(char)};' for char in '\\`*_[]#!|~^-+=.():'
+})
+
+
+def literal_text(text: str) -> str:
+    """Encode native text once without exposing it as Markdown/HTML syntax."""
+    text = escape(text, quote=False).translate(_LITERAL_PUNCTUATION)
+    return text.replace('\t', '&#9;').replace('\u000b', '<br>')
+
+
+def boundary_whitespace(text: str) -> str:
+    """Keep run-edge spaces from becoming Markdown indentation/hard breaks."""
+    return literal_text(text).replace(' ', '&#32;')
+
+
 def prepare_document(data):
     """Recover raw code before native text-run normalization removes breaks."""
     if isinstance(data, dict) and 'body' in data:
@@ -50,7 +68,8 @@ def inline_object_to_markdown(self, doc) -> str:
     img_props = embedded_obj.image_properties
     if img_props is None:
         return ''
-    return f'![{embedded_obj.title or ""}]({img_props.content_uri})'
+    return (f'<img src="{escape(img_props.content_uri or "", quote=True)}" '
+            f'alt="{escape(embedded_obj.title or "", quote=True)}">')
 
 
 def inline_object_to_text(self, doc) -> str:
@@ -82,7 +101,9 @@ def text_style_format_string(self) -> str:
         ),
         'subscript': ('<sub>', '</sub>'),
         'superscript': ('<sup>', '</sup>'),
-        'link': (f'<a href="{self.link and self.link.url}">', '</a>'),
+        'link': ('<a href="' + escape(
+            self.link.url or '' if self.link else '', quote=True,
+        ).replace('{', '{{').replace('}', '}}') + '">', '</a>'),
     }
 
     collected = []
@@ -102,7 +123,7 @@ def text_style_format_string(self) -> str:
 
 def text_run_to_markdown(self, doc) -> str:
     """Render this element as Markdown using document metadata."""
-    content = self.content.replace('\u000b', '  \n')
+    content = self.content
     if not content:
         return content
     text = content
@@ -112,9 +133,9 @@ def text_run_to_markdown(self, doc) -> str:
     text = text.rstrip()
     end = len(text) + start
     return (
-        f'{content[:start]}'
-        f'{self.text_style.format_string.format(text=text)}'
-        f'{content[end:]}'
+        f'{boundary_whitespace(content[:start])}'
+        f'{self.text_style.format_string.format(text=literal_text(text))}'
+        f'{boundary_whitespace(content[end:])}'
     )
 
 
@@ -169,7 +190,7 @@ def paragraph_to_markdown(self, doc) -> str:  # noqa: PLR0911
     ):
         prefix = '#' * (style.named_style_type.level + 1)
         anchor = (
-            f'<a id={style.heading_id}></a>'
+            f'<a id="{escape(style.heading_id, quote=True)}"></a>'
             if style.heading_id is not None
             else ''
         )
