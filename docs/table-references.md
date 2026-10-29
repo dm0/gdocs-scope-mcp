@@ -106,7 +106,7 @@ Pass `base_token` with the same table/cells/fields to validate and renew it.
 Changed selected state returns `EDIT_CONFLICT`; reread and review the affected
 state rather than blindly issuing a new baseline. `SNAPSHOT_EXPIRED` requires
 a fresh read/snapshot. TTL defaults to 86400 seconds; configure JSON
-`table_snapshot_ttl_seconds` or `GOOGLE_DOCS_MCP_TABLE_SNAPSHOT_TTL_SECONDS`
+`table_snapshot_ttl_seconds` or `GDOCS_SCOPE_MCP_TABLE_SNAPSHOT_TTL_SECONDS`
 from 1 to 604800 seconds. Table refs have no time expiry.
 
 Snapshot validation takes no lock. `docs_table_patch` resolves and validates

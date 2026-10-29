@@ -102,7 +102,7 @@ See the [tool reference](docs/tools/documents.md) for operation-specific details
    uvx --from git+https://github.com/dm0/gdocs-scope-mcp gdocs-scope-mcp
    ```
 
-   Set `GOOGLE_DOCS_MCP_TOKEN` to the absolute path of the saved token file
+   Set `GDOCS_SCOPE_MCP_TOKEN` to the absolute path of the saved token file
    (default: `$XDG_CONFIG_HOME/gdocs-scope-mcp/token.json`, or
    `~/.config/gdocs-scope-mcp/token.json` when unset).
 

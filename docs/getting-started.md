@@ -70,7 +70,7 @@ token path printed by the authorization command:
     "gdocs-scope": {
       "command": "gdocs-scope-mcp",
       "env": {
-        "GOOGLE_DOCS_MCP_TOKEN": "/absolute/path/to/token.json"
+        "GDOCS_SCOPE_MCP_TOKEN": "/absolute/path/to/token.json"
       }
     }
   }
@@ -148,12 +148,12 @@ The authorization CLI selects the client in this order:
 
 1. `--credentials /path/to/credentials.json`
 2. `--client-id`
-3. `GOOGLE_DOCS_MCP_CLIENT_ID` (or `GOOGLE_DRIVE_MCP_CLIENT_ID`)
+3. `GDOCS_SCOPE_MCP_CLIENT_ID`
 4. `client_id` in the JSON settings file
 5. The bundled project client ID and matching Desktop secret
 
 For example, add this to `~/.config/gdocs-scope-mcp/config.json`, or the file
-selected by `GOOGLE_DOCS_MCP_CONFIG`:
+selected by `GDOCS_SCOPE_MCP_CONFIG`:
 
 ```json
 {
@@ -163,7 +163,7 @@ selected by `GOOGLE_DOCS_MCP_CONFIG`:
 
 Selecting a custom ID does not provide its client secret. For clients that require
 one, use their credentials JSON, or supply the matching secret through
-`GOOGLE_DOCS_MCP_CLIENT_SECRET` together with an explicit client ID. The bundled
+`GDOCS_SCOPE_MCP_CLIENT_SECRET` together with an explicit client ID. The bundled
 secret is only used with the matching bundled ID. A credentials JSON supplies
 its own pair and overrides both ID and secret settings. With no client ID
 override, the bundled pair is used, ignoring standalone secret overrides.
@@ -181,7 +181,7 @@ for all authentication settings.
 | Your account cannot authorize a Testing app | Add that account to the Cloud project's **Audience → Test users**. |
 | Session expired or state mismatch | Start a new attempt and use the complete redirect URL from that attempt. |
 | The browser did not open | Open the printed URL manually, or use `--headless`. |
-| The server uses an old account or client | Check `GOOGLE_DOCS_MCP_TOKEN`, then restart the MCP server. |
+| The server uses an old account or client | Check `GDOCS_SCOPE_MCP_TOKEN`, then restart the MCP server. |
 
 ## Migrating from google-docs-mcp
 
@@ -193,7 +193,11 @@ Existing credentials can be reused. Explicit token environment variables take
 precedence over default locations. If no explicit token path is set, the server
 checks the new XDG location first, followed by `~/.google-docs-mcp/token.json`
 and `~/.google-drive-mcp/token.json`. Existing files are not moved or rewritten.
-Legacy `GOOGLE_DRIVE_MCP_*` environment aliases remain supported.
+Use `GDOCS_SCOPE_MCP_*` for all application environment settings. Former
+`GOOGLE_DOCS_MCP_*`, `GOOGLE_DRIVE_MCP_*`, and `GOOGLE_DOCS_TOKEN_FILE` settings
+are ignored. Rename existing MCP environment entries and restart the server;
+the token contents, configuration JSON keys, and file locations stay unchanged.
+See [migration and validation](configuration.md#environment-name-migration-and-validation).
 
 ## Scopes
 

@@ -11,7 +11,7 @@ Set `write_revision_mode` in the normal server JSON configuration:
 {"write_revision_mode": "target"}
 ```
 
-Or set `GOOGLE_DOCS_MCP_WRITE_REVISION_MODE=target` in the MCP server's
+Or set `GDOCS_SCOPE_MCP_WRITE_REVISION_MODE=target` in the MCP server's
 environment. Environment overrides JSON; the default is `required`. Invalid
 values fail settings validation. Restart the MCP process to apply changes.
 This is a server policy, not a per-call agent argument. It applies to the
