@@ -81,6 +81,9 @@ prohibited dependencies. Extend it when introducing a new boundary.
 - `documents.targeting.build_full_text_map`, `full_text_pos_to_doc_index` and
   `full_text_range_to_doc_indices` preserve UTF-16 width and reject matches
   crossing omitted native structure.
+- `documents.rendering` escapes literal text separately from generated markup,
+  including Markdown syntax and HTML attributes. Character references belong
+  only to display output; source maps retain original native characters.
 - `tables.geometry.walk_tables` and `cell_geometry` describe native paths and
   conservative span geometry. `tables.refs.Layout` and
   `tables.references.reference_map` construct checked references independently

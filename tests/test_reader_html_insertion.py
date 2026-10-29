@@ -51,7 +51,7 @@ def test_read_output_can_be_inserted_with_supported_styles(
     """Reuse reader HTML while keeping styles and heading IDs scoped."""
     read = reading.read('example', ['original-id'])
     markdown = read.sections[0].markdown
-    assert '<a id=original-id></a>' in markdown
+    assert '<a id="original-id"></a>' in markdown
     assert '<b>Bold🦷</b>' in markdown
     assert '<p style="text-align: center;">' in markdown
     if operation == 'append':

@@ -87,7 +87,9 @@ def test_inline_runs_merge_without_emphasis_or_links(code_document):
         ('`y`', {**FONT, **GREEN, 'link': {'url': 'https://example.com'}}),
         (' after\n', {'italic': True}),
     ]])
-    assert render(doc) == '<b>Before</b> `` x😀 <b> `y` `` <i>after</i>\n\n'
+    assert render(doc) == (
+        '<b>Before</b>&#32;`` x😀 <b> `y` ``&#32;<i>after</i>\n\n'
+    )
     typed = GoogleDocument.model_validate(deepcopy(doc))
     assert typed.to_markdown() == render(doc)
 
@@ -410,7 +412,7 @@ def test_native_switch_is_independent(native_code_document, monkeypatch,
     assert '```' not in markup
     assert '`UI_CODE' not in markup
     assert '\ue907' not in markup
-    assert 'UI_CODE_20261027 = 1' in markup
+    assert 'UI&#95;CODE&#95;20261027 &#61;&#32;1' in markup
     monkeypatch.setenv('GOOGLE_DOCS_MCP_READ_NATIVE_CODE_BLOCKS', 'true')
     get_settings.cache_clear()
     assert markup != render(native_code_document)

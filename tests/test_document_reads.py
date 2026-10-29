@@ -245,14 +245,14 @@ def test_captured_read_preserves_inline_and_paragraph_styles(
         '<b>bold</b>',
         '<i>italic</i>',
         '<u>underline</u>',
-        '<s>strike-through</s>',
-        '<sup>super-script</sup>',
-        '<sub>sub-script</sub>',
-        '<span style="font-variant: small-caps;">small-caps</span>',
+        '<s>strike&#45;through</s>',
+        '<sup>super&#45;script</sup>',
+        '<sub>sub&#45;script</sub>',
+        '<span style="font-variant: small-caps;">small&#45;caps</span>',
         '<p style="text-align: right;">',
         '<p style="text-align: center;">',
         '<p style="text-align: justify;">',
-        '  \nIt also includes multiple soft breaks',
+        '<br>It also includes multiple soft breaks',
     ]:
         assert fragment in text
     assert 'Text after title.' not in text
@@ -267,8 +267,8 @@ def test_partial_read_includes_descendants_and_heading_anchors(mock_docs):
     assert result.selected_headings == ['parent']
     assert len(result.sections) == 1
     text = result.sections[0].markdown
-    assert '<a id=parent></a>Parent' in text
-    assert '<a id=nested></a>Nested' in text
+    assert '<a id="parent"></a>Parent' in text
+    assert '<a id="nested"></a>Nested' in text
     assert 'Target phrase again' in text
     assert 'elsewhere' not in text
     assert 'Introduction' not in text
@@ -334,7 +334,7 @@ def test_captured_inline_images_are_included_in_reads(
         uri = f'https://example.com/fixture-image-{index}.png'
         embedded['title'] = title
         embedded['imageProperties']['contentUri'] = uri
-        expected_images.append(f'![{title}]({uri})')
+        expected_images.append(f'<img src="{uri}" alt="{title}">')
     assert expected_images
     mock_docs.get.return_value.execute.side_effect = None
     mock_docs.get.return_value.execute.return_value = captured_document
@@ -417,7 +417,7 @@ def test_inline_object_title_is_optional_in_plain_text(simple_document, title):
     })
     assert element.to_text(document) == (title or '')
     assert element.to_markdown(document) == (
-        f'![{title or ""}](https://example.com/image.png)'
+        f'<img src="https://example.com/image.png" alt="{title or ""}">'
     )
 
 

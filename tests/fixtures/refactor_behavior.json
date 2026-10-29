@@ -1,5 +1,5 @@
 {
-  "rendered": "Hello <b>😀 X</b>\n\n",
+  "rendered": "Hello&#32;<b>😀 X</b>\n\n",
   "conversions": {
     "paragraphs": {
       "requests": [

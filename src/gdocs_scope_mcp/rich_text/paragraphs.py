@@ -203,8 +203,10 @@ def _convert_page_elements(
     added = []
     last = paragraph
     for element in elements:
-        if isinstance(element, NavigableString):
-            content = str(element)
+        if isinstance(element, NavigableString) or (
+            isinstance(element, Tag) and element.name == 'br'
+        ):
+            content = ('\u000b' if isinstance(element, Tag) else str(element))
             start_index = last.start_index + len(last)
             text_run = GoogleDocumentTextRun(
                 content=content,
