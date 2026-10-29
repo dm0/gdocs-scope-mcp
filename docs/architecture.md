@@ -12,7 +12,7 @@ application operation merely to reuse one of its helpers.
 | `server.py`, `__main__.py` | Construct the server, capture startup identity, configure middleware, register tools and start STDIO. |
 | `tools/` | Thin MCP contracts, descriptions, schemas, annotations and explicit registration functions. |
 | `google_api/credentials.py` | Token precedence, legacy aliases, gog fallback and OAuth refresh. |
-| `google_api/oauth.py` | PKCE sessions, callback validation, private session files, token exchange and the google-auth public-client refresh adapter. |
+| `google_api/oauth.py` | Shared Desktop client configuration, PKCE sessions, callback validation, private session files, token exchange and the google-auth public-client refresh adapter. |
 | `auth_setup.py` | Desktop authorization CLI, bounded loopback listener and headless session lifecycle. |
 | `google_api/clients.py` | Construct discovery clients; cache Docs reads by default, with explicit uncached construction where required. |
 | `google_api/files.py` | Document listing and creation workflows, independent of transport. |

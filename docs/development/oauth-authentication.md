@@ -51,11 +51,24 @@ remained outside the repository. These initial checks establish
 compatibility for the supplied client with its secret, not general acceptance
 of ID-only Desktop authorization.
 
+Subsequent distribution checks on the same date used commit `ad8aa43` through
+`uv tool run --isolated --from git+file://...@ad8aa43`, with dependency versions
+constrained to those tested in the worktree. uv built and installed the package
+from a clean Git checkout. No credentials file or client environment overrides
+were supplied, and an isolated XDG directory excluded local client settings.
+Browser authorization with the bundled pair succeeded. The resulting token
+file had mode `600`, a refresh token and no access token. Two separately started
+installed STDIO servers each refreshed and read the authorized test document
+successfully. The user's existing token files were not replaced. The Git
+source was local; these checks did not publish changes to GitHub or establish
+unrestricted public availability of the OAuth application.
+
 Permanent coverage is in `tests/test_auth_setup.py` and `tests/test_oauth_pkce.py`.
 It exercises actual loopback sockets and the installed google-auth refresh
 implementation with substituted token-endpoint responses. The complete offline
-suite passed with 1711 tests and 91 skips. Ruff, wheel/sdist builds and both
-installed entry points passed; installed-wheel discovery exposed 32 MCP tools.
+suite passed with 1719 tests and 91 skips after bundling the client. Ruff passed.
+Earlier wheel/sdist builds and both installed entry points passed;
+installed-wheel discovery exposed 32 MCP tools.
 
 ## Distribution considerations
 
