@@ -467,3 +467,28 @@ def test_decision_permission_errors_remain_specific(
     assert error.value.failure.code == 'PERMISSION_DENIED'
     assert permission in error.value.failure.description
     assert len(proposal_api['batches']) == 1
+
+
+def test_deletion_guards_next_paragraph_when_removing_break(proposal_api):
+    proposal_api['document']['body']['content'][3]['paragraph']['elements'][
+        0
+    ]['textRun']['suggestedDeletionIds'] = ['neighbor-proposal']
+    with pytest.raises(ToolFailureError) as error:
+        suggestion_writes.suggest('example', op(
+            operation='delete_paragraph', anchor='Target phrase',
+        ))
+    assert error.value.failure.code == 'EDIT_CONFLICT'
+    assert not proposal_api['batches']
+
+
+@pytest.mark.parametrize('operation', ['replace', 'format_text'])
+def test_text_operations_preserve_paragraph_terminator(
+    proposal_api, operation,
+):
+    arguments = {'operation': operation, 'find': 'Target phrase\n'}
+    arguments.update({'text': 'replacement'} if operation == 'replace'
+                     else {'style': {'bold': True}})
+    with pytest.raises(ToolFailureError) as error:
+        suggestion_writes.suggest('example', op(**arguments))
+    assert error.value.failure.code == 'INVALID_ARGUMENT'
+    assert not proposal_api['batches']

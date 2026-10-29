@@ -225,6 +225,15 @@ def _plan(view, operation, heading_id):
         start, end = paragraph.start_index, min(paragraph.end_index, terminal)
         if start >= end:
             fail('INVALID_ARGUMENT', 'The final paragraph is already empty.')
+        if end == paragraph.end_index:
+            # Deleting a paragraph break merges with its next paragraph. That
+            # neighbor is a structural dependency, even without matching text.
+            neighbor = next((m.paragraph for m in tree.find_all('\n', True)
+                             if m.paragraph.start_index == end), None)
+            if neighbor is None:
+                fail('INVALID_ARGUMENT', 'The following paragraph boundary '
+                     'cannot be verified; no deletion was proposed.')
+            _safe_paragraph(view, neighbor)
     else:
         start, end = docs_edit._full_text_range_to_doc_indices(
             match.start_index,
@@ -232,6 +241,9 @@ def _plan(view, operation, heading_id):
             paragraph.text,
             paragraph.text_map,
         )
+        if end > paragraph.end_index - 1:
+            fail('INVALID_ARGUMENT', 'Text matching cannot include the '
+                 'paragraph terminator. Use delete_paragraph to remove it.')
     target = {'startIndex': start, 'endIndex': end}
     if operation.operation == 'format_text':
         style = operation.style.model_dump(exclude_none=True)
