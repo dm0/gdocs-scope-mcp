@@ -2,6 +2,7 @@
 
 import json
 import logging
+import time
 
 from gdocs_scope_mcp.cache.types import Entry
 
@@ -10,6 +11,9 @@ log = logging.getLogger(__name__)
 
 class ValidatedSnapshots:
     """Share revision, expiry and invalidation rules across backends."""
+
+    def __init__(self, *, clock=time.monotonic):
+        self.clock = clock
 
     def read(self, owner, doc_id, options, *, fetch, check, settings):
         """Validate access/revision on hits; never return stale on error."""

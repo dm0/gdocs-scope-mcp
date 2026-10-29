@@ -13,7 +13,7 @@ from functools import lru_cache
 from filelock import FileLock
 from platformdirs import user_cache_path
 
-from gdocs_scope_mcp.cache.memory import SnapshotCache
+from gdocs_scope_mcp.cache.base import ValidatedSnapshots
 from gdocs_scope_mcp.cache.types import Entry
 from gdocs_scope_mcp.settings import get_settings
 
@@ -21,7 +21,7 @@ log = logging.getLogger(__name__)
 PAGE_SIZE = 4096
 
 
-class DiskSnapshotCache(SnapshotCache):
+class DiskSnapshotCache(ValidatedSnapshots):
     """Share snapshots and document locks between local MCP processes."""
 
     def __init__(self, directory, max_bytes, *, clock=time.time):

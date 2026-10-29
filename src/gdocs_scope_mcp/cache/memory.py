@@ -14,7 +14,7 @@ class SnapshotCache(ValidatedSnapshots):
     """Serialize same-document operations and bound process-local storage."""
 
     def __init__(self, *, clock=time.monotonic):
-        self.clock = clock
+        super().__init__(clock=clock)
         self.entries = OrderedDict()
         self.size = 0
         self.lock = RLock()

@@ -118,3 +118,11 @@ def test_shared_apis_do_not_import_private_helpers():
                 assert not any(a.name.startswith('_') for a in node.names), (
                     path.relative_to(ROOT), node.lineno,
                 )
+
+
+def test_cache_storage_backends_share_only_the_algorithm():
+    """Disk storage must not inherit the process-local memory backend."""
+    graph = import_graph()
+    assert PREFIX + '.cache.memory' not in graph[PREFIX + '.cache.disk']
+    assert PREFIX + '.cache.base' in graph[PREFIX + '.cache.disk']
+    assert PREFIX + '.cache.base' in graph[PREFIX + '.cache.memory']
