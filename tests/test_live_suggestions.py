@@ -6,6 +6,8 @@
 import asyncio
 import uuid
 
+from gdocs_scope_mcp.suggestion_index import index_document
+
 from .native_snapshot_assertions import assert_tabs_unchanged
 from .test_live_table_identity import paragraph_text, table_probe  # noqa: F401
 
@@ -33,6 +35,30 @@ def changed_ids(response, kind):
         for r in response.get('suggestionResponses', [])
         for sid in r.get(kind, [])
     }
+
+
+async def cleanup_suggestion_tab(probe, tab_id, original_tabs):
+    """Remove pending owned proposals before their temporary tab disappears."""
+    try:
+        native = await probe.call(0, 'probe_suggestions_document',
+                                  {'threads': True})
+        index = index_document(native)
+        open_ids = {t['suggestionId'] for t in native.get('suggestions', [])
+                    if t.get('status') == 'OPEN'}
+        owned = sorted(sid for sid, locations in index.locations.items()
+                       if sid in open_ids
+                       and any(loc.tab_id == tab_id for loc in locations))
+        for offset in range(0, len(owned), 50):
+            await probe.call(0, 'docs_suggestions_manage', {
+                'doc_id': native['documentId'], 'action': 'delete',
+                'suggestion_ids': owned[offset:offset + 50],
+            })
+    finally:
+        current = await probe.call(0, 'probe_tabs_document')
+        await probe.batch([{'deleteTab': {'tabId': tab_id}}], current)
+        after = await probe.call(0, 'probe_tabs_document')
+        assert_tabs_unchanged(original_tabs, after['tabs'])
+        probe.report['temporary_tab_removed'] = True
 
 
 def test_live_suggestion_lifecycle(
@@ -306,14 +332,7 @@ def test_live_suggestion_lifecycle(
                 probe.report['lifecycle_passed'] = True
             finally:
                 if tab_id:
-                    current = await probe.call(0, 'probe_tabs_document')
-                    await probe.batch(
-                        [{'deleteTab': {'tabId': tab_id}}],
-                        current,
-                    )
-                    after = await probe.call(0, 'probe_tabs_document')
-                    assert_tabs_unchanged(before['tabs'], after['tabs'])
-                    probe.report['temporary_tab_removed'] = True
+                    await cleanup_suggestion_tab(probe, tab_id, before['tabs'])
 
     asyncio.run(run())
 
@@ -552,12 +571,6 @@ def test_live_accepted_content_and_scoped_inspection(
                 probe.report['native_thread_inspection_passed'] = True
             finally:
                 if tab_id:
-                    current = await probe.call(0, 'probe_tabs_document')
-                    await probe.batch(
-                        [{'deleteTab': {'tabId': tab_id}}], current
-                    )
-                    after = await probe.call(0, 'probe_tabs_document')
-                    assert_tabs_unchanged(before['tabs'], after['tabs'])
-                    probe.report['temporary_tab_removed'] = True
+                    await cleanup_suggestion_tab(probe, tab_id, before['tabs'])
 
     asyncio.run(run())

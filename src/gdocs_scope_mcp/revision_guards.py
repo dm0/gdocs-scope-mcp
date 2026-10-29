@@ -224,7 +224,7 @@ def uses_target_revision():
 
 
 def submit(service, doc_id, requests, revision=None, *, native=False,
-           force_required=False):
+           force_required=False, write_mode=None):
     """Send one guarded atomic batch; classify uncertainty without replay."""
     edit = _active.get()
     if native and edit is not None and edit.expected_revision is not None:
@@ -242,6 +242,10 @@ def submit(service, doc_id, requests, revision=None, *, native=False,
     if not native:
         key = 'targetRevisionId' if target else 'requiredRevisionId'
         body['writeControl'] = {key: revision}
+    if write_mode is not None:
+        if native or write_mode not in {'EDIT', 'SUGGEST'}:
+            raise ValueError('Explicit write mode requires a guarded batch')
+        body['writeControl']['writeMode'] = write_mode
     try:
         result = service.documents().batchUpdate(
             documentId=doc_id, body=body,

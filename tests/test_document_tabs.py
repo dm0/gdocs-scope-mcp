@@ -320,6 +320,7 @@ def test_catalog_optional_tab_selectors():
                     'docs_delete_comment',
                     'docs_reopen_comment', 'docs_edit_comment',
                     'docs_delete_comment_reply',
+                    'docs_suggestions_manage',
                 }:
                     continue
                 assert 'tab_id' in tool.inputSchema['properties'], tool.name
