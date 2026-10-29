@@ -86,6 +86,7 @@ def probe_suggestions_batch(
 ) -> dict:
     """Probe revision-guarded native suggestions without production tools."""
     allowed = {'insertText', 'deleteContentRange', 'updateTextStyle',
+               'updateParagraphStyle',
                'createNamedRange', 'acceptSuggestion', 'rejectSuggestion',
                'deleteSuggestion', 'addCommentReply'}
     if (mode not in {'EDIT', 'SUGGEST'} or not requests

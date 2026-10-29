@@ -3,7 +3,10 @@
 [Implementation notes](implementation-notes.md) · [Indexing](../protocol.md#indexing-and-suggestions)
 
 Investigated on 2026-10-28. This is research, not a supported MCP tool contract.
-Production tools and defaults were not changed.
+Production tools and defaults were not changed by the investigation. The
+subsequent implementation of [reading support](../tools/suggestions.md) adds
+clean ordinary views and a dedicated native proposal reader. The baseline
+reader observations below describe behavior before that implementation.
 
 ## API contract
 
@@ -61,12 +64,14 @@ files have the same basename and `.0.log` / `.1.log` suffixes.
 
 ## Implications for this MCP
 
-The current reader requests inline suggestions for correct source indices,
-but ordinary text-run models do not retain suggestion IDs or style-change
-maps. Thread reading currently exposes comments only. Consequently, adding a
+At the investigation baseline, the reader requested inline suggestions for
+correct source indices, but ordinary text-run models did not retain suggestion
+IDs or style-change maps. Thread reading exposed comments only. Adding a
 write-mode switch alone would leave agents without a clear review workflow.
 The live `docs_read` observation confirmed that the proposed insertion was
-rendered without its native suggestion ID.
+rendered without its native suggestion ID. Reading support now addresses these
+gaps through an accepted-content view and separate proposal inspection;
+proposal creation/management remains tracked in #43.
 
 The agreed implementation sequence is tracked in two issues:
 

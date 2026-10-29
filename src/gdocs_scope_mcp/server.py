@@ -49,6 +49,7 @@ from . import (
     comments,
     docs_edit,
     entity_edit,
+    suggestions,
     table_format,
     table_patch,
     table_read,
@@ -83,6 +84,8 @@ from .models import (
     ResolveCommentResponse,
 )
 from .settings import code_formatting, get_settings
+from .suggestion_models import SuggestionsReadResponse
+from .suggestions import SuggestionCursor, SuggestionId, SuggestionLimit
 from .table_format import FormatChanges, FormatResponse
 from .table_patch import CellPatches, PatchResponse
 from .table_read import (
@@ -157,6 +160,23 @@ DOCUMENT TABS:
     not every document tab. TAB_MISMATCH means the supplied reference and
     selected tab differ: follow its suggested_action to fix the selector or
     obtain a reference in the intended tab. Do not edit opaque tokens.
+
+SUGGESTIONS:
+    docs_get_tree and docs_read show accepted content: pending insertions are
+    hidden, pending deletions retained, and proposed formatting is not applied.
+    This view does not accept or reject anything. Their suggestions metadata
+    reports document_has_pending and selected_content_has_pending (null means
+    unknown), relevant IDs and detection warnings. General named-style effects
+    may be unknown. Without proposals, ordinary reading needs no extra call.
+    unavailable_heading_ids flags accepted selectors that cannot be mapped
+    safely to native headings; read the whole tab instead of using them.
+    Use docs_suggestions_read to inspect native IDs, status, summaries, source
+    ranges and replies separately. Scope is first tab by default. Existing
+    editing tools still perform direct edits from native inline coordinates.
+    Preview coordinates must never drive a write. Pending structural changes
+    may prevent safe table references; inspect suggestions.warnings when an
+    HTML table lacks data-mcp-table-ref. Proposal-writing tools are separate
+    future work; this reading tool performs no mutations.
 
 CONCURRENT EDITS:
     Server setting write_revision_mode selects required (default) or target.
@@ -345,6 +365,11 @@ def docs_get_tree(doc_id: str, *,
     """
     Fetch a Google Doc's structural outline as a JSON object.
 
+    Headings describe accepted content without pending suggestions applied.
+    suggestions metadata reports pending changes in the document/selected
+    tab, with null for unavailable detection. Read details separately with
+    docs_suggestions_read; this tool accepts or rejects no changes.
+
     The object contains document_id, title, revision_id, and a flat sections
     collection. Each section has id, title, level, and ancestor_ids. Hierarchy
     is represented by ancestor_ids, not nested section objects. Body
@@ -386,6 +411,42 @@ def docs_tabs_list(doc_id: str) -> TabsResponse:
 
 
 @mcp.tool(
+    output_schema=_tool_response_schema(SuggestionsReadResponse),
+    annotations={'readOnlyHint': True, 'destructiveHint': False,
+                 'idempotentHint': True, 'openWorldHint': True},
+)
+def docs_suggestions_read(
+    doc_id: str, *, tab_id: TabId | None = None,
+    heading_id: NonemptyText | None = None,
+    suggestion_id: SuggestionId | None = None,
+    include_closed: bool = False, limit: SuggestionLimit = 50,
+    page_token: SuggestionCursor | None = None,
+) -> SuggestionsReadResponse:
+    """Inspect native proposals separately from accepted-content reads.
+
+    Omitted tab_id selects the first tab; heading_id selects an accepted
+    heading subtree. Ordinary docs_read/docs_get_tree omit proposed insertions
+    and retain proposed deletions without accepting/rejecting anything.
+    This tool lists OPEN/unknown proposals by default. include_closed also
+    returns decided threads; an explicit suggestion_id includes its status
+    regardless of include_closed and pages its replies with a complete head.
+    Summaries and diagnostic native ranges identify proposals, not editable
+    source text or preview coordinates. Unknown locations are returned with
+    scope_match=unknown rather than assigned to a tab/heading by their summary.
+    Closed threads can lose their source ranges. Lists omit posts/reply bodies;
+    summaries and locations are bounded with truncation flags. Use detail to
+    read complete posts. page_token requires unchanged arguments and native
+    thread/document state; restart without it after STALE_REFERENCE.
+    No proposals or comments are created, accepted, rejected or deleted.
+    """
+    return suggestions.read(
+        doc_id, tab_id=tab_id, heading_id=heading_id,
+        suggestion_id=suggestion_id, include_closed=include_closed,
+        limit=limit, page_token=page_token,
+    )
+
+
+@mcp.tool(
     output_schema=_tool_response_schema(DocumentSubset),
     annotations={
         'readOnlyHint': True,
@@ -401,6 +462,13 @@ def docs_read(
     """
     Read the selected Google document tab's content converted to Markdown.
 
+    Return accepted content: hide proposed insertions, retain proposed
+    deletions, and omit suggested formatting. suggestions identifies the
+    view, pending changes in the document and returned scope, relevant IDs
+    and detection warnings. A null pending flag means unknown, not absent.
+    Use docs_suggestions_read for proposals rather than interpreting this
+    Markdown as a diff. No suggestions are accepted or rejected by reading.
+
     Native people, resource, date and dropdown chips remain identifiable HTML
     spans with data-mcp-entity and data-mcp-id, rather than ordinary labels or
     links. Pass a span to a rich insertion tool to create a native instance.
@@ -408,7 +476,9 @@ def docs_read(
     options. tab_id selects a root or nested tab; omit for the first tab.
     Discover IDs with docs_tabs_list; returned tab_id identifies this view.
 
-    Table HTML includes data-mcp-table-ref, including nested tables. Pass a
+    Table HTML includes data-mcp-table-ref when its native position can be
+    validated, including nested tables. Unsafe refs are omitted with an
+    explicit suggestions.warnings entry. Pass a
     reference to docs_table_read for bounded structured cells and A1 addresses.
     Refs describe checked section positions, not persistent object identity:
     heading ID hierarchy + table ordinal + section table structure inventory.
@@ -461,6 +531,10 @@ def docs_tables_list(
 ) -> TablesListResponse:
     """Discover native tables in the selected tab without returning full text.
 
+    Summaries use accepted content without applying pending suggestions.
+    TARGET_CHANGED means structural proposals prevent safe native refs;
+    inspect docs_read and docs_suggestions_read before retrying.
+
     Returns compact summaries: opaque table_ref, nearest heading context,
     dimensions, nesting/parent-cell reference, merged geometry warnings and
     a preview of at most 200 Unicode code points. Tables are in preorder,
@@ -493,6 +567,10 @@ def docs_table_read(
     *, tab_id: TabId | None = None,
 ) -> TableReadResponse:
     """Inspect a table reference from docs_read or docs_tables_list.
+
+    Cell Markdown uses accepted content without applying pending suggestions.
+    Structural proposals that prevent verified native refs fail explicitly
+    with TARGET_CHANGED. Write planning/snapshots retain native coordinates.
 
     Returns rows/cells, A1 address, cell_ref, zero-based coordinates and spans,
     physical_cell positions, merged-slot covered_by and unsupported-edit

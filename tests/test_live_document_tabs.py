@@ -8,6 +8,7 @@ import uuid
 
 from bs4 import BeautifulSoup
 
+from .native_snapshot_assertions import assert_tabs_unchanged
 from .test_live_table_identity import table_probe  # noqa: F401
 
 
@@ -304,7 +305,15 @@ def test_live_document_tabs(live_test_doc, table_probe):
                     },
                 )
                 assert default['tab_id'] == original_read['tab_id']
-                assert default['sections'] == original_read['sections']
+                # Compare selectors on the current snapshot: Markdown image
+                # URLs from the initial read may already have rotated. Native
+                # preservation is checked separately in the cleanup below.
+                explicit = await probe.call(1, 'docs_read', {
+                    'doc_id': live_test_doc,
+                    'tab_id': original_read['tab_id'],
+                })
+                assert default['revision_id'] == explicit['revision_id']
+                assert default['sections'] == explicit['sections']
                 probe.report['checks_passed'] = True
             finally:
                 if comment_id:
@@ -317,7 +326,7 @@ def test_live_document_tabs(live_test_doc, table_probe):
                         [{'deleteTab': {'tabId': parent}}], current
                     )
                 after = await probe.call(0, 'probe_tabs_document')
-                assert after['tabs'] == original_tabs
+                assert_tabs_unchanged(original_tabs, after['tabs'])
                 probe.report['cleanup_passed'] = True
 
     asyncio.run(run())
