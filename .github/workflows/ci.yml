@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: ['**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Python ${{ matrix.python }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        # Every stable minor from the declared minimum through Python 3.14.
+        python: ['3.10', '3.11', '3.12', '3.13', '3.14']
+    env:
+      UV_PYTHON: ${{ matrix.python }}
+      UV_VERSION: '0.12.18'
+      # No Google secrets or live-test target are supplied to this workflow.
+      GOOGLE_DOCS_MCP_TOKEN: /tmp/gdocs-scope-mcp-ci-missing-token.json
+    steps:
+      - name: Check out source and version tags
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up uv and Python
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: ${{ matrix.python }}
+          enable-cache: true
+      - name: Install locked development dependencies
+        run: uv sync --locked
+      - name: Install pinned Ruff as a standalone tool
+        run: uv tool install ruff==0.17.3
+      - name: Lint source and CI helpers
+        run: ruff check --config pyproject.toml src .github/scripts
+      - name: Lint CI test infrastructure explicitly
+        run: ruff check --config pyproject.toml tests/conftest.py tests/test_ci_network.py
+      - name: Run all offline tests (loopback and Unix sockets only)
+        run: uv run --locked pytest -q --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,::1
+      - name: Build wheel and source distribution
+        run: uv build
+      - name: Verify artifact contents and isolated installations
+        run: uv run --locked python .github/scripts/check_artifacts.py dist

@@ -24,7 +24,70 @@ uv run pytest
 ```
 
 For pip-based development, install the editable package and pytest with
-`pip install -e . pytest`.
+`pip install -e . pytest pytest-socket`.
+
+## Continuous integration
+
+`.github/workflows/ci.yml` runs on pushes to any branch, pull requests, and
+manual dispatch. Branch pushes are sufficient; a PR is not required. Push
+events for tags are excluded. A same-repository branch push followed by a PR
+can produce separate runs. No package publishing, releases, or branch-protection
+changes are performed.
+
+The Ubuntu 24.04 matrix covers every stable minor version from Python 3.10
+(the declared minimum) through 3.14: 3.10, 3.11, 3.12, 3.13, and 3.14.
+Each job installs runtime and development dependencies from
+`uv.lock`, run the complete offline suite including architecture/MCP contract
+checks, build wheel and sdist, and verify isolated installations of both.
+Checkout fetches full history and tags for setuptools-scm version discovery.
+Third-party actions are pinned to full commit SHAs, uv to 0.12.18, and Ruff
+to 0.17.3. Update pins deliberately and repeat the commands below.
+
+Ruff configuration lives in `pyproject.toml` and includes the existing machine's
+rule selections, ignores, 79-character line limit, single inline quotes,
+NumPy docstrings, import settings, and default exclusion of `tests/`. Source
+and CI scripts are linted normally; CI test infrastructure is passed as explicit
+file paths to check it despite that directory exclusion. Use the same approach
+for other changed tests. Ruff is installed as a standalone tool, not a project
+dependency.
+
+Run the CI commands from the repository root:
+
+```bash
+uv sync --locked
+ruff check --config pyproject.toml src .github/scripts
+ruff check --config pyproject.toml tests/conftest.py tests/test_ci_network.py
+uv run --locked pytest -q --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,::1
+uv build
+uv run --locked python .github/scripts/check_artifacts.py dist
+```
+
+Use `UV_PYTHON=3.10` through `UV_PYTHON=3.14` to select a matrix interpreter. For
+parallel local runs, set `UV_PROJECT_ENVIRONMENT=.venv-ci/3.10` or
+`.venv-ci/3.14` consistently on all uv commands for that run. These are separate
+environments for this checkout; do not borrow another checkout's environment.
+Use a clean output directory containing exactly one wheel and one sdist for
+artifact checks. The helper accepts a different build output directory as its
+argument.
+
+CI supplies no Google credentials or live-test document. `pytest-socket`
+restricts test-process sockets to loopback and Unix sockets, retaining real
+local OAuth callback tests while blocking external connects. The CI network
+regression confirms that block without contacting Google. The restriction is
+not an operating-system sandbox for arbitrary child processes. STDIO discovery
+smokes call only `server_info` and tool listing, with an explicit missing token
+path, and never invoke document operations. Live tests require the separate
+explicit development-document opt-in described below.
+
+The artifact helper compares every Python source module with both archives,
+checks their version metadata, then installs each in its own temporary virtual
+environment using locked runtime constraints. It runs the authorization CLI's
+help and discovers tools through the installed server's console entry point,
+checking the installed package path/version and the entire catalog against the
+worktree. Temporary environments are removed on completion or failure.
+
+References: [uv GitHub Actions integration](https://docs.astral.sh/uv/guides/integration/github/),
+[pytest-socket](https://github.com/miketheman/pytest-socket).
 
 The server can also be started with `uv run -m gdocs_scope_mcp`.
 `gdocs-scope-mcp` and `gdocs-scope-mcp-auth` are the installed commands.

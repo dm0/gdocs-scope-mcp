@@ -4,6 +4,7 @@ import json
 import os
 import re
 import struct
+import sys
 import zlib
 from contextlib import asynccontextmanager
 from copy import deepcopy
@@ -26,7 +27,7 @@ def isolated_mcp():
         repo = Path(__file__).resolve().parents[1]
         executable = 'fastmcp' if probe else 'gdocs-scope-mcp'
         transport = StdioTransport(
-            command=str(repo / '.venv/bin' / executable),
+            command=str(Path(sys.executable).parent / executable),
             args=(['run', str(repo / 'tests/probes/table_server.py'),
                    '--transport', 'stdio'] if probe else []),
             cwd=str(repo), env=dict(os.environ), log_file=log,
