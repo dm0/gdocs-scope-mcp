@@ -4,6 +4,25 @@ User-facing changes to `gdocs-scope-mcp` are listed in descending version order,
 starting with v0.3.0. The upstream 0.2.0 baseline is documented separately for
 provenance; it is not a release of this independent project.
 
+## [v0.6.1] - 2026-10-29
+
+### Fixed
+
+- Disable document snapshot caching by default. On large documents, checking
+  only the Docs revision can be nearly as slow as downloading the full
+  document, and changed cached documents require both requests. Explicit
+  `document_cache_enabled=true` or
+  `GOOGLE_DOCS_MCP_DOCUMENT_CACHE_ENABLED=true` still enables caching with
+  native revision validation and the configured disk or memory backend.
+
+### Added
+
+- With caching enabled, diagnostic logs separately time native document and
+  revision requests, helping distinguish Google API request latency from
+  local cache handling. Logs omit document IDs, revision IDs and content.
+
+[v0.6.1]: https://github.com/dm0/gdocs-scope-mcp/compare/v0.6.0...v0.6.1
+
 ## [v0.6.0] - 2026-10-29
 
 ### Added
