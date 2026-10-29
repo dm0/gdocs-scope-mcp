@@ -2,7 +2,6 @@
 
 # Explicit byte budgets and fixture counts are part of these contracts.
 # ruff: noqa: D103, PLR2004
-
 import multiprocessing
 import sqlite3
 import time

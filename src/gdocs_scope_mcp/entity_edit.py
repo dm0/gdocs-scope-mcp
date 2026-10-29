@@ -1,16 +1,22 @@
 """Inspect native entities and guard definition/instance mutations."""
 
 # Resolve the existing authentication/service boundary without import cycles.
-# ruff: noqa: PLC0415
-
 import uuid
 
-from .document_tabs import select
-from .entities import EntityDetails, EntityEditResponse, collect_entities
-from .errors import ToolFailureError
-from .models import EditFailedResponse
-from .revision_guards import revision_changed, uses_target_revision
-from .table_insertion import TableInsertionPlan
+from gdocs_scope_mcp.contracts import EditFailedResponse
+from gdocs_scope_mcp.documents.tabs import select
+from gdocs_scope_mcp.entities import (
+    EntityDetails,
+    EntityEditResponse,
+    collect_entities,
+)
+from gdocs_scope_mcp.errors import ToolFailureError
+from gdocs_scope_mcp.google_api import clients
+from gdocs_scope_mcp.revision_guards import (
+    revision_changed,
+    uses_target_revision,
+)
+from gdocs_scope_mcp.rich_text.table_insertion import TableInsertionPlan
 
 INSERT_ENTITY_KINDS = {'insertPerson', 'insertRichLink', 'insertDate',
                        'insertDropdown'}
@@ -38,8 +44,8 @@ def _tab_document(service, doc_id: str, tab_id: str | None = None):
 
 def _service():
     """Reuse the project's configured OAuth service provider."""
-    from . import docs_edit
-    return docs_edit._get_service('docs', 'v1')
+
+    return clients.get_service('docs', 'v1')
 
 
 def get_entity(doc_id: str, entity_id: str, tab_id: str | None = None):

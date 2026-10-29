@@ -6,7 +6,8 @@ import pytest
 from fastmcp import Client
 from jsonschema import validate
 
-from gdocs_scope_mcp import docs_edit, server
+from gdocs_scope_mcp import server
+from gdocs_scope_mcp.documents import reading
 
 
 @pytest.mark.parametrize(
@@ -22,7 +23,7 @@ from gdocs_scope_mcp import docs_edit, server
 )
 def test_effective_selection(mock_docs, requested, selected, unknown):
     """Resolve once, order by source, and distinguish empty from full reads."""
-    result = docs_edit.read('example', requested)
+    result = reading.read('example', requested)
 
     assert result.selected_headings == selected
     assert [item.heading_id for item in result.sections] == selected
@@ -36,7 +37,7 @@ def test_effective_selection(mock_docs, requested, selected, unknown):
 
 def test_whole_read_identifies_preamble(mock_docs):
     """Keep pre-heading content distinct from selectable headings."""
-    result = docs_edit.read('example')
+    result = reading.read('example')
 
     assert [item.heading_id for item in result.sections] == [
         None, 'parent', 'other',
@@ -56,13 +57,13 @@ def test_document_without_headings(mock_docs, simple_document, empty):
     simple_document['body']['content'] = (
         [] if empty else simple_document['body']['content'][:1]
     )
-    result = docs_edit.read('example')
+    result = reading.read('example')
 
     assert result.partial is False
     assert [item.heading_id for item in result.sections] == (
         [] if empty else [None]
     )
-    failure = docs_edit.read('example', ['parent', 'parent'])
+    failure = reading.read('example', ['parent', 'parent'])
     assert failure.code == 'HEADING_NOT_FOUND'
     mock_docs.batchUpdate.assert_not_called()
 

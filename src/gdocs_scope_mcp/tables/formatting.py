@@ -2,7 +2,6 @@
 
 # Share the native service/read boundary without module import cycles.
 # ruff: noqa: PLC0415
-
 import logging
 import time
 from copy import deepcopy
@@ -11,19 +10,29 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from typing_extensions import Self
 
-from .errors import ToolFailureError
-from .models import EditFailedResponse
-from .revision_guards import MAX_ATTEMPTS, RevisionRaceError, submit
-from .table_refs import Layout
-from .table_snapshots import resolve_cells, validate_baseline
-from .table_style_state import (
+from gdocs_scope_mcp.contracts import EditFailedResponse
+from gdocs_scope_mcp.errors import ToolFailureError
+from gdocs_scope_mcp.google_api import clients
+from gdocs_scope_mcp.revision_guards import (
+    MAX_ATTEMPTS,
+    RevisionRaceError,
+    submit,
+)
+from gdocs_scope_mcp.tables.refs import Layout
+from gdocs_scope_mcp.tables.snapshots import resolve_cells, validate_baseline
+from gdocs_scope_mcp.tables.style_state import (
     CELL_FIELDS,
     cell_at,
     edge_resource,
     neighbor,
     property_state,
 )
-from .table_tokens import CellAddress, coordinates, decode, fail
+from gdocs_scope_mcp.tables.tokens import (
+    CellAddress,
+    coordinates,
+    decode,
+    fail,
+)
 
 log = logging.getLogger(__name__)
 Points = Annotated[float, Field(strict=True, ge=0, le=10000,
@@ -313,8 +322,8 @@ def plan(document, entry, changes, available):
 
 def format_table(doc_id, table_ref, base_token, changes, *, tab_id=None):
     """Recheck properties and commit one strictly guarded style batch."""
-    from . import docs_edit
-    from .table_read import _fetch
+
+    from gdocs_scope_mcp.tables.fetching import _fetch
     table = decode(table_ref, 'table', doc_id)
     baseline = decode(base_token, 'base', doc_id)
     required = requirements(changes, baseline)
@@ -333,7 +342,7 @@ def format_table(doc_id, table_ref, base_token, changes, *, tab_id=None):
                 fail('EDIT_CONFLICT', 'A requested style property changed.')
         requests = plan(document, entry, changes, available)
         try:
-            result = submit(docs_edit._get_service(), doc_id, requests,
+            result = submit(clients.get_service(), doc_id, requests,
                             document['revisionId'], force_required=True)
         except RevisionRaceError:
             if attempt == MAX_ATTEMPTS:

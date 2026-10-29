@@ -1,5 +1,6 @@
 """Load and refresh credentials using the established token precedence."""
 
+
 import json
 import logging
 import os

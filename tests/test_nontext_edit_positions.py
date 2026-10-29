@@ -1,12 +1,14 @@
 """Specify safe edits around non-text elements for GitHub issue #23."""
 
+
 import asyncio
 import re
 
 import pytest
 from fastmcp import Client
 
-from gdocs_scope_mcp import docs_edit, server
+from gdocs_scope_mcp import server
+from gdocs_scope_mcp.documents import editing as docs_edit
 from gdocs_scope_mcp.tool_errors import ToolFailureError
 
 

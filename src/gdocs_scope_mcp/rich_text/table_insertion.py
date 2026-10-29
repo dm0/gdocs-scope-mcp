@@ -2,20 +2,19 @@
 
 # Deferred imports separate the paragraph converter and structural planner.
 # ruff: noqa: PLC0415
-
 import re
 from copy import deepcopy
 from dataclasses import dataclass, field
 
 from bs4 import NavigableString, Tag
 
-from .errors import ToolFailureError
-from .models import EditFailedResponse
-from .revision_guards import (
+from gdocs_scope_mcp.contracts import EditFailedResponse
+from gdocs_scope_mcp.errors import ToolFailureError
+from gdocs_scope_mcp.revision_guards import (
     RevisionRaceError,
     submit as guarded_submit,
 )
-from .text_indices import utf16_length
+from gdocs_scope_mcp.text_indices import utf16_length
 
 
 def unsupported_table(description: str) -> None:
@@ -62,7 +61,7 @@ class InsertionTable:
 
 def convert_table(element: Tag, start: int) -> InsertionTable:
     """Validate simple Markdown/HTML tables and prepare every cell offline."""
-    from .md2requests import (
+    from gdocs_scope_mcp.rich_text.compiler import (
         gpars_to_requests,
         html_to_gpars,
         inserted_text_from_requests,
@@ -164,7 +163,7 @@ class TableInsertionPlan:
 
     def paragraph_requests(self, paragraphs: list, start: int) -> list[dict]:
         """Rebase paragraph/run positions at the current native cursor."""
-        from .md2requests import gpars_to_requests
+        from gdocs_scope_mcp.rich_text.compiler import gpars_to_requests
 
         paragraphs = deepcopy(paragraphs)
         cursor = start
@@ -206,7 +205,7 @@ class TableInsertionPlan:
 
     def replace_image_uri(self, old: str, new: str) -> None:
         """Replace staged sources in both table cells and body paragraphs."""
-        from .md2requests import InsertionImage
+        from gdocs_scope_mcp.rich_text.compiler import InsertionImage
 
         for request in self.iter_requests():
             image = request.get('insertInlineImage')
@@ -220,7 +219,9 @@ class TableInsertionPlan:
 
     def text(self) -> str:
         """Render native paragraph text, excluding table structural indices."""
-        from .md2requests import inserted_text_from_requests
+        from gdocs_scope_mcp.rich_text.compiler import (
+            inserted_text_from_requests,
+        )
 
         text = ''
         for group in self.request_groups():
@@ -258,8 +259,10 @@ class TableInsertionPlan:
                  required_revision: str | None, table_borders: bool,
                  tab_id=None, *, size_images=None) -> None:
         """Guard each stage with the revision returned by the prior write."""
-        from .document_tabs import scope_requests, select
-        from .md2requests import inserted_text_from_requests
+        from gdocs_scope_mcp.documents.tabs import scope_requests, select
+        from gdocs_scope_mcp.rich_text.compiler import (
+            inserted_text_from_requests,
+        )
 
         documents = service.documents()
         revision = required_revision or documents.get(

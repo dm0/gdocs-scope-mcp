@@ -7,15 +7,20 @@ from unittest.mock import MagicMock
 import pytest
 
 from gdocs_scope_mcp import (
-    docs_edit,
     revision_guards as guards,
 )
-from gdocs_scope_mcp.image_uploads import rich_insertion_requests
-from gdocs_scope_mcp.md2requests import (
+from gdocs_scope_mcp.documents import (
+    editing as docs_edit,
+)
+from gdocs_scope_mcp.rich_text.compiler import (
     inserted_text_from_requests,
     markdown_to_requests,
 )
-from gdocs_scope_mcp.table_insertion import InsertionTable, TableInsertionPlan
+from gdocs_scope_mcp.rich_text.image_uploads import rich_insertion_requests
+from gdocs_scope_mcp.rich_text.table_insertion import (
+    InsertionTable,
+    TableInsertionPlan,
+)
 from gdocs_scope_mcp.tool_errors import ToolFailureError
 
 MARKDOWN = ('| **Name** | Value |\n| :--- | ---: |\n'

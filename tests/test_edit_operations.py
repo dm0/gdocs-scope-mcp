@@ -2,10 +2,11 @@
 
 # Fixture counts and offsets are intentional expectations in these tests.
 # ruff: noqa: PLR2004
-
 import pytest
 
-from gdocs_scope_mcp import docs_edit
+from gdocs_scope_mcp.documents import (
+    editing as docs_edit,
+)
 
 
 def edited_text(document, mock_docs):

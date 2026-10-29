@@ -6,8 +6,8 @@ import logging
 import time
 from urllib.parse import parse_qsl, urlsplit
 
-from ..settings import get_settings
-from .selection import selected_cache
+from gdocs_scope_mcp.cache.selection import selected_cache
+from gdocs_scope_mcp.settings import get_settings
 
 log = logging.getLogger(__name__)
 

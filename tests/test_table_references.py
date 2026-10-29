@@ -2,13 +2,16 @@
 
 # Imported pytest fixtures are requested by name in tests.
 # ruff: noqa: F811
-
 from copy import deepcopy
 
 import pytest
 
-from gdocs_scope_mcp import table_read, table_snapshots, table_tokens
-from gdocs_scope_mcp.table_refs import Layout, first_tab
+from gdocs_scope_mcp.tables import (
+    reading as table_read,
+    snapshots as table_snapshots,
+    tokens as table_tokens,
+)
+from gdocs_scope_mcp.tables.refs import Layout, first_tab
 from gdocs_scope_mcp.tool_errors import ToolFailureError
 
 from .test_table_discovery import call, table_source  # noqa: F401

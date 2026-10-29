@@ -2,14 +2,17 @@
 
 # Fixture counts and offsets are intentional expectations in these tests.
 # ruff: noqa: PLR2004
-
 from copy import deepcopy
 
 import pytest
 from pydantic import TypeAdapter
 
-from gdocs_scope_mcp import docs_edit
-from gdocs_scope_mcp.models import (
+from gdocs_scope_mcp.documents import (
+    editing as docs_edit,
+    parsing,
+    reading,
+)
+from gdocs_scope_mcp.documents.native_models import (
     GoogleDocument,
     GoogleDocumentList,
     GoogleDocumentParagraphElement,
@@ -52,7 +55,7 @@ def test_reads_work_when_api_omits_lists(
     """Read a document without lists when the API omits the empty map."""
     del simple_document['lists']
 
-    result = getattr(docs_edit, operation)('example')
+    result = getattr(reading, operation)('example')
 
     assert result.document_id == 'example'
     mock_docs.batchUpdate.assert_not_called()
@@ -65,7 +68,7 @@ def test_reads_with_both_optional_collections_omitted(
     """Omitted empty maps preserve headings and content."""
     del simple_document['lists']
     del simple_document['inlineObjects']
-    result = getattr(docs_edit, operation)('example')
+    result = getattr(reading, operation)('example')
     assert result.document_id == 'example'
     if operation == 'read':
         markdown = ''.join(section.markdown for section in result.sections)
@@ -136,8 +139,8 @@ def test_reads_work_when_api_omits_inline_objects(simple_document, mock_docs):
     """Outline and section reads survive the response seen in live testing."""
     del simple_document['inlineObjects']
 
-    outline = docs_edit.get_tree('example')
-    result = docs_edit.read('example', ['nested'])
+    outline = reading.get_tree('example')
+    result = reading.read('example', ['nested'])
 
     assert [section.id for section in outline.sections] == [
         '', 'parent', 'nested', 'other',
@@ -155,7 +158,7 @@ def test_captured_outline_preserves_heading_identity(
     mock_docs.get.return_value.execute.side_effect = None
     mock_docs.get.return_value.execute.return_value = captured_document
 
-    outline = docs_edit.get_tree('example')
+    outline = reading.get_tree('example')
 
     assert outline.document_id == captured_document['documentId']
     assert outline.revision_id == captured_document['revisionId']
@@ -192,7 +195,7 @@ def test_captured_outline_preserves_heading_identity(
 
 def test_tree_keeps_preamble_and_sibling_boundaries(simple_document):
     """Heading nesting retains preamble text and stops at sibling sections."""
-    tree = docs_edit._parse_document_tree(simple_document)
+    tree = parsing.parse_document_tree(simple_document)
 
     assert [s.id for s in tree.sections] == ['', 'parent', 'other']
     assert [s.id for s in tree.headings['parent'].subtree()] == [
@@ -216,7 +219,7 @@ def test_editable_tree_preserves_api_paragraph_text(
                 for element in source['paragraph']['elements'])
         for source in document['body']['content']
     ]
-    tree = docs_edit._parse_document_tree(document)
+    tree = parsing.parse_document_tree(document)
     section = tree.headings['boundary']
 
     assert section.subtree_text() == 'Prefix !\nMiddle ?\nBoundarySentinel\n'
@@ -235,7 +238,7 @@ def test_captured_read_preserves_inline_and_paragraph_styles(
     mock_docs.get.return_value.execute.side_effect = None
     mock_docs.get.return_value.execute.return_value = captured_document
 
-    result = docs_edit.read('example', ['h.gieyzo6dbxcm'])
+    result = reading.read('example', ['h.gieyzo6dbxcm'])
 
     text = result.sections[0].markdown
     for fragment in [
@@ -258,7 +261,7 @@ def test_captured_read_preserves_inline_and_paragraph_styles(
 
 def test_partial_read_includes_descendants_and_heading_anchors(mock_docs):
     """A selected parent includes its nested heading and excludes siblings."""
-    result = docs_edit.read('example', ['parent'])
+    result = reading.read('example', ['parent'])
 
     assert result.partial is True
     assert result.selected_headings == ['parent']
@@ -274,7 +277,7 @@ def test_partial_read_includes_descendants_and_heading_anchors(mock_docs):
 
 def test_full_read_includes_all_sections(mock_docs):
     """An unscoped read includes the preamble, nested content, and siblings."""
-    result = docs_edit.read('example')
+    result = reading.read('example')
 
     assert result.partial is False
     assert result.selected_headings is None
@@ -289,7 +292,7 @@ def test_full_read_includes_all_sections(mock_docs):
 
 def test_multiple_selected_sections_keep_document_order(mock_docs):
     """Selected independent sections are returned in document order."""
-    result = docs_edit.read('example', ['other', 'nested'])
+    result = reading.read('example', ['other', 'nested'])
 
     assert len(result.sections) == 2
     assert 'Target phrase again' in result.sections[0].markdown
@@ -337,7 +340,7 @@ def test_captured_inline_images_are_included_in_reads(
     mock_docs.get.return_value.execute.return_value = captured_document
 
     document = GoogleDocument.model_validate(deepcopy(captured_document))
-    result = docs_edit.read('example')
+    result = reading.read('example')
 
     markdown = ''.join(section.markdown for section in result.sections)
     for image in expected_images:
@@ -362,7 +365,7 @@ def test_horizontal_rule_is_included_in_reads(simple_document, mock_docs):
         },
     }]
 
-    result = docs_edit.read('example')
+    result = reading.read('example')
 
     markdown = ''.join(section.markdown for section in result.sections)
     assert '\n---\n' in markdown
@@ -420,7 +423,7 @@ def test_inline_object_title_is_optional_in_plain_text(simple_document, title):
 
 def test_partial_read_contract_rejects_all_unknown_headings(mock_docs):
     """An entirely unresolved selection must not look like an empty section."""
-    result = docs_edit.read('example', ['missing-heading'])
+    result = reading.read('example', ['missing-heading'])
 
     assert getattr(result, 'ok', True) is False
     assert result.code == 'HEADING_NOT_FOUND'
@@ -429,7 +432,7 @@ def test_partial_read_contract_rejects_all_unknown_headings(mock_docs):
 
 def test_partial_read_contract_reports_found_and_unknown_headings(mock_docs):
     """Separate unresolved IDs from the sections actually returned."""
-    result = docs_edit.read('example', ['missing-heading', 'nested'])
+    result = reading.read('example', ['missing-heading', 'nested'])
 
     assert result.selected_headings == ['nested']
     assert result.unknown_heading_ids == ['missing-heading']
@@ -438,7 +441,7 @@ def test_partial_read_contract_reports_found_and_unknown_headings(mock_docs):
 
 def test_partial_read_contract_deduplicates_overlapping_subtrees(mock_docs):
     """Return nested content once when both ancestor and child are selected."""
-    result = docs_edit.read('example', ['parent', 'nested'])
+    result = reading.read('example', ['parent', 'nested'])
 
     markdown = ''.join(section.markdown for section in result.sections)
     assert markdown.count('Target phrase again') == 1
@@ -448,7 +451,7 @@ def test_partial_read_contract_deduplicates_overlapping_subtrees(mock_docs):
 
 def test_partial_read_contract_identifies_each_returned_section(mock_docs):
     """Associate each Markdown chunk with its resolved heading ID."""
-    result = docs_edit.read('example', ['nested', 'other'])
+    result = reading.read('example', ['nested', 'other'])
 
     assert [section.heading_id for section in result.sections] == [
         'nested', 'other',

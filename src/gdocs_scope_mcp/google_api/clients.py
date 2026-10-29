@@ -1,9 +1,10 @@
 """Construct clients with explicit cached and uncached Docs behavior."""
 
+
 from googleapiclient.discovery import build
 
-from ..cache.service import wrap_service
-from . import credentials
+from gdocs_scope_mcp.cache.service import wrap_service
+from gdocs_scope_mcp.google_api import credentials
 
 
 def get_service(api: str = 'docs', version: str = 'v1', *, cached=True):

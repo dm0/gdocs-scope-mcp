@@ -8,8 +8,8 @@ from pathlib import Path
 import pytest
 from bs4 import BeautifulSoup
 
-from gdocs_scope_mcp import docs_edit
 from gdocs_scope_mcp.entities import ENTITY_KINDS
+from gdocs_scope_mcp.google_api import clients
 
 
 @pytest.mark.parametrize('kind', ['person', 'dateElement', 'richLink'])
@@ -51,7 +51,7 @@ def test_live_entity_round_trip(live_test_doc, isolated_mcp, kind, tool):
             markdown = '\n'.join(section['markdown'] for section in
                                  read.structured_content['sections'])
             soup = BeautifulSoup(markdown, 'html.parser')
-            native = docs_edit._get_service('docs', 'v1').documents().get(
+            native = clients.get_service('docs', 'v1').documents().get(
                 documentId=live_test_doc,
             ).execute()
             paragraphs = [item['paragraph'] for item in native['body'][

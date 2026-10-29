@@ -1,10 +1,10 @@
 """Resolve table positions guarded by heading scope and structural hashes."""
 
+
 # Native table traversal lives in the reader; import lazily to avoid cycles.
 # ruff: noqa: PLC0415
-
-from .document_tabs import require_matching_tab, select
-from .table_tokens import Token, digest, fail
+from gdocs_scope_mcp.documents.tabs import require_matching_tab, select
+from gdocs_scope_mcp.tables.tokens import Token, digest, fail
 
 
 def first_tab(document):
@@ -39,7 +39,7 @@ class Layout:
 
     def __init__(self, document):
         """Group top-level tables by their nearest heading hierarchy."""
-        from .table_read import _tables
+        from gdocs_scope_mcp.tables.geometry import _tables
         self.document = document
         self.entries = _tables(document)
         self.by_path = {tuple(e.path): e for e in self.entries}

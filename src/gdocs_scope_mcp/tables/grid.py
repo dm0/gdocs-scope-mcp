@@ -2,10 +2,9 @@
 
 # Reuse the reader's verified geometry without import cycles.
 # ruff: noqa: PLC0415
-
 from dataclasses import dataclass
 
-from .table_tokens import address, coordinates, digest, fail
+from gdocs_scope_mcp.tables.tokens import address, coordinates, digest, fail
 
 
 @dataclass
@@ -35,7 +34,7 @@ class Grid:
 
     def __init__(self, entry):
         """Index each real head, covered slot and physical placeholder."""
-        from .table_read import _geometry
+        from gdocs_scope_mcp.tables.geometry import _geometry
         self.entry = entry
         geometry, valid = _geometry(entry)
         if (not valid or any(type(rs) is not int or type(cs) is not int
@@ -139,7 +138,7 @@ def content_direction(document, entry):
 
 def merge_state(document, grid, head):
     """Hash all physical members, metadata and perimeter dependencies."""
-    from .table_deletion_state import deletion_state
+    from gdocs_scope_mcp.tables.deletion_state import deletion_state
     table = grid.entry.item['table']
     columns = table.get('tableStyle', {}).get('tableColumnProperties', [])
     return digest([

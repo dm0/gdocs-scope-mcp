@@ -1,5 +1,6 @@
 """Translate tool failures into structured MCP errors."""
 
+
 from http import HTTPStatus
 
 from fastmcp.tools.base import ToolResult
@@ -8,8 +9,8 @@ from googleapiclient.errors import HttpError
 from mcp.types import CallToolResult
 from pydantic import ValidationError
 
-from .errors import ToolFailureError
-from .models import EditFailedResponse
+from gdocs_scope_mcp.contracts import EditFailedResponse
+from gdocs_scope_mcp.errors import ToolFailureError
 
 
 class ErrorToolResult(ToolResult):

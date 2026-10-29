@@ -1,5 +1,6 @@
 """Native smart-chip metadata, readable HTML and strict MCP inputs."""
 
+
 from copy import deepcopy
 from datetime import datetime
 from html import escape

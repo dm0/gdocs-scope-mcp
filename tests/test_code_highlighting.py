@@ -1,5 +1,6 @@
 """Verify syntax colors, lossless code text and native UTF-16 style ranges."""
 
+
 from types import SimpleNamespace
 from typing import ClassVar
 
@@ -10,7 +11,7 @@ from pygments.token import Token
 
 from gdocs_scope_mcp import code_highlighting
 from gdocs_scope_mcp.code_highlighting import code_shading, code_spans
-from gdocs_scope_mcp.md2requests import (
+from gdocs_scope_mcp.rich_text.compiler import (
     inserted_text_from_requests,
     markdown_to_requests,
 )

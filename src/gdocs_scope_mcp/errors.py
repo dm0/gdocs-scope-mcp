@@ -1,6 +1,7 @@
 """Carry application failures independently of the MCP transport."""
 
-from .models import EditFailedResponse
+
+from gdocs_scope_mcp.contracts import EditFailedResponse
 
 
 class ToolFailureError(ValueError):

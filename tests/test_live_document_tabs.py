@@ -1,5 +1,6 @@
 """Exercise tab-scoped public tools through isolated real STDIO servers."""
 
+
 # Imported fixtures intentionally retain their pytest names.
 # ruff: noqa: F811
 

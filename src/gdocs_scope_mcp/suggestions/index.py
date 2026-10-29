@@ -1,9 +1,13 @@
 """Locate native proposals and inherited effects without flattening text."""
 
+
 from dataclasses import dataclass, field
 
-from .document_tabs import select, walk
-from .suggestion_models import SuggestionLocation, SuggestionNotice
+from gdocs_scope_mcp.documents.tabs import select, walk
+from gdocs_scope_mcp.suggestions.models import (
+    SuggestionLocation,
+    SuggestionNotice,
+)
 
 STYLE_LEVELS = {
     'TITLE': 0,

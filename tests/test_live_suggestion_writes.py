@@ -1,5 +1,6 @@
 """Verify public proposal tools through isolated MCP servers."""
 
+
 # Imported pytest fixtures intentionally retain their names.
 # ruff: noqa: F811
 

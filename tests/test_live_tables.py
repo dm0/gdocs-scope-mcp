@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from gdocs_scope_mcp import docs_edit
+from gdocs_scope_mcp.google_api import clients
 
 
 @pytest.mark.parametrize('tool', [
@@ -23,7 +23,7 @@ def test_native_table_insertion(
     log = Path(f'/tmp/gdocs-scope-mcp-{tool}-tables-{mode}.log')
     evidence = log.with_suffix('.json')
     report = {}
-    docs = docs_edit._get_service('docs', 'v1').documents()
+    docs = clients.get_service('docs', 'v1').documents()
 
     async def run():
         async with isolated_mcp(log) as (client, info):

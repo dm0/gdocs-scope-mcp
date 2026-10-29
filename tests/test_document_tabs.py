@@ -2,17 +2,25 @@
 
 # Imported fixtures intentionally retain their pytest names.
 # ruff: noqa: F811
-
 import asyncio
 from copy import deepcopy
 
 import pytest
 from fastmcp import Client
 
-from gdocs_scope_mcp import docs_edit, server, table_read, table_snapshots
-from gdocs_scope_mcp.document_tabs import discover, scope_requests, select
+from gdocs_scope_mcp import comments, server
+from gdocs_scope_mcp.documents import (
+    editing as docs_edit,
+    reading,
+)
+from gdocs_scope_mcp.documents.tabs import discover, scope_requests, select
 from gdocs_scope_mcp.entity_edit import validate_insertions
-from gdocs_scope_mcp.table_patch import CellPatch, patch
+from gdocs_scope_mcp.google_api import clients
+from gdocs_scope_mcp.tables import (
+    reading as table_read,
+    snapshots as table_snapshots,
+)
+from gdocs_scope_mcp.tables.patch import CellPatch, patch
 from gdocs_scope_mcp.tool_errors import ToolFailureError
 
 from .native_comment_fixtures import native_batch
@@ -62,8 +70,8 @@ def test_discovery_hierarchy_and_read_only(mock_docs):
 def test_reads_outline_and_table_refs_share_tab(mock_docs, tab_id):
     """Duplicate headings and indices cannot make refs interchangeable."""
     actual = tab_id or 'first'
-    outline = docs_edit.get_tree('example', tab_id=tab_id)
-    read = docs_edit.read('example', ['parent'], tab_id=tab_id)
+    outline = reading.get_tree('example', tab_id=tab_id)
+    read = reading.read('example', ['parent'], tab_id=tab_id)
     listing = table_read.tables_list('example', tab_id=tab_id)
     assert outline.tab_id == read.tab_id == listing.snapshot.tab_id == actual
     assert [t.tab_id for t in outline.tabs] == ['first', 'nested', 'second']
@@ -74,7 +82,7 @@ def test_reads_outline_and_table_refs_share_tab(mock_docs, tab_id):
         'example', listing.tables[0].table_ref, tab_id=tab_id
     )
     assert table.snapshot.tab_id == actual
-    assert docs_edit.get_full_tree('example', tab_id=tab_id).tab_id == actual
+    assert reading.get_full_tree('example', tab_id=tab_id).tab_id == actual
     mock_docs.batchUpdate.assert_not_called()
 
 
@@ -458,7 +466,7 @@ def test_default_selection_pinned_during_retry(tabs, mock_docs, remove):
 def test_native_comment_anchor_chooses_selected_tab(mock_docs):
     """Create a native range in the selected tab without auxiliary writes."""
     mock_docs.batchUpdate.return_value.execute.return_value = native_batch()
-    result = docs_edit.add_comment('example', 'comment', 'Tail',
+    result = comments.add_comment('example', 'comment', 'Tail',
                                    tab_id='nested')
     request = mock_docs.batchUpdate.call_args.kwargs['body']['requests'][0]
     assert request['insertComment']['range']['tabId'] == 'nested'
@@ -474,7 +482,7 @@ def test_chip_preflight_uses_destination_definitions(tabs, mock_docs):
     tabs['tabs'][0]['documentTab']['dropdownDefinitions'] = {'def': definition}
     requests = [{'insertDropdown': {'dropdownDefinitionId': 'def',
                                      'selectedOptionId': 'item'}}]
-    service = docs_edit._get_service()
+    service = clients.get_service()
     with pytest.raises(ToolFailureError):
         validate_insertions(service, 'example', requests, tab_id='nested')
     tabs['tabs'][0]['childTabs'][0]['documentTab']['dropdownDefinitions'] = {

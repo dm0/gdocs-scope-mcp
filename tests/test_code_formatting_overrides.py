@@ -1,5 +1,6 @@
 """Verify agent-facing formatting overrides and request-local isolation."""
 
+
 import asyncio
 
 import pytest

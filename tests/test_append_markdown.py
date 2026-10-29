@@ -1,13 +1,15 @@
 """Check append's shared Markdown conversion path and style ranges."""
 
+
 import asyncio
 import json
 
 import pytest
 from fastmcp import Client
 
-from gdocs_scope_mcp import docs_edit, server
-from gdocs_scope_mcp.models import AppendSucceedResponse
+from gdocs_scope_mcp import server
+from gdocs_scope_mcp.documents import editing as docs_edit
+from gdocs_scope_mcp.documents.receipts import AppendSucceedResponse
 
 EXPECTED_PREVIEW_LIMIT = 200
 
@@ -121,7 +123,7 @@ def test_literal_append_preserves_input_without_conversion(
         raise AssertionError('Literal append must not parse Markdown')
 
     monkeypatch.setattr(
-        'gdocs_scope_mcp.image_uploads.html_to_gpars',
+        'gdocs_scope_mcp.rich_text.image_uploads.html_to_gpars',
         unexpected_conversion,
     )
     result = docs_edit.append('example', text, rich=False)

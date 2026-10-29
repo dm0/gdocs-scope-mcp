@@ -1,5 +1,6 @@
 """Convert markdown (with HTML) into google requests"""
 
+
 import re
 from collections.abc import Iterable
 from functools import lru_cache
@@ -14,17 +15,12 @@ from pydantic import BaseModel, ValidationError, field_validator
 from rich.syntax import Syntax
 
 # isort: split
-from .code_highlighting import code_shading, code_spans
-from .code_reading import block_marker
-from .entities import chip_input, insertion_request
-from .errors import ToolFailureError
-from .models import (
-    EditFailedResponse,
-    GoogleDocumentAlignment,
-    GoogleDocumentBaselineOffset,
+from gdocs_scope_mcp.code_highlighting import code_shading, code_spans
+from gdocs_scope_mcp.code_reading import block_marker
+from gdocs_scope_mcp.contracts import EditFailedResponse
+from gdocs_scope_mcp.documents.native_models import (
     GoogleDocumentColor,
     GoogleDocumentLink,
-    GoogleDocumentNamedStyleType,
     GoogleDocumentOptionalColor,
     GoogleDocumentParagraph,
     GoogleDocumentParagraphStyle,
@@ -33,14 +29,21 @@ from .models import (
     GoogleDocumentTextStyle,
     GoogleDocumentWeightedFontFamily,
 )
-from .settings import get_code_settings
-from .table_insertion import (
+from gdocs_scope_mcp.documents.styles import (
+    GoogleDocumentAlignment,
+    GoogleDocumentBaselineOffset,
+    GoogleDocumentNamedStyleType,
+)
+from gdocs_scope_mcp.entities import chip_input, insertion_request
+from gdocs_scope_mcp.errors import ToolFailureError
+from gdocs_scope_mcp.rich_text.table_insertion import (
     InsertionTable,
     TableInsertionPlan,
     convert_table,
     unsupported_table,
 )
-from .text_indices import utf16_length
+from gdocs_scope_mcp.settings import get_code_settings
+from gdocs_scope_mcp.text_indices import utf16_length
 
 IMAGE_URI_MAX_BYTES = 2048
 

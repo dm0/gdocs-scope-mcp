@@ -1,17 +1,22 @@
 """Read native comment threads and confirm independently persisted writes."""
 
 # Reuse authentication lazily without a docs_edit import cycle.
-# ruff: noqa: PLC0415
-
 import base64
 import hashlib
 import json
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-from .document_tabs import walk
-from .errors import ToolFailureError
-from .models import EditFailedResponse, ReadCommentsResponse
-from .revision_guards import guarded_edit, remember_snapshot, submit
+from gdocs_scope_mcp.comment_models import ReadCommentsResponse
+from gdocs_scope_mcp.contracts import EditFailedResponse
+from gdocs_scope_mcp.documents import fetching, parsing, targeting
+from gdocs_scope_mcp.documents.tabs import walk
+from gdocs_scope_mcp.errors import ToolFailureError
+from gdocs_scope_mcp.google_api import clients
+from gdocs_scope_mcp.revision_guards import (
+    guarded_edit,
+    remember_snapshot,
+    submit,
+)
 
 
 def fail(code, description, committed=0):
@@ -232,9 +237,9 @@ def read(
     comment_id=None,
 ):
     """Page document-wide thread summaries, or replies in a selected thread."""
-    from . import docs_edit
 
-    document = fetch(docs_edit._get_service(), doc_id)
+
+    document = fetch(clients.get_service(), doc_id)
     anchor_map = anchors(document)
     threads = sorted(
         document.get('comments', []),
@@ -300,9 +305,9 @@ def mutate(
     expected_revision_id=None,  # noqa: ARG001 - decorator
 ):
     """Apply one ID-addressed mutation with the normal revision policy."""
-    from . import docs_edit
 
-    service = docs_edit._get_service()
+
+    service = clients.get_service()
     document = fetch(service, doc_id)
     # ID-addressed comments are document-wide. No first-tab body is targeted.
     remember_snapshot(
@@ -374,3 +379,86 @@ def mutate(
     elif operation == 'delete_reply':
         result['reply_id'] = post_id
     return result
+
+
+
+from gdocs_scope_mcp.revision_guards import (
+    depend_on,
+    guarded_edit,
+)
+
+
+@guarded_edit
+def add_comment(
+    doc_id: str,
+    comment: str,
+    anchor_text: str,
+    occurrence: int = 1,
+    *, tab_id: str | None = None,
+    expected_revision_id: str | None = None,  # noqa: ARG001 - decorator
+) -> dict:
+    """Create one native anchored comment with guarded UTF-16 targeting."""
+    docs_service = clients.get_service('docs', 'v1')
+    doc = fetching.get_document(docs_service, doc_id, tab_id=tab_id)
+    paragraphs = parsing.extract_paragraphs(doc)
+    full_text, text_map = targeting.build_full_text_map(paragraphs)
+
+    # Find all occurrences of anchor_text
+    matches = []
+    search_from = 0
+    while True:
+        pos = full_text.find(anchor_text, search_from)
+        if pos == -1:
+            break
+        matches.append((pos, pos + len(anchor_text)))
+        search_from = pos + 1
+
+    if not matches:
+        raise ToolFailureError(
+            EditFailedResponse(
+                code='TEXT_NOT_FOUND',
+                description=(
+                    f'Anchor text not found in document: {anchor_text!r}'
+                ),
+                suggested_action='Run docs_read to verify the anchor text.',
+            )
+        )
+
+    target_idx = occurrence - 1
+    if target_idx >= len(matches):
+        raise ToolFailureError(
+            EditFailedResponse(
+                code='OCCURRENCE_NOT_FOUND',
+                description=(
+                    f'Occurrence {occurrence} not found — document has '
+                    f'{len(matches)} occurrence(s) of {anchor_text!r}'
+                ),
+                suggested_action='Run docs_read to verify occurrence number.',
+            )
+        )
+
+    ft_start, ft_end = matches[target_idx]
+    doc_start, doc_end = targeting.full_text_range_to_doc_indices(
+        ft_start, ft_end, full_text, text_map,
+    )
+    depend_on(doc, doc_start, doc_end)
+
+    response = saved(submit(docs_service, doc_id, [{
+        'insertComment': {'content': comment, 'range': {
+            'startIndex': doc_start, 'endIndex': doc_end,
+        }},
+    }]))
+    thread = created(response, 'insertComment', 'commentThread')
+    head = thread.get('headPost', {})
+    if not isinstance(head.get('postId'), str) or not head['postId']:
+        fail('WRITE_OUTCOME_UNKNOWN', 'Google saved a comment but omitted '
+             'its head post ID. Inspect threads before retrying.', 1)
+    control = response.get('writeControl', {})
+    return {
+        'ok': True, 'document_id': doc_id, 'comment_id': thread['commentId'],
+        'post_id': head['postId'], 'anchor_id': thread.get('anchorId'),
+        'anchored_to': full_text[ft_start:ft_end], 'at_index': doc_start,
+        'comment_content': head.get('content', comment),
+        'revision_id': control.get('requiredRevisionId') or
+        control.get('targetRevisionId'), 'comment_update_state': 'ALL_SAVED',
+    }

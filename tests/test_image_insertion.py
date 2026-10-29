@@ -1,5 +1,6 @@
 """Verify native Markdown/HTML images with independent UTF-16 replay."""
 
+
 import asyncio
 import json
 
@@ -9,7 +10,7 @@ from fastmcp import Client
 from googleapiclient.errors import HttpError
 
 from gdocs_scope_mcp import server
-from gdocs_scope_mcp.md2requests import (
+from gdocs_scope_mcp.rich_text.compiler import (
     html_to_gpars,
     inserted_text_from_requests,
     markdown_to_requests,

@@ -1,25 +1,31 @@
 """Plan native proposals and verify their persistence separately from edits."""
 
 # Reuse authentication and source mapping without a docs_edit import cycle.
-# ruff: noqa: PLC0415
-
 from http import HTTPStatus
 
 from googleapiclient.errors import HttpError
 
-from . import comments, suggestions
-from .errors import ToolFailureError
-from .md2requests import markdown_to_requests
-from .models import EditFailedResponse
-from .revision_guards import depend_on, guarded_edit, remember_snapshot, submit
-from .suggestion_index import index_document, scope_ranges
-from .suggestion_write_models import (
+from gdocs_scope_mcp import comments
+from gdocs_scope_mcp.contracts import EditFailedResponse
+from gdocs_scope_mcp.documents import parsing, targeting
+from gdocs_scope_mcp.errors import ToolFailureError
+from gdocs_scope_mcp.google_api import clients
+from gdocs_scope_mcp.revision_guards import (
+    depend_on,
+    guarded_edit,
+    remember_snapshot,
+    submit,
+)
+from gdocs_scope_mcp.rich_text.compiler import markdown_to_requests
+from gdocs_scope_mcp.suggestions import reading as suggestions
+from gdocs_scope_mcp.suggestions.index import index_document, scope_ranges
+from gdocs_scope_mcp.suggestions.write_models import (
     SuggestionChanges,
     SuggestionDecision,
     SuggestionsManageResponse,
     SuggestResponse,
 )
-from .text_indices import utf16_length
+from gdocs_scope_mcp.text_indices import utf16_length
 
 CHANGE_FIELDS = {
     'created': 'createdSuggestionIds',
@@ -166,7 +172,7 @@ def _insert(text, index, rich, *, before=False):
 
 def _plan(view, operation, heading_id):
     """Resolve literal anchors on native indices within an accepted scope."""
-    from . import docs_edit
+
 
     document = view.source
     ranges = scope_ranges(document, [heading_id] if heading_id else None)
@@ -175,7 +181,7 @@ def _plan(view, operation, heading_id):
             'HEADING_NOT_FOUND',
             'The heading scope has no safe native mapping.',
         )
-    tree = docs_edit._parse_document_tree(document)
+    tree = parsing.parse_document_tree(document)
     if operation.operation == 'append':
         end = ranges[0][1]
         item = next(
@@ -235,7 +241,7 @@ def _plan(view, operation, heading_id):
                      'cannot be verified; no deletion was proposed.')
             _safe_paragraph(view, neighbor)
     else:
-        start, end = docs_edit._full_text_range_to_doc_indices(
+        start, end = targeting.full_text_range_to_doc_indices(
             match.start_index,
             match.end_index,
             paragraph.text,
@@ -284,9 +290,9 @@ def suggest(
     expected_revision_id=None,  # noqa: ARG001 - decorator
 ):
     """Submit exactly one preflighted suggest batch and read back its IDs."""
-    from . import docs_edit
 
-    service = docs_edit._get_service()
+
+    service = clients.get_service()
     view = suggestions.fetch(service, doc_id, tab_id, threads=True)
     if view.unavailable or not view.source.get('revisionId'):
         fail(
@@ -329,7 +335,7 @@ def suggest(
 
 def manage(doc_id, action, suggestion_ids, *, expected_revision_id=None):
     """Preflight all IDs, apply one decision batch, and verify each ID."""
-    from . import docs_edit
+
 
     if len(set(suggestion_ids)) != len(suggestion_ids):
         fail('INVALID_ARGUMENT', 'Suggestion IDs must be unique.')
@@ -338,7 +344,7 @@ def manage(doc_id, action, suggestion_ids, *, expected_revision_id=None):
     @guarded_edit
     def apply(*, expected_revision_id=None):  # noqa: ARG001 - decorator
         nonlocal baseline
-        service = docs_edit._get_service()
+        service = clients.get_service()
         document = comments.fetch(service, doc_id)
         remember_snapshot(
             {'documentId': doc_id, 'revisionId': document.get('revisionId')}

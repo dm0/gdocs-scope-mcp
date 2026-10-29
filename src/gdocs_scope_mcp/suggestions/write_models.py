@@ -1,12 +1,13 @@
 """Define typed, bounded native proposal operations and verified receipts."""
 
+
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from typing_extensions import Self
 
-from .suggestions import SuggestionId
-from .tool_inputs import NonemptyText, PositiveInteger
+from gdocs_scope_mcp.suggestions.reading import SuggestionId
+from gdocs_scope_mcp.tool_inputs import NonemptyText, PositiveInteger
 
 
 class Operation(BaseModel):

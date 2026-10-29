@@ -1,5 +1,6 @@
 """Measure cross-service visibility without assuming immediate updates."""
 
+
 # Imported reusable fixture names are intentional.
 # ruff: noqa: F811
 

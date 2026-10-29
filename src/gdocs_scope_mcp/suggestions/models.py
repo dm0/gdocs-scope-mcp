@@ -1,5 +1,6 @@
 """Describe accepted-content views and native proposal inspection."""
 
+
 from typing import Literal
 
 from pydantic import BaseModel, Field

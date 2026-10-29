@@ -30,56 +30,44 @@ from __future__ import annotations
 import logging
 import re
 from contextlib import nullcontext
-from copy import deepcopy
-from dataclasses import dataclass
+
+from gdocs_scope_mcp.documents import fetching, parsing, targeting
+from gdocs_scope_mcp.google_api import clients
 
 # isort: split
-from .comments import created, fail, saved
-from .document_tabs import discover, select
-from .entities import collect_entities
-from .entity_edit import INSERT_ENTITY_KINDS, validate_insertions
-from .errors import ToolFailureError
-from .google_api.clients import get_service as _get_service
-from .image_layout import fit_images
-from .image_uploads import PreparedInsertion, rich_insertion_requests
-from .md2requests import inserted_text_from_requests
-from .models import (
+from gdocs_scope_mcp.contracts import (
     APPEND_PREVIEW_LIMIT,
     RECEIPT_ITEM_LIMIT,
     SHORT_PREVIEW_LIMIT,
     TEXT_PREVIEW_LIMIT,
-    AppendSucceedResponse,
-    DocumentOutline,
-    DocumentParagraph,
-    DocumentReadSection,
-    DocumentSection,
-    DocumentSubset,
-    DocumentTree,
     EditFailedResponse,
-    GoogleDocument,
-    GoogleDocumentNamedStyleType,
-    GoogleDocumentParagraph,
-    GoogleDocumentSmartChip,
-    GoogleDocumentTable,
+)
+from gdocs_scope_mcp.documents.receipts import (
+    AppendSucceedResponse,
     InsertSucceedResponse,
     ReplaceSucceedResponse,
 )
-from .revision_guards import (
+from gdocs_scope_mcp.entities import collect_entities
+from gdocs_scope_mcp.entity_edit import (
+    INSERT_ENTITY_KINDS,
+    validate_insertions,
+)
+from gdocs_scope_mcp.errors import ToolFailureError
+from gdocs_scope_mcp.image_layout import fit_images
+from gdocs_scope_mcp.revision_guards import (
     depend_on,
     guarded_edit,
     insertion_context,
-    pinned_tab,
-    remember_snapshot,
     require_native_precondition,
     submit,
 )
-from .suggestion_index import scope_ranges as suggestion_scope_ranges
-from .suggestions import (
-    fetch as read_view,
-    table_references,
+from gdocs_scope_mcp.rich_text.compiler import inserted_text_from_requests
+from gdocs_scope_mcp.rich_text.image_uploads import (
+    PreparedInsertion,
+    rich_insertion_requests,
 )
-from .table_insertion import TableInsertionPlan
-from .text_indices import utf16_length
+from gdocs_scope_mcp.rich_text.table_insertion import TableInsertionPlan
+from gdocs_scope_mcp.text_indices import utf16_length
 
 log = logging.getLogger(__name__)
 
@@ -90,28 +78,8 @@ log = logging.getLogger(__name__)
 SUGGESTIONS_VIEW_MODE = 'SUGGESTIONS_INLINE'
 
 
-def _get_document(service, doc_id: str, *, tab_id=None) -> dict:
-    """
-    Fetch a document with inline suggestions so returned indices stay usable
-
-    for later batchUpdate calls.
-    """
-    document = service.documents().get(
-        documentId=doc_id, includeTabsContent=True,
-        suggestionsViewMode=SUGGESTIONS_VIEW_MODE,
-    ).execute()
-    return remember_snapshot(select(
-        document, tab_id if tab_id is not None else pinned_tab(),
-    ))
 
 
-def tabs_list(doc_id):
-    """Discover root and nested tabs without modifying the document."""
-    document = _get_service('docs', 'v1').documents().get(
-        documentId=doc_id, includeTabsContent=True,
-        suggestionsViewMode=SUGGESTIONS_VIEW_MODE,
-    ).execute()
-    return discover(document)
 
 
 # ---------------------------------------------------------------------------
@@ -119,263 +87,25 @@ def tabs_list(doc_id):
 # ---------------------------------------------------------------------------
 
 
-@dataclass
-class TextRun:
-    """Store plain text and its inclusive/exclusive document indices."""
-
-    text: str
-    start: int  # Document index (inclusive)
-    end: int  # Document index (exclusive)
 
 
-@dataclass
-class Paragraph:
-    """Store source indices and plain text for an editable paragraph."""
-
-    text: str
-    style: str
-    start: int  # Start of paragraph including leading newline-like element
-    end: int  # End of paragraph (exclusive)
-    runs: list[TextRun]
 
 
-def _extract_paragraphs(doc: dict) -> list[Paragraph]:
-    """Extract paragraphs with full structure from a Docs API response."""
-    paragraphs = []
-    for elem in doc.get('body', {}).get('content', []):
-        if 'paragraph' not in elem:
-            continue
-        para = elem['paragraph']
-        style = para.get('paragraphStyle', {}).get(
-            'namedStyleType', 'NORMAL_TEXT'
-        )
-        runs = []
-        full_text = ''
-        for pe in para.get('elements', []):
-            if 'textRun' in pe:
-                content = pe['textRun']['content']
-                runs.append(
-                    TextRun(
-                        text=content,
-                        start=pe['startIndex'],
-                        end=pe['endIndex'],
-                    )
-                )
-                full_text += content
-        # Strip trailing newline for display (Google Docs always ends
-        # paragraphs with \n)
-        display_text = full_text.rstrip('\n')
-        paragraphs.append(
-            Paragraph(
-                text=display_text,
-                style=style,
-                start=elem['startIndex'],
-                end=elem['endIndex'],
-                runs=runs,
-            )
-        )
-    return paragraphs
 
 
 # def _paragraph_to_md(item: dict[str, ]):
 
 
-def _paragraph_text_map(elements: list[dict]) -> list[tuple[int, int, str]]:
-    """Keep original run positions while omitting non-text display elements."""
-    text_map = []
-    offset = 0
-    for element in elements:
-        if 'textRun' in element:
-            text = element['textRun']['content']
-            text_map.append((offset, element['startIndex'], text))
-            offset += len(text)
-    return text_map
 
 
-def _table_source_paragraphs(table: dict) -> list[DocumentParagraph]:
-    """Retain cell paragraphs and their terminal boundaries in source order."""
-    paragraphs = []
-    for row in table['tableRows']:
-        for cell in row['tableCells']:
-            for item in cell['content']:
-                if 'paragraph' in item:
-                    text_map = _paragraph_text_map(
-                        item['paragraph']['elements'],
-                    )
-                    paragraphs.append(DocumentParagraph(
-                        start_index=item['startIndex'],
-                        end_index=item['endIndex'],
-                        text=''.join(run[2] for run in text_map),
-                        text_map=text_map,
-                        markdown='',
-                        table_cell_end_index=cell['endIndex'] - 1,
-                    ))
-                elif 'table' in item:
-                    paragraphs.extend(_table_source_paragraphs(item['table']))
-    return paragraphs
 
 
-def _parse_document_tree(doc: dict) -> DocumentTree:
-    """Extract document hierarchy from a Docs API response."""
-
-    # Dummy section if there is text before headings
-    last: DocumentSection = DocumentSection(
-        title='',
-        id='',
-        level=GoogleDocumentNamedStyleType.NORMAL_TEXT.compact,
-        paragraphs=[
-            DocumentParagraph(start_index=0, end_index=0, text='', markdown='')
-        ],
-    )
-    top_level: list[DocumentSection] = [last]
-
-    # Model validators flatten API payloads in place; retain source text first.
-    source_maps = [
-        _paragraph_text_map(
-            source.get('paragraph', {}).get('elements', []),
-        )
-        for source in doc['body']['content']
-    ]
-    table_paragraphs = {
-        source['startIndex']: _table_source_paragraphs(source['table'])
-        for source in doc['body']['content'] if 'table' in source
-    }
-    google_doc = GoogleDocument.model_validate(deepcopy(doc))
-
-    headings = {}
-
-    for text_map, elem in zip(
-        source_maps, google_doc.body.content, strict=True,
-    ):
-        if not isinstance(elem, GoogleDocumentParagraph):
-            # Display markup does not extend the preceding editable paragraph.
-            last.paragraphs[-1].markdown += elem.to_markdown(google_doc)
-            if isinstance(elem, GoogleDocumentTable):
-                last.paragraphs.extend(table_paragraphs[elem.start_index])
-            continue
-        paragraph = DocumentParagraph(
-            start_index=elem.start_index,
-            end_index=elem.end_index,
-            # Rendered paragraph separators are not editable source characters.
-            text=''.join(run[2] for run in text_map),
-            text_map=text_map,
-            markdown=elem.to_markdown(google_doc),
-        )
-        if elem.paragraph_style.heading_id is None:
-            last.paragraphs.append(paragraph)
-            continue
-
-        title = paragraph.text
-        if any(isinstance(element, GoogleDocumentSmartChip)
-               for element in elem.elements):
-            title = ''.join(element.to_text(google_doc)
-                            for element in elem.elements)
-            if paragraph.text.endswith('\n'):
-                title += '\n'
-        section = DocumentSection(
-            title=title,
-            id=elem.paragraph_style.heading_id,
-            level=elem.paragraph_style.named_style_type.compact,
-            ancestor_ids=[],
-            paragraphs=[paragraph],
-            sections=[],
-        )
-
-        headings[section.id] = section
-
-        # Nest under correct parent
-        parent = last
-        # Traverse up
-        if parent.level_index > section.level_index:
-            while parent and parent.level_index >= section.level_index:
-                parent = parent.parent
-        # The same level => use sibling parent
-        elif parent.level_index == section.level_index:
-            parent = parent.parent
-
-        section.parent = parent
-        if parent is not None:
-            parent.sections.append(section)
-            section.ancestor_ids = [*parent.ancestor_ids, parent.id]
-        else:
-            top_level.append(section)
-
-        last = section
-    # Remove dummy section if empty
-    if not top_level[0].markdown:
-        top_level = top_level[1:]
-    return DocumentTree(
-        sections=top_level,
-        headings=headings,
-        title=google_doc.title,
-        revision_id=google_doc.revision_id,
-        document_id=google_doc.document_id,
-        tab_id=doc.get('_mcp_tab_id'), tab_title=doc.get('_mcp_tab_title'),
-    )
 
 
-def _build_full_text_map(
-    paragraphs: list[Paragraph],
-) -> tuple[str, list[tuple[int, int, str]]]:
-    """
-    Return (full_text, text_map) where:
-
-    - full_text is all characters concatenated from all text runs
-    - text_map retains (Python offset, API start index, original run text),
-      allowing conversion to UTF-16 without losing source-run boundaries.
-    """
-    parts = []
-    text_map = []
-    offset = 0
-    for para in paragraphs:
-        for run in para.runs:
-            text_map.append((offset, run.start, run.text))
-            parts.append(run.text)
-            offset += len(run.text)
-    return ''.join(parts), text_map
 
 
-def _full_text_pos_to_doc_index(
-    pos: int, text_map: list[tuple[int, int, str]], *, end: bool = False,
-) -> int:
-    """Map Python offsets to UTF-16; range ends prefer the preceding run."""
-    for ft_offset, doc_start, text in text_map:
-        run_end = ft_offset + len(text)
-        if ft_offset <= pos < run_end or (end and ft_offset < pos == run_end):
-            return doc_start + utf16_length(text[:pos - ft_offset])
-    if text_map:
-        ft_offset, doc_start, text = text_map[-1]
-        if pos == ft_offset + len(text):
-            return doc_start + utf16_length(text)
-    raise ValueError(
-        f'Position {pos} is not within any text run in the document.'
-    )
 
 
-def _full_text_range_to_doc_indices(
-    start: int, end: int, full_text: str,
-    text_map: list[tuple[int, int, str]],
-) -> tuple[int, int]:
-    """Reject a text range spanning omitted document structure."""
-    try:
-        doc_start = _full_text_pos_to_doc_index(start, text_map)
-        doc_end = _full_text_pos_to_doc_index(end, text_map, end=True)
-    except ValueError:
-        raise ToolFailureError(EditFailedResponse(
-            code='INVALID_ARGUMENT',
-            description='The match has no reliable text-run source range.',
-            suggested_action='Target nonempty text within a source text run.',
-        )) from None
-    if doc_end - doc_start != utf16_length(full_text[start:end]):
-        raise ToolFailureError(EditFailedResponse(
-            code='INVALID_ARGUMENT',
-            description='The match crosses non-contiguous document structure.',
-            suggested_action=(
-                'Target text within a single paragraph or contiguous body '
-                'paragraphs; do not match across tables or non-text objects.'
-            ),
-        ))
-    return doc_start, doc_end
 
 
 # ---------------------------------------------------------------------------
@@ -383,104 +113,10 @@ def _full_text_range_to_doc_indices(
 # ---------------------------------------------------------------------------
 
 
-def read(
-    doc_id: str, heading_ids: list[str] | None = None,
-    *, tab_id: str | None = None,
-) -> DocumentSubset | EditFailedResponse:
-    """
-    Read Google document or its parts including all nested headings.
-    """
-    service = _get_service('docs', 'v1')
-    view = read_view(service, doc_id, tab_id)
-    doc = view.document
-    doc['table_refs'], table_warnings = table_references(view)
-    google_doc = _parse_document_tree(doc)
-
-    if heading_ids is None:
-        roots = google_doc.sections
-        selected = None
-        unknown = []
-    else:
-        requested = set(heading_ids)
-        resolved = requested.intersection(google_doc.headings)
-        unknown = list(dict.fromkeys(
-            item for item in heading_ids if item not in google_doc.headings
-        ))
-        if heading_ids and not resolved:
-            return EditFailedResponse(
-                code='HEADING_NOT_FOUND',
-                description='None of the requested heading IDs were found.',
-                suggested_action='Call docs_get_tree to refresh heading IDs, '
-                'then retry with IDs from the current outline.',
-            )
-        roots = [
-            item for item in google_doc.descendants()
-            if item.id in resolved
-            and not resolved.intersection(item.ancestor_ids)
-        ]
-        selected = [item.id for item in roots]
-
-    if selected and suggestion_scope_ranges(view.source, selected) is None:
-        return EditFailedResponse(
-            code='TARGET_CHANGED',
-            description='Pending heading changes prevent safe mapping of '
-            'this accepted heading selection to native source.',
-            suggested_action='Read the whole tab without heading_ids, or '
-            'review the heading proposals with docs_suggestions_read first.',
-        )
-    notice = view.index.notice(view.source, selected,
-                               unavailable=view.unavailable)
-    notice.warnings.extend(table_warnings)
-    return DocumentSubset(
-        suggestions=notice,
-        tab_count=len(doc.get('_mcp_tabs', [])),
-        sections=[
-            DocumentReadSection(
-                heading_id=item.id or None, markdown=item.subtree_markdown(),
-            ) for item in roots
-        ],
-        unknown_heading_ids=unknown,
-        selected_headings=selected,
-        partial=heading_ids is not None,
-        title=google_doc.title,
-        revision_id=google_doc.revision_id,
-        document_id=google_doc.document_id,
-        tab_id=doc.get('_mcp_tab_id'), tab_title=doc.get('_mcp_tab_title'),
-    )
 
 
-def get_tree(doc_id: str, *, tab_id=None) -> DocumentOutline:
-    """
-    Fetch a Google Doc and return structured representation.
-    """
-    service = _get_service('docs', 'v1')
-    view = read_view(service, doc_id, tab_id)
-    doc = view.document
-
-    tree = _parse_document_tree(doc)
-    flat_items = list(tree.descendants())
-
-    return DocumentOutline(
-        suggestions=view.index.notice(
-            view.source, unavailable=view.unavailable,
-        ),
-        sections=flat_items,
-        tabs=doc.get('_mcp_tabs', []),
-        title=tree.title,
-        revision_id=tree.revision_id,
-        document_id=tree.document_id,
-        tab_id=doc.get('_mcp_tab_id'), tab_title=doc.get('_mcp_tab_title'),
-    )
 
 
-def get_full_tree(doc_id: str, *, tab_id=None) -> DocumentTree:
-    """
-    Fetch a Google Doc and return structured representation.
-    """
-    service = _get_service('docs', 'v1')
-    doc = _get_document(service, doc_id, tab_id=tab_id)
-
-    return _parse_document_tree(doc)
 
 
 # Preserve the public positional calling convention.
@@ -526,12 +162,12 @@ def search_replace(  # noqa: PLR0911, PLR0917
             ),
         )
 
-    service = _get_service('docs', 'v1')
+    service = clients.get_service('docs', 'v1')
 
     # Replace-all: use the native replaceAllText API (fast, atomic)
     if occurrence == 0 and not regex and heading_id is None:
         require_native_precondition()
-        _get_document(service, doc_id, tab_id=tab_id)
+        fetching.get_document(service, doc_id, tab_id=tab_id)
         result = submit(service, doc_id, [{
             'replaceAllText': {
                 'containsText': {'text': find, 'matchCase': True},
@@ -551,8 +187,8 @@ def search_replace(  # noqa: PLR0911, PLR0917
         )
 
     # Targeted occurrence: find index manually
-    doc = _get_document(service, doc_id, tab_id=tab_id)
-    tree = _parse_document_tree(doc)
+    doc = fetching.get_document(service, doc_id, tab_id=tab_id)
+    tree = parsing.parse_document_tree(doc)
     haystack = (
         tree if heading_id is None else tree.headings.get(heading_id, None)
     )
@@ -593,7 +229,7 @@ def search_replace(  # noqa: PLR0911, PLR0917
     target = found[target_idx]
 
     try:
-        doc_start, doc_end = _full_text_range_to_doc_indices(
+        doc_start, doc_end = targeting.full_text_range_to_doc_indices(
             target.start_index, target.end_index,
             target.paragraph.text, target.paragraph.text_map,
         )
@@ -674,7 +310,7 @@ def _insert_content(
         context = rich_insertion_requests(
             text, index, newline_before=newline_before,
             upload_local_images=upload_local_images,
-            drive_factory=lambda: _get_service('drive', 'v3'),
+            drive_factory=lambda: clients.get_service('drive', 'v3'),
             validate_requests=lambda requests: validate_insertions(
                 service, doc_id, requests, required_revision, tab_id=tab_id,
             ),
@@ -729,9 +365,9 @@ def insert_after(
     automatically).
     The search can be scoped to the specified heading (and nested subheadings).
     """
-    service = _get_service('docs', 'v1')
-    doc = _get_document(service, doc_id, tab_id=tab_id)
-    tree = _parse_document_tree(doc)
+    service = clients.get_service('docs', 'v1')
+    doc = fetching.get_document(service, doc_id, tab_id=tab_id)
+    tree = parsing.parse_document_tree(doc)
 
     haystack = (
         tree if heading_id is None else tree.headings.get(heading_id, None)
@@ -810,9 +446,9 @@ def insert_before(
     automatically).
     The search can be scoped to the specified heading (and nested subheadings).
     """
-    service = _get_service('docs', 'v1')
-    doc = _get_document(service, doc_id, tab_id=tab_id)
-    tree = _parse_document_tree(doc)
+    service = clients.get_service('docs', 'v1')
+    doc = fetching.get_document(service, doc_id, tab_id=tab_id)
+    tree = parsing.parse_document_tree(doc)
 
     haystack = (
         tree if heading_id is None else tree.headings.get(heading_id, None)
@@ -885,9 +521,9 @@ def delete_paragraph(doc_id: str, anchor: str, *,
     paragraphs whose content was removed, including a cleared final paragraph;
     an already-empty final paragraph is not counted.
     """
-    service = _get_service('docs', 'v1')
-    doc = _get_document(service, doc_id, tab_id=tab_id)
-    paragraphs = _extract_paragraphs(doc)
+    service = clients.get_service('docs', 'v1')
+    doc = fetching.get_document(service, doc_id, tab_id=tab_id)
+    paragraphs = parsing.extract_paragraphs(doc)
 
     targets = [p for p in paragraphs if anchor.lower() in p.text.lower()]
     if not targets:
@@ -964,8 +600,8 @@ def append(
     """
     Append Markdown or literal text and return a compact typed receipt.
     """
-    service = _get_service('docs', 'v1')
-    doc = _get_document(service, doc_id, tab_id=tab_id)
+    service = clients.get_service('docs', 'v1')
+    doc = fetching.get_document(service, doc_id, tab_id=tab_id)
 
     # Find the last content index (end of the body, before the body's closing)
     body_content = doc.get('body', {}).get('content', [])
@@ -1028,10 +664,10 @@ def batch_replace(doc_id: str, replacements: list[dict], *,
     -------
         {"ok": True, "applied": N, "changes": [...]}
     """
-    service = _get_service('docs', 'v1')
-    doc = _get_document(service, doc_id, tab_id=tab_id)
-    paragraphs = _extract_paragraphs(doc)
-    full_text, text_map = _build_full_text_map(paragraphs)
+    service = clients.get_service('docs', 'v1')
+    doc = fetching.get_document(service, doc_id, tab_id=tab_id)
+    paragraphs = parsing.extract_paragraphs(doc)
+    full_text, text_map = targeting.build_full_text_map(paragraphs)
 
     # Collect all changes with their document indices
     changes = []  # (doc_start, doc_end, replace_text, find_text)
@@ -1068,7 +704,7 @@ def batch_replace(doc_id: str, replacements: list[dict], *,
         if occurrence == 0:
             # Replace all
             for ft_start, ft_end in matches:
-                ds, de = _full_text_range_to_doc_indices(
+                ds, de = targeting.full_text_range_to_doc_indices(
                     ft_start, ft_end, full_text, text_map,
                 )
                 changes.append(
@@ -1089,7 +725,7 @@ def batch_replace(doc_id: str, replacements: list[dict], *,
                     )
                 )
             ft_start, ft_end = matches[idx]
-            ds, de = _full_text_range_to_doc_indices(
+            ds, de = targeting.full_text_range_to_doc_indices(
                 ft_start, ft_end, full_text, text_map,
             )
             changes.append((ds, de, replace_text, full_text[ft_start:ft_end]))
@@ -1155,77 +791,3 @@ def batch_replace(doc_id: str, replacements: list[dict], *,
 
 
 # Preserve the public positional calling convention.
-@guarded_edit
-def add_comment(
-    doc_id: str,
-    comment: str,
-    anchor_text: str,
-    occurrence: int = 1,
-    *, tab_id: str | None = None,
-    expected_revision_id: str | None = None,  # noqa: ARG001 - decorator
-) -> dict:
-    """Create one native anchored comment with guarded UTF-16 targeting."""
-    docs_service = _get_service('docs', 'v1')
-    doc = _get_document(docs_service, doc_id, tab_id=tab_id)
-    paragraphs = _extract_paragraphs(doc)
-    full_text, text_map = _build_full_text_map(paragraphs)
-
-    # Find all occurrences of anchor_text
-    matches = []
-    search_from = 0
-    while True:
-        pos = full_text.find(anchor_text, search_from)
-        if pos == -1:
-            break
-        matches.append((pos, pos + len(anchor_text)))
-        search_from = pos + 1
-
-    if not matches:
-        raise ToolFailureError(
-            EditFailedResponse(
-                code='TEXT_NOT_FOUND',
-                description=(
-                    f'Anchor text not found in document: {anchor_text!r}'
-                ),
-                suggested_action='Run docs_read to verify the anchor text.',
-            )
-        )
-
-    target_idx = occurrence - 1
-    if target_idx >= len(matches):
-        raise ToolFailureError(
-            EditFailedResponse(
-                code='OCCURRENCE_NOT_FOUND',
-                description=(
-                    f'Occurrence {occurrence} not found — document has '
-                    f'{len(matches)} occurrence(s) of {anchor_text!r}'
-                ),
-                suggested_action='Run docs_read to verify occurrence number.',
-            )
-        )
-
-    ft_start, ft_end = matches[target_idx]
-    doc_start, doc_end = _full_text_range_to_doc_indices(
-        ft_start, ft_end, full_text, text_map,
-    )
-    depend_on(doc, doc_start, doc_end)
-
-    response = saved(submit(docs_service, doc_id, [{
-        'insertComment': {'content': comment, 'range': {
-            'startIndex': doc_start, 'endIndex': doc_end,
-        }},
-    }]))
-    thread = created(response, 'insertComment', 'commentThread')
-    head = thread.get('headPost', {})
-    if not isinstance(head.get('postId'), str) or not head['postId']:
-        fail('WRITE_OUTCOME_UNKNOWN', 'Google saved a comment but omitted '
-             'its head post ID. Inspect threads before retrying.', 1)
-    control = response.get('writeControl', {})
-    return {
-        'ok': True, 'document_id': doc_id, 'comment_id': thread['commentId'],
-        'post_id': head['postId'], 'anchor_id': thread.get('anchorId'),
-        'anchored_to': full_text[ft_start:ft_end], 'at_index': doc_start,
-        'comment_content': head.get('content', comment),
-        'revision_id': control.get('requiredRevisionId') or
-        control.get('targetRevisionId'), 'comment_update_state': 'ALL_SAVED',
-    }

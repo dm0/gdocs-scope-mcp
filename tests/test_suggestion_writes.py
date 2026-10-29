@@ -2,7 +2,6 @@
 
 # Numeric offsets and native field names are explicit regression contracts.
 # ruff: noqa: D103, PLR2004
-
 from copy import deepcopy
 from unittest.mock import MagicMock
 
@@ -10,9 +9,11 @@ import pytest
 from jsonschema import validate
 from pydantic import TypeAdapter
 
-from gdocs_scope_mcp import docs_edit, revision_guards, suggestion_writes
+from gdocs_scope_mcp import revision_guards
+from gdocs_scope_mcp.google_api import clients
 from gdocs_scope_mcp.settings import Settings
-from gdocs_scope_mcp.suggestion_write_models import ProposalOperation
+from gdocs_scope_mcp.suggestions import writing as suggestion_writes
+from gdocs_scope_mcp.suggestions.write_models import ProposalOperation
 from gdocs_scope_mcp.tool_errors import ToolFailureError
 
 from .test_mcp_output_contracts import call_tool
@@ -79,7 +80,7 @@ def proposal_api(monkeypatch, simple_document):
 
     service.documents().get.side_effect = get
     service.documents().batchUpdate.side_effect = batch
-    monkeypatch.setattr(docs_edit, '_get_service', lambda *_args: service)
+    monkeypatch.setattr(clients, 'get_service', lambda *_args: service)
     state['service'] = service
     return state
 

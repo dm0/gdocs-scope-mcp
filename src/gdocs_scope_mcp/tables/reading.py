@@ -2,29 +2,35 @@
 
 # Reuse the existing OAuth boundary without a docs_edit import cycle.
 # ruff: noqa: PLC0415
-
-import base64
-import hashlib
-import json
 from copy import deepcopy
-from dataclasses import dataclass
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, Field
 
-from .errors import ToolFailureError
-from .models import (
-    EditFailedResponse,
-    GoogleDocument,
+from gdocs_scope_mcp.contracts import ListingPage
+from gdocs_scope_mcp.documents import parsing
+from gdocs_scope_mcp.documents.native_models import (
     GoogleDocumentTableCell,
-    ListingPage,
 )
-from .table_refs import Layout, first_tab
-from .table_tokens import (
-    Token,
+from gdocs_scope_mcp.google_api import clients
+from gdocs_scope_mcp.tables.geometry import (
+    _geometry,
+    _tables,
+)
+from gdocs_scope_mcp.tables.references import (
+    _check_revision,
+    _decode,
+    _digest,
+    _encode,
+    _fail,
+    _require_revision,
+    _table_token,
+    _Token,
+)
+from gdocs_scope_mcp.tables.refs import Layout
+from gdocs_scope_mcp.tables.rendering import _model
+from gdocs_scope_mcp.tables.tokens import (
     address,
-    decode as decode_position,
-    encode as encode_position,
 )
 
 TableLimit = Annotated[int, Field(strict=True, ge=1, le=100)]
@@ -34,108 +40,30 @@ ReadReference = Annotated[
     str, Field(strict=True, min_length=1, max_length=8192),
 ]
 PREVIEW_LIMIT = 200
-MAX_GRID_AREA = 100_000
 NESTED_REF_LIMIT = 20
 
 
-def _fail(code, description, action=None):
-    """Give callers a safe way to reacquire a reference instead of guessing."""
-    raise ToolFailureError(EditFailedResponse(
-        code=code, description=description,
-        suggested_action=action or (
-            'Read the document or call docs_tables_list and use the returned '
-            'reference/page token with unchanged arguments. References are '
-            'tab-scoped; page tokens require the same revision. '
-            'Structural changes require fresh table refs; do not edit tokens.'
-        ),
-    ))
 
 
-def _digest(value):
-    """Hash canonical native data or cursor options without a process cache."""
-    return hashlib.sha256(json.dumps(
-        value, ensure_ascii=True, sort_keys=True, separators=(',', ':'),
-    ).encode()).hexdigest()
 
 
-class _Token(BaseModel):
-    """Validate internal token data; tokens confer no document permissions."""
-
-    model_config = ConfigDict(extra='forbid', strict=True)
-    version: Literal[1] = 1
-    kind: Literal['table', 'cell', 'tables-page', 'cells-page']
-    document: str
-    revision: str
-    scope: Literal['first_tab', 'selected_tab'] = 'first_tab'
-    path: list[Annotated[int, Field(ge=0)]] = Field(default_factory=list)
-    cell: list[Annotated[int, Field(ge=0)]] | None = None
-    fingerprint: str = ''
-    offset: Annotated[int, Field(ge=0)] = 0
-    options: str = ''
-    tab: str | None = None
 
 
-def _encode(token):
-    """Use versioned, portable opaque references with a corruption checksum."""
-    if isinstance(token, Token):
-        return encode_position(token)
-    payload = token.model_dump(exclude_defaults=True)
-    data = json.dumps(payload, sort_keys=True, separators=(',', ':')).encode()
-    encoded = base64.urlsafe_b64encode(data).decode().rstrip('=')
-    return 'gdt1.' + encoded + '.' + hashlib.sha256(data).hexdigest()[:16]
 
 
-def _unpack(value):
-    """Validate transport encoding separately from document/tool policy."""
-    if len(value) > 8192:  # noqa: PLR2004
-        raise ValueError('Oversized token')
-    prefix, payload, checksum = value.split('.')
-    if prefix != 'gdt1':
-        raise ValueError('Unsupported token version')
-    data = base64.b64decode(payload + '=' * (-len(payload) % 4),
-                            altchars=b'-_', validate=True)
-    if hashlib.sha256(data).hexdigest()[:16] != checksum:
-        raise ValueError('Invalid token checksum')
-    return _Token.model_validate_json(data)
 
 
-def _decode(value, kind, doc_id):
-    """Reject malformed, mismatched and wrong-kind tokens before API access."""
-    if kind in {'table', 'cell'}:
-        return decode_position(value, kind, doc_id)
-    try:
-        token = _unpack(value)
-    except (ValueError, TypeError, ValidationError):
-        _fail('INVALID_ARGUMENT', 'Invalid reference or continuation token '
-              'for this document/tool.')
-    if token.kind != kind or token.document != doc_id:
-        _fail('INVALID_ARGUMENT', 'Reference has a different tool/document.')
-    return token
 
 
-def _check_revision(token, document):
-    """Reject stale references without reusing an old structural path."""
-    from .document_tabs import require_matching_tab
-    require_matching_tab(token.tab, document.get('_mcp_tab_id'))
-    if token.revision != document['revisionId']:
-        _fail('STALE_REFERENCE', 'The reference revision is not current.')
 
 
-def _fetch(doc_id, tab_id=None):
-    """Read the selected tab through the normal read-only API boundary."""
-    from . import docs_edit
-    document = first_tab(docs_edit._get_document(
-        docs_edit._get_service(), doc_id, tab_id=tab_id,
-    ))
-    _require_revision(document)
-    return document
 
 
 def _read_fetch(doc_id, tab_id=None):
     """Read accepted cells while keeping write/snapshot fetches native."""
-    from . import docs_edit
-    from .suggestions import fetch, table_references
-    view = fetch(docs_edit._get_service(), doc_id, tab_id)
+
+    from gdocs_scope_mcp.suggestions.reading import fetch, table_references
+    view = fetch(clients.get_service(), doc_id, tab_id)
     _require_revision(view.document)
     _, warnings = table_references(view)
     if warnings:
@@ -146,86 +74,16 @@ def _read_fetch(doc_id, tab_id=None):
     return view.document
 
 
-def _require_revision(document):
-    """Do not issue misleading revision-bound references without metadata."""
-    if not isinstance(document.get('revisionId'), str) or not document[
-        'revisionId'
-    ]:
-        _fail('REVISION_UNAVAILABLE', 'Table references require a document '
-              'revision, which this read did not return.',
-              'Verify edit access: Google returns revision IDs only to '
-              'editors. Refresh the document after access is corrected.')
 
 
-def _text(item):
-    """Read source heading text without exposing indices or Markdown markup."""
-    return ''.join(e.get('textRun', {}).get('content', '')
-                   for e in item.get('paragraph', {}).get('elements', []))
 
 
-@dataclass
-class _Table:
-    """Keep a native structural path private to the current snapshot."""
-
-    item: dict
-    path: list[int]
-    headings: list[tuple[int, str, str]]
-    parent_cell: tuple[list[int], int, int] | None = None
 
 
-def _tables(document):
-    """Walk tables in preorder, retaining nesting paths and heading scope."""
-    def walk(content, path, inherited, parent=None):
-        """Use independent heading stacks inside cells, retaining ancestry."""
-        headings = list(inherited)
-        for index, item in enumerate(content):
-            style = item.get('paragraph', {}).get('paragraphStyle', {})
-            heading = style.get('headingId')
-            if heading:
-                kind = style.get('namedStyleType', '')
-                level = int(kind[-1]) if kind.startswith('HEADING_') else 0
-                headings = [h for h in headings if h[0] < level]
-                headings.append((level, heading, _text(item).rstrip('\n')))
-            if 'table' not in item:
-                continue
-            current = [*path, index]
-            yield _Table(item, current, list(headings), parent)
-            for r, row in enumerate(item['table'].get('tableRows', [])):
-                for c, cell in enumerate(row.get('tableCells', [])):
-                    yield from walk(cell.get('content', []),
-                                    [*current, r, c], headings,
-                                    (current, r, c))
-    return list(walk(document.get('body', {}).get('content', []), [], []))
 
 
-def _table_token(document, entry, kind='table', *, layout=None, **updates):
-    """Describe a checked position or an exact-revision page cursor."""
-    if kind in {'table', 'cell'}:
-        cell = updates.get('cell')
-        cell_address = None
-        if cell is not None:
-            geometry, valid = _geometry(entry)
-            value = next(x for x in geometry if x[:2] == tuple(cell))
-            if not valid:
-                _fail('INVALID_ARGUMENT', 'Cell geometry is not verified.')
-            cell_address = address(value[0], value[2])
-        return (layout or Layout(document)).reference(
-            entry, kind=kind, address=cell_address,
-        )
-    return _Token(kind=kind, document=document['documentId'],
-                  revision=document['revisionId'], path=entry.path,
-                  tab=document.get('_mcp_tab_id'),
-                  fingerprint=_digest(entry.item), **updates)
 
 
-def reference_map(document):
-    """Supply HTML table references without any document writes."""
-    entries = _tables(document)
-    if entries:
-        _require_revision(document)
-    layout = Layout(document)
-    return {entry.item['startIndex']: _encode(layout.reference(entry))
-            for entry in entries}
 
 
 class TableSnapshot(BaseModel):
@@ -313,67 +171,8 @@ class TableReadResponse(ListingPage):
     rows: list[TableRowRead]
 
 
-def _geometry(entry):
-    """Map spans conservatively, preserving API placeholder entries."""
-    table = entry.item['table']
-    height, width = table.get('rows', 0), table.get('columns', 0)
-    rows = table.get('tableRows', [])
-    valid = (len(rows) == height and height > 0 and width > 0
-             and height * width <= MAX_GRID_AREA)
-    if not valid:
-        return [(r, c, c, cell.get('tableCellStyle', {}).get('rowSpan'),
-                 cell.get('tableCellStyle', {}).get('columnSpan'), None, cell)
-                for r, row in enumerate(rows)
-                for c, cell in enumerate(row.get('tableCells', []))], False
-    occupied = {}
-    result = []
-    for r, row in enumerate(rows):
-        cells = row.get('tableCells', [])
-        explicit = len(cells) == width
-        cursor = 0
-        for physical, cell in enumerate(cells):
-            if explicit:
-                c = physical
-            else:
-                while (r, cursor) in occupied:
-                    cursor += 1
-                c = cursor
-            style = cell.get('tableCellStyle', {})
-            rs, cs = style.get('rowSpan'), style.get('columnSpan')
-            owner = occupied.get((r, c)) if explicit else None
-            result.append((r, physical, c, rs, cs, owner, cell))
-            if not all(isinstance(n, int) and n > 0 for n in (rs, cs)):
-                valid = False
-                continue
-            if owner is not None:
-                # A covered physical slot must not introduce another span.
-                nonempty = any(_text(item).strip() or 'table' in item
-                               or any('textRun' not in e for e in
-                                      item.get('paragraph', {}).get(
-                                          'elements', []))
-                               for item in cell.get('content', []))
-                if rs != 1 or cs != 1 or nonempty:
-                    valid = False
-                continue
-            if (r + rs > height or c + cs > width
-                    or rs * cs > MAX_GRID_AREA):
-                valid = False
-                continue
-            for rr in range(r, r + rs):
-                for cc in range(c, c + cs):
-                    if (rr, cc) in occupied:
-                        valid = False
-                    occupied[rr, cc] = (r, physical)
-            cursor = c + cs
-    valid = valid and len(occupied) == height * width
-    return result, valid
 
 
-def _model(document):
-    """Render shared Markdown while leaving the native snapshot untouched."""
-    return GoogleDocument.model_validate(deepcopy({
-        **document, 'table_refs': reference_map(document),
-    }))
 
 
 def _summary(document, entry, model, layout=None):
@@ -423,8 +222,7 @@ def _summary(document, entry, model, layout=None):
 
 def _headings(document, requested):
     """Match docs_read's root selection and unknown-heading diagnostics."""
-    from .docs_edit import _parse_document_tree
-    tree = _parse_document_tree(document)
+    tree = parsing.parse_document_tree(document)
     if requested is None:
         return None, []
     found = set(requested).intersection(tree.headings)

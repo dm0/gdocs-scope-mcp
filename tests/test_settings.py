@@ -7,7 +7,7 @@ import pytest
 from pydantic import ValidationError
 
 from gdocs_scope_mcp import server
-from gdocs_scope_mcp.md2requests import markdown_to_requests
+from gdocs_scope_mcp.rich_text.compiler import markdown_to_requests
 from gdocs_scope_mcp.settings import config_path, get_settings
 
 

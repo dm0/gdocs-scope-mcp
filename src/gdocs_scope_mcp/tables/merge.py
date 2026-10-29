@@ -2,12 +2,11 @@
 
 # Reuse the normal fetch boundary without import cycles.
 # ruff: noqa: PLC0415
-
 import logging
 
-from .table_grid import Grid, content_direction, merge_state
-from .table_refs import Layout, section
-from .table_tokens import coordinates, encode, fail
+from gdocs_scope_mcp.tables.grid import Grid, content_direction, merge_state
+from gdocs_scope_mcp.tables.refs import Layout, section
+from gdocs_scope_mcp.tables.tokens import coordinates, encode, fail
 
 log = logging.getLogger(__name__)
 
@@ -112,7 +111,7 @@ def refreshed_reference(doc_id, token, revision):
     Return a receipt requesting rediscovery instead of guessing another table,
     failing with zero committed batches, or repeating the transformation.
     """
-    from .table_read import _fetch
+    from gdocs_scope_mcp.tables.fetching import _fetch
     try:
         document = _fetch(doc_id, tab_id=token.tab)
         if not revision or document['revisionId'] != revision or (

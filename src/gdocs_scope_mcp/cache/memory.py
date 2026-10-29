@@ -1,12 +1,13 @@
 """Validate immutable snapshots and bound process-local storage."""
 
+
 import json
 import logging
 import time
 from collections import OrderedDict
 from threading import RLock
 
-from .types import Entry
+from gdocs_scope_mcp.cache.types import Entry
 
 log = logging.getLogger(__name__)
 

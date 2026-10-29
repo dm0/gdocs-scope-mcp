@@ -1,10 +1,14 @@
 """Verify the shared converter and literal insertion entry points."""
 
+
 import pytest
 
-from gdocs_scope_mcp import docs_edit
-from gdocs_scope_mcp.md2requests import markdown_to_html, markdown_to_requests
-from gdocs_scope_mcp.table_insertion import InsertionTable
+from gdocs_scope_mcp.documents import editing as docs_edit
+from gdocs_scope_mcp.rich_text.compiler import (
+    markdown_to_html,
+    markdown_to_requests,
+)
+from gdocs_scope_mcp.rich_text.table_insertion import InsertionTable
 
 
 @pytest.mark.parametrize(

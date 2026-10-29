@@ -7,8 +7,11 @@ from pathlib import Path
 
 import pytest
 
-from gdocs_scope_mcp import docs_edit
 from gdocs_scope_mcp.code_reading import MARKER_PREFIX
+from gdocs_scope_mcp.documents import (
+    fetching,
+)
+from gdocs_scope_mcp.google_api import clients
 
 
 def _markdown(result):
@@ -101,8 +104,8 @@ def test_live_unmarked_code_heuristic(
                 f'  second\n```\n\nAfter {marker}',
             })
             assert not result.is_error
-        service = docs_edit._get_service()
-        native = docs_edit._get_document(service, live_test_doc)
+        service = clients.get_service()
+        native = fetching.get_document(service, live_test_doc)
         ranges = native.get('namedRanges', {})
         # Remove only the marker of this test's appended block. This backend
         # setup simulates external formatting; reads still go through STDIO.
@@ -128,7 +131,7 @@ def test_live_unmarked_code_heuristic(
         async with isolated_mcp(log.with_suffix('.reader.log')) as session:
             client, info = session
             report['reader'] = info
-            before = docs_edit._get_document(service, live_test_doc)[
+            before = fetching.get_document(service, live_test_doc)[
                 'revisionId']
             result = await client.call_tool('docs_read',
                                             {'doc_id': live_test_doc})
@@ -136,7 +139,7 @@ def test_live_unmarked_code_heuristic(
             assert f'```\n{marker}\n\n  second\n```' in markdown
             assert f'Before {marker}' in markdown
             assert f'After {marker}' in markdown
-            assert docs_edit._get_document(service, live_test_doc)[
+            assert fetching.get_document(service, live_test_doc)[
                 'revisionId'] == before
             report['checks_passed'] = True
 

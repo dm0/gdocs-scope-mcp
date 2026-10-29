@@ -1,7 +1,6 @@
 """Verify access validation, bounded snapshots and write invalidation."""
 
 # ruff: noqa: D103, PLR2004
-
 import logging
 import threading
 from concurrent.futures import ThreadPoolExecutor

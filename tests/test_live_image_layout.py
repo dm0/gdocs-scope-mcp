@@ -1,5 +1,6 @@
 """Check automatic image widths using native readback through isolated MCP."""
 
+
 # Imported fixtures intentionally retain names; dimensions are test contracts.
 # ruff: noqa: F811
 

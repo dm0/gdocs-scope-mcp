@@ -1,12 +1,14 @@
 """Discover document tabs and keep every selected view and write scoped."""
 
+
 from copy import deepcopy
 from typing import Annotated
 
 from pydantic import BaseModel, Field
 
-from .errors import ToolFailureError
-from .models import EditFailedResponse, TabInfo
+from gdocs_scope_mcp.contracts import EditFailedResponse
+from gdocs_scope_mcp.documents.models import TabInfo
+from gdocs_scope_mcp.errors import ToolFailureError
 
 MAX_TAB_ID_LENGTH = 256
 

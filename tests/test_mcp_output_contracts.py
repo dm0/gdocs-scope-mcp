@@ -13,7 +13,7 @@ from googleapiclient.errors import HttpError
 from httplib2 import Response
 from jsonschema import validate
 
-from gdocs_scope_mcp import docs_edit, server
+from gdocs_scope_mcp import server
 from gdocs_scope_mcp.google_api import (
     clients,
     credentials as google_credentials,
@@ -597,7 +597,7 @@ def test_unsupported_replace_all_returns_structured_mcp_error(
     get_service = MagicMock(
         side_effect=AssertionError('Unexpected API access'),
     )
-    monkeypatch.setattr(docs_edit, '_get_service', get_service)
+    monkeypatch.setattr(clients, 'get_service', get_service)
 
     tool, response = call_tool(
         'docs_search_replace',
@@ -697,7 +697,7 @@ def test_expired_credentials_have_authentication_guidance(monkeypatch):
     def expired():
         raise RefreshError('private-token-details')
 
-    monkeypatch.setattr(docs_edit, '_get_service', lambda *_args: expired())
+    monkeypatch.setattr(clients, 'get_service', lambda *_args: expired())
     _, response = call_tool(
         'docs_resolve_comment',
         {'doc_id': 'example', 'comment_id': 'comment-id'},

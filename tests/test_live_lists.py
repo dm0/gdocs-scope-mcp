@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from gdocs_scope_mcp import docs_edit
+from gdocs_scope_mcp.google_api import clients
 
 
 @pytest.mark.parametrize('tool', [
@@ -21,7 +21,7 @@ def test_native_continuation_lists(live_test_doc, isolated_mcp, tool, ordered):
     mode = 'ordered' if ordered else 'unordered'
     log = Path(f'/tmp/gdocs-scope-mcp-{tool}-lists-{mode}.log')
     report = {}
-    documents = docs_edit._get_service('docs', 'v1').documents()
+    documents = clients.get_service('docs', 'v1').documents()
 
     async def run():
         async with isolated_mcp(log) as (client, info):
@@ -97,7 +97,7 @@ def test_native_continuation_lists(live_test_doc, isolated_mcp, tool, ordered):
                                  read.structured_content['sections'])
             assert marker + ' after child' in markdown
             if ordered:
-                exported = docs_edit._get_service('drive', 'v3').files(
+                exported = clients.get_service('drive', 'v3').files(
                 ).export_media(fileId=live_test_doc,
                                mimeType='text/plain').execute().decode('utf-8')
                 for number, label in enumerate(('first😀', 'second', 'third'),

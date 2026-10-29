@@ -14,8 +14,8 @@ import pytest
 from fastmcp import Client
 from fastmcp.client.transports import StdioTransport
 
-from gdocs_scope_mcp import docs_edit
 from gdocs_scope_mcp.diagnostics import capture_server_info
+from gdocs_scope_mcp.google_api import clients
 
 
 @pytest.fixture
@@ -130,7 +130,7 @@ def mock_docs(monkeypatch, simple_document):
         simple_document
     )
     documents.batchUpdate.return_value.execute.return_value = {}
-    monkeypatch.setattr(docs_edit, '_get_service', lambda *_args: service)
+    monkeypatch.setattr(clients, 'get_service', lambda *_args: service)
     return documents
 
 

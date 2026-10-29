@@ -2,8 +2,11 @@
 
 import pytest
 
-from gdocs_scope_mcp import docs_edit
-from gdocs_scope_mcp.md2requests import markdown_to_requests
+from gdocs_scope_mcp.documents import (
+    editing as docs_edit,
+    reading,
+)
+from gdocs_scope_mcp.rich_text.compiler import markdown_to_requests
 
 
 @pytest.fixture
@@ -46,7 +49,7 @@ def test_read_output_can_be_inserted_with_supported_styles(
     mock_docs, formatted_document, operation, rich,
 ):
     """Reuse reader HTML while keeping styles and heading IDs scoped."""
-    read = docs_edit.read('example', ['original-id'])
+    read = reading.read('example', ['original-id'])
     markdown = read.sections[0].markdown
     assert '<a id=original-id></a>' in markdown
     assert '<b>Bold🦷</b>' in markdown

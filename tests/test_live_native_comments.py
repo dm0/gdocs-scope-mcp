@@ -1,5 +1,6 @@
 """Verify native comment persistence and anchoring through isolated MCP."""
 
+
 # Imported pytest fixtures intentionally retain their registered names.
 # ruff: noqa: F811
 

@@ -2,7 +2,6 @@
 
 # Reuse the service boundary and rich converter without import cycles.
 # ruff: noqa: PLC0415
-
 import logging
 import re
 import time
@@ -11,18 +10,26 @@ from typing import Annotated, Literal
 from bs4 import BeautifulSoup, Comment
 from pydantic import BaseModel, ConfigDict, Field
 
-from .code_reading import NATIVE_CODE_BOUNDARY
-from .errors import ToolFailureError
-from .models import EditFailedResponse
-from .revision_guards import MAX_ATTEMPTS, RevisionRaceError, submit
-from .table_insertion import convert_table, shifted_requests
-from .table_snapshots import (
+from gdocs_scope_mcp.code_reading import NATIVE_CODE_BOUNDARY
+from gdocs_scope_mcp.contracts import EditFailedResponse
+from gdocs_scope_mcp.errors import ToolFailureError
+from gdocs_scope_mcp.google_api import clients
+from gdocs_scope_mcp.revision_guards import (
+    MAX_ATTEMPTS,
+    RevisionRaceError,
+    submit,
+)
+from gdocs_scope_mcp.rich_text.table_insertion import (
+    convert_table,
+    shifted_requests,
+)
+from gdocs_scope_mcp.tables.snapshots import (
     resolve_cells,
     validate_baseline,
     validate_states,
 )
-from .table_tokens import CellAddress, decode, fail
-from .text_indices import utf16_length
+from gdocs_scope_mcp.tables.tokens import CellAddress, decode, fail
+from gdocs_scope_mcp.text_indices import utf16_length
 
 log = logging.getLogger(__name__)
 MAX_MARKDOWN = 100000
@@ -72,7 +79,7 @@ class PatchResponse(BaseModel):
 
 def compile_cell(markdown):
     """Validate inline Markdown and reuse the table-cell converter."""
-    from .md2requests import markdown_to_html
+    from gdocs_scope_mcp.rich_text.compiler import markdown_to_html
     if any(ord(c) < 32 and c not in '\t\r\n\v' for c in markdown):  # noqa: PLR2004
         fail('INVALID_ARGUMENT', 'Unsupported control character in cell text.')
     if any(0xd800 <= ord(c) <= 0xdfff for c in markdown):  # noqa: PLR2004
@@ -191,8 +198,8 @@ def plan_requests(document, available, compiled):
 
 def patch(doc_id, table_ref, base_token, changes, *, tab_id=None):
     """Revalidate the original expected state after each confirmed CAS race."""
-    from . import docs_edit
-    from .table_read import _fetch
+
+    from gdocs_scope_mcp.tables.fetching import _fetch
     table = decode(table_ref, 'table', doc_id)
     baseline = decode(base_token, 'base', doc_id)
     cells = [change.address for change in changes]
@@ -212,7 +219,7 @@ def patch(doc_id, table_ref, base_token, changes, *, tab_id=None):
         validate_states(document, baseline, available)
         requests, receipts = plan_requests(document, available, compiled)
         try:
-            result = submit(docs_edit._get_service(), doc_id, requests,
+            result = submit(clients.get_service(), doc_id, requests,
                             document['revisionId'], force_required=True
                             ) if requests else {}
         except RevisionRaceError:

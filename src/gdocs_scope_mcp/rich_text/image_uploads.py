@@ -14,13 +14,13 @@ from bs4 import BeautifulSoup
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaIoBaseUpload
 
-from .md2requests import (
+from gdocs_scope_mcp.rich_text.compiler import (
     _image_failure,
     gpars_to_requests,
     html_to_gpars,
     markdown_to_html,
 )
-from .table_insertion import TableInsertionPlan
+from gdocs_scope_mcp.rich_text.table_insertion import TableInsertionPlan
 
 logger = logging.getLogger('gdocs_scope_mcp')
 MAX_LOCAL_IMAGE_BYTES = 50_000_000

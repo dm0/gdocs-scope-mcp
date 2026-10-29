@@ -2,7 +2,6 @@
 
 # Fixture offsets and item counts are independent expectations.
 # ruff: noqa: PLR2004
-
 import asyncio
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -11,8 +10,14 @@ import pytest
 from bs4 import BeautifulSoup
 from fastmcp import Client
 
-from gdocs_scope_mcp import docs_edit, server
-from gdocs_scope_mcp.md2requests import markdown_to_html, markdown_to_requests
+from gdocs_scope_mcp import server
+from gdocs_scope_mcp.documents import (
+    editing as docs_edit,
+)
+from gdocs_scope_mcp.rich_text.compiler import (
+    markdown_to_html,
+    markdown_to_requests,
+)
 
 
 @dataclass

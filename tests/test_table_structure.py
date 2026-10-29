@@ -2,7 +2,6 @@
 
 # Imported pytest fixtures are requested by name.
 # ruff: noqa: F811
-
 from copy import deepcopy
 
 import pytest
@@ -10,10 +9,14 @@ from googleapiclient.errors import HttpError
 from httplib2 import Response
 from pydantic import TypeAdapter
 
-from gdocs_scope_mcp import table_read, table_snapshots, table_structure
-from gdocs_scope_mcp.table_deletion_state import deletion_state
-from gdocs_scope_mcp.table_refs import Layout
-from gdocs_scope_mcp.table_tokens import decode, digest, encode
+from gdocs_scope_mcp.tables import (
+    reading as table_read,
+    snapshots as table_snapshots,
+    structure as table_structure,
+)
+from gdocs_scope_mcp.tables.deletion_state import deletion_state
+from gdocs_scope_mcp.tables.refs import Layout
+from gdocs_scope_mcp.tables.tokens import decode, digest, encode
 from gdocs_scope_mcp.tool_errors import ToolFailureError
 
 from .test_table_discovery import call, table_source  # noqa: F401

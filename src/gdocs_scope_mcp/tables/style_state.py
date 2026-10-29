@@ -1,8 +1,9 @@
 """Read table style dependencies, including both shared border sides."""
 
+
 from copy import deepcopy
 
-from .table_tokens import digest, fail
+from gdocs_scope_mcp.tables.tokens import digest, fail
 
 CELL_FIELDS = {
     'background_color': 'backgroundColor',

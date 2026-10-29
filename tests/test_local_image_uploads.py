@@ -10,7 +10,9 @@ import pytest
 from fastmcp import Client
 from googleapiclient.errors import HttpError
 
-from gdocs_scope_mcp import docs_edit, image_uploads, server
+from gdocs_scope_mcp import server
+from gdocs_scope_mcp.google_api import clients
+from gdocs_scope_mcp.rich_text import image_uploads
 
 URL = 'https://drive.google.com/uc?id=temporary&export=download'
 IMAGE_COUNT = 2
@@ -61,7 +63,7 @@ def services(mock_docs, monkeypatch):
     factory = MagicMock(side_effect=lambda api, _version: (
         drive if api == 'drive' else docs
     ))
-    monkeypatch.setattr(docs_edit, '_get_service', factory)
+    monkeypatch.setattr(clients, 'get_service', factory)
     return mock_docs, drive, factory
 
 

@@ -1,12 +1,13 @@
 """Verify strict border inputs and forwarding through real MCP tools."""
 
+
 import asyncio
 
 import pytest
 from fastmcp import Client
 
 from gdocs_scope_mcp import server
-from gdocs_scope_mcp.table_insertion import TableInsertionPlan
+from gdocs_scope_mcp.rich_text.table_insertion import TableInsertionPlan
 
 
 def call(tool, extra):

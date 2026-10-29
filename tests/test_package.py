@@ -1,5 +1,6 @@
 """Check installed entry points without starting or authenticating."""
 
+
 from importlib.metadata import distribution
 
 from gdocs_scope_mcp import auth_setup, server

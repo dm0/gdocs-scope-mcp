@@ -2,7 +2,6 @@
 
 # Imported pytest fixtures are requested by name in dependent fixtures/tests.
 # ruff: noqa: F811
-
 from copy import deepcopy
 from types import SimpleNamespace
 
@@ -10,8 +9,12 @@ import pytest
 from googleapiclient.errors import HttpError
 from httplib2 import Response
 
-from gdocs_scope_mcp import table_patch, table_read, table_snapshots
-from gdocs_scope_mcp.table_patch import CellPatch
+from gdocs_scope_mcp.tables import (
+    patch as table_patch,
+    reading as table_read,
+    snapshots as table_snapshots,
+)
+from gdocs_scope_mcp.tables.patch import CellPatch
 from gdocs_scope_mcp.text_indices import utf16_length
 from gdocs_scope_mcp.tool_errors import ToolFailureError
 

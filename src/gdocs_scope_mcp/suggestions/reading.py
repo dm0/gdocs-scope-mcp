@@ -2,7 +2,6 @@
 
 # Authentication and tree parsing are shared lazily with the edit backend.
 # ruff: noqa: PLC0415
-
 from dataclasses import dataclass
 from http import HTTPStatus
 from typing import Annotated, NoReturn
@@ -10,17 +9,19 @@ from typing import Annotated, NoReturn
 from googleapiclient.errors import HttpError
 from pydantic import Field
 
-from . import comments
-from .document_tabs import select
-from .errors import ToolFailureError
-from .models import EditFailedResponse
-from .suggestion_index import (
+from gdocs_scope_mcp import comments
+from gdocs_scope_mcp.contracts import EditFailedResponse
+from gdocs_scope_mcp.documents import parsing
+from gdocs_scope_mcp.documents.tabs import select
+from gdocs_scope_mcp.errors import ToolFailureError
+from gdocs_scope_mcp.google_api import clients
+from gdocs_scope_mcp.suggestions.index import (
     STYLE_LEVELS,
     ProposalIndex,
     index_document,
     scope_ranges,
 )
-from .suggestion_models import (
+from gdocs_scope_mcp.suggestions.models import (
     SuggestionDetails,
     SuggestionPost,
     SuggestionsReadResponse,
@@ -158,7 +159,7 @@ def _heading_mapping(source, document):
 
 def table_references(view):
     """Expose projected table refs only when native meaning is unchanged."""
-    from .table_read import reference_map
+    from gdocs_scope_mcp.tables.references import reference_map
 
     if not view.document.get('revisionId'):
         return {}, ['Table references require edit access and a revision ID.']
@@ -202,11 +203,11 @@ def read(
     page_token=None,
 ):
     """Page scoped threads or one thread's head and bounded replies."""
-    from . import docs_edit
 
-    view = fetch(docs_edit._get_service(), doc_id, tab_id, threads=True)
+
+    view = fetch(clients.get_service(), doc_id, tab_id, threads=True)
     if heading_id is not None:
-        tree = docs_edit._parse_document_tree(view.document)
+        tree = parsing.parse_document_tree(view.document)
         if heading_id not in tree.headings:
             fail(
                 'HEADING_NOT_FOUND',

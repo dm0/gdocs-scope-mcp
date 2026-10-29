@@ -1,5 +1,6 @@
 """Verify startup identity through a real in-process MCP connection."""
 
+
 import asyncio
 import os
 from importlib.metadata import version

@@ -1,5 +1,6 @@
 """Verify native comment persistence, permissions and pagination."""
 
+
 from copy import deepcopy
 from types import SimpleNamespace
 from unittest.mock import MagicMock

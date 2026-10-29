@@ -4,8 +4,12 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from gdocs_scope_mcp import docs_edit
-from gdocs_scope_mcp.md2requests import markdown_to_requests
+from gdocs_scope_mcp import comments
+from gdocs_scope_mcp.documents import (
+    editing as docs_edit,
+    targeting,
+)
+from gdocs_scope_mcp.rich_text.compiler import markdown_to_requests
 
 
 @pytest.fixture
@@ -181,7 +185,7 @@ def test_native_comment_uses_utf16_source_runs(
         'id': 'comment-id',
     }
 
-    result = docs_edit.add_comment('example', 'Comment', anchor)
+    result = comments.add_comment('example', 'Comment', anchor)
 
     request = mock_docs.batchUpdate.call_args.kwargs['body']['requests'][0]
     assert request['insertComment']['range'] == {
@@ -195,8 +199,8 @@ def test_range_endpoint_keeps_preceding_run_boundary():
     """A range end excludes a source gap, while a start uses the next run."""
     first_end, second_start = 5, 9
     text_map = [(0, 3, '😀'), (1, second_start, 'X')]
-    assert docs_edit._full_text_pos_to_doc_index(1, text_map) == second_start
-    assert docs_edit._full_text_pos_to_doc_index(
+    assert targeting.full_text_pos_to_doc_index(1, text_map) == second_start
+    assert targeting.full_text_pos_to_doc_index(
         1, text_map, end=True,
     ) == first_end
 

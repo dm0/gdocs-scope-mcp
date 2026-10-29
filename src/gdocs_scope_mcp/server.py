@@ -45,59 +45,70 @@ from fastmcp import FastMCP
 from googleapiclient.discovery import build
 from pydantic import BaseModel, Field, TypeAdapter
 
-from . import (
-    comments,
-    docs_edit,
-    entity_edit,
-    suggestion_writes,
-    suggestions,
-    table_format,
-    table_patch,
-    table_read,
-    table_snapshots,
-    table_structure,
+from gdocs_scope_mcp import comments, entity_edit
+from gdocs_scope_mcp.comment_models import (
+    AddCommentResponse,
+    DeleteCommentReplyResponse,
+    DeleteCommentResponse,
+    EditCommentResponse,
+    ReadCommentsResponse,
+    ReopenCommentResponse,
+    ReplyCommentResponse,
+    ResolveCommentResponse,
 )
-from .diagnostics import ServerInfo, capture_server_info
-from .document_tabs import TabId, TabsResponse
-from .entities import (
+from gdocs_scope_mcp.contracts import EditFailedResponse
+from gdocs_scope_mcp.diagnostics import ServerInfo, capture_server_info
+from gdocs_scope_mcp.documents import (
+    editing as docs_edit,
+    reading,
+)
+from gdocs_scope_mcp.documents.models import DocumentOutline, DocumentSubset
+from gdocs_scope_mcp.documents.receipts import (
+    AppendSucceedResponse,
+    BatchReplaceResponse,
+    DeleteParagraphResponse,
+    InsertSucceedResponse,
+    ReplaceSucceedResponse,
+)
+from gdocs_scope_mcp.documents.tabs import TabId, TabsResponse
+from gdocs_scope_mcp.entities import (
     DropdownOptions,
     EntityDetails,
     EntityEditResponse,
 )
-from .google_api import credentials
-from .models import (
-    AddCommentResponse,
-    AppendSucceedResponse,
-    BatchReplaceResponse,
+from gdocs_scope_mcp.google_api import credentials
+from gdocs_scope_mcp.google_api.models import (
     CreateDocumentResponse,
-    DeleteCommentReplyResponse,
-    DeleteCommentResponse,
-    DeleteParagraphResponse,
-    DocumentOutline,
-    DocumentSubset,
-    EditCommentResponse,
-    EditFailedResponse,
-    InsertSucceedResponse,
     ListDocumentsResponse,
-    ReadCommentsResponse,
-    ReopenCommentResponse,
-    ReplaceSucceedResponse,
-    ReplyCommentResponse,
-    ResolveCommentResponse,
 )
-from .settings import code_formatting, get_settings
-from .suggestion_models import SuggestionsReadResponse
-from .suggestion_write_models import (
+from gdocs_scope_mcp.settings import code_formatting, get_settings
+from gdocs_scope_mcp.suggestions import (
+    reading as suggestions,
+    writing as suggestion_writes,
+)
+from gdocs_scope_mcp.suggestions.models import SuggestionsReadResponse
+from gdocs_scope_mcp.suggestions.reading import (
+    SuggestionCursor,
+    SuggestionId,
+    SuggestionLimit,
+)
+from gdocs_scope_mcp.suggestions.write_models import (
     ProposalOperation,
     SuggestionAction,
     SuggestionIds,
     SuggestionsManageResponse,
     SuggestResponse,
 )
-from .suggestions import SuggestionCursor, SuggestionId, SuggestionLimit
-from .table_format import FormatChanges, FormatResponse
-from .table_patch import CellPatches, PatchResponse
-from .table_read import (
+from gdocs_scope_mcp.tables import (
+    formatting as table_format,
+    patch as table_patch,
+    reading as table_read,
+    snapshots as table_snapshots,
+    structure as table_structure,
+)
+from gdocs_scope_mcp.tables.formatting import FormatChanges, FormatResponse
+from gdocs_scope_mcp.tables.patch import CellPatches, PatchResponse
+from gdocs_scope_mcp.tables.reading import (
     CellLimit,
     CellPreviewLimit,
     ReadReference,
@@ -105,10 +116,17 @@ from .table_read import (
     TableReadResponse,
     TablesListResponse,
 )
-from .table_snapshots import SnapshotResponse
-from .table_structure import StructureOperation, StructureResponse
-from .table_tokens import CellAddress, SnapshotFields, SnapshotToken
-from .tool_inputs import (
+from gdocs_scope_mcp.tables.snapshots import SnapshotResponse
+from gdocs_scope_mcp.tables.structure import (
+    StructureOperation,
+    StructureResponse,
+)
+from gdocs_scope_mcp.tables.tokens import (
+    CellAddress,
+    SnapshotFields,
+    SnapshotToken,
+)
+from gdocs_scope_mcp.tool_inputs import (
     CodeBlockStyle,
     CodeBlockThemeBackground,
     CommentActionText,
@@ -121,7 +139,10 @@ from .tool_inputs import (
     Replacements,
     TableBorders,
 )
-from .tool_logging import ToolCallLoggingMiddleware, configure_logging
+from gdocs_scope_mcp.tool_logging import (
+    ToolCallLoggingMiddleware,
+    configure_logging,
+)
 
 SERVER_INFO = capture_server_info()
 TableCells = Annotated[
@@ -342,7 +363,7 @@ to further reduce the scope.
 #     Args:
 #         doc_id: Google Doc ID (from the URL: /document/d/{DOC_ID}/edit)
 #     """
-#     return docs_edit.get_full_tree(doc_id)
+#     return reading.get_full_tree(doc_id)
 
 
 @mcp.tool(
@@ -401,7 +422,7 @@ def docs_get_tree(doc_id: str, *,
     Args:
         doc_id: Google Doc ID (from the URL: /document/d/{DOC_ID}/edit)
     """
-    return docs_edit.get_tree(doc_id, tab_id=tab_id)
+    return reading.get_tree(doc_id, tab_id=tab_id)
 
 
 @mcp.tool(
@@ -416,7 +437,7 @@ def docs_tabs_list(doc_id: str) -> TabsResponse:
     means the first document tab. Explicit missing IDs never fall back.
     Tab discovery is read-only; revision IDs remain document-wide.
     """
-    return docs_edit.tabs_list(doc_id)
+    return reading.tabs_list(doc_id)
 
 
 @mcp.tool(
@@ -594,7 +615,7 @@ def docs_read(
     """
     if isinstance(heading_ids, str):
         heading_ids = [heading_ids]
-    return docs_edit.read(doc_id, heading_ids, tab_id=tab_id)
+    return reading.read(doc_id, heading_ids, tab_id=tab_id)
 
 
 @mcp.tool(
@@ -1428,7 +1449,7 @@ def docs_add_comment(
         occurrence: Which occurrence to anchor (default 1 = first).
             Use 2, 3, etc. when the same text appears more than once.
     """
-    result = docs_edit.add_comment(
+    result = comments.add_comment(
         doc_id, comment, anchor_text, occurrence,
         expected_revision_id=expected_revision_id, tab_id=tab_id,
     )

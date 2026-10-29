@@ -14,10 +14,10 @@ from http.client import HTTPException
 from googleapiclient.errors import HttpError
 from httplib2 import HttpLib2Error
 
-from .document_tabs import scope_requests
-from .errors import ToolFailureError
-from .models import EditFailedResponse
-from .settings import get_settings
+from gdocs_scope_mcp.contracts import EditFailedResponse
+from gdocs_scope_mcp.documents.tabs import scope_requests
+from gdocs_scope_mcp.errors import ToolFailureError
+from gdocs_scope_mcp.settings import get_settings
 
 MAX_ATTEMPTS = 3
 _active = ContextVar('document_edit', default=None)

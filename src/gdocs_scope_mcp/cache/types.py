@@ -1,5 +1,6 @@
 """Immutable storage entries shared by snapshot backends."""
 
+
 from dataclasses import dataclass
 
 

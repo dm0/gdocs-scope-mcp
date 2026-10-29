@@ -1,5 +1,6 @@
 """Persist revision-validated snapshots with bounded SQLite storage."""
 
+
 import hashlib
 import json
 import logging
@@ -12,9 +13,9 @@ from functools import lru_cache
 from filelock import FileLock
 from platformdirs import user_cache_path
 
-from ..settings import get_settings
-from .memory import SnapshotCache
-from .types import Entry
+from gdocs_scope_mcp.cache.memory import SnapshotCache
+from gdocs_scope_mcp.cache.types import Entry
+from gdocs_scope_mcp.settings import get_settings
 
 log = logging.getLogger(__name__)
 PAGE_SIZE = 4096
