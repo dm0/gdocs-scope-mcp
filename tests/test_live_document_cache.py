@@ -7,6 +7,7 @@ import asyncio
 import time
 import uuid
 
+from .native_snapshot_assertions import assert_tabs_unchanged
 from .test_live_table_identity import table_probe  # noqa: F401
 
 
@@ -97,6 +98,6 @@ def test_live_document_cache(
                         [{'deleteTab': {'tabId': tab_id}}], current,
                     )
                     after = await probe.call(0, 'probe_tabs_document')
-                    assert after['tabs'] == before['tabs']
+                    assert_tabs_unchanged(before['tabs'], after['tabs'])
 
     asyncio.run(run())
