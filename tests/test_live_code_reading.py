@@ -11,6 +11,7 @@ import pytest
 from gdocs_scope_mcp.code_reading import MARKER_PREFIX
 from gdocs_scope_mcp.documents import (
     fetching,
+    tabs,
 )
 from gdocs_scope_mcp.google_api import clients
 
@@ -125,7 +126,9 @@ def test_live_unmarked_code_heuristic(
                         matching.append(named['namedRangeId'])
         assert len(matching) == 1
         service.documents().batchUpdate(documentId=live_test_doc, body={
-            'requests': [{'deleteNamedRange': {'namedRangeId': matching[0]}}],
+            'requests': tabs.scope_requests([
+                {'deleteNamedRange': {'namedRangeId': matching[0]}},
+            ], native['_mcp_tab_id']),
             'writeControl': {'requiredRevisionId': native['revisionId']},
         }).execute()
         monkeypatch.setenv('GDOCS_SCOPE_MCP_READ_CODE_BLOCK_HEURISTIC', 'true')
