@@ -124,3 +124,10 @@ Full logs are under `/tmp/gdocs-53-{targeted,offline,live,build,artifacts}.log`.
 Live identity and cleanup evidence are in
 `/tmp/gdocs-scope-mcp-literal-search.json`, with stderr in the matching `.log`.
 No normal user MCP process was reconfigured or restarted.
+
+The first CI run exposed a test-fixture portability issue on Python 3.10/3.11:
+the Google client's `HttpError` constructor parsed deeply nested JSON before
+the classifier was reached. Malformed-body fixtures now attach the raw body
+after constructing the exception with a minimal valid payload, isolating the
+classifier boundary consistently across Python versions. Normal error fixtures
+still use the real constructor with their full payload.

@@ -34,7 +34,12 @@ def http_error(status, reasons=(), *, content=None, domain='usageLimits'):
             'errors': [{'reason': reason, 'domain': domain, 'message': PRIVATE}
                        for reason in reasons],
         }}).encode()
-    return HttpError(Response({'status': status}), content)
+        return HttpError(Response({'status': status}), content)
+    # Keep Google client constructor parsing outside this classifier seam.
+    # Older CPython versions reject deeply nested JSON in HttpError.__init__.
+    error = HttpError(Response({'status': status}), b'{}')
+    error.content = content
+    return error
 
 
 def wrap(error):
@@ -96,7 +101,9 @@ MALFORMED_BODIES = [
 ]
 
 
-@pytest.mark.parametrize('content', MALFORMED_BODIES)
+@pytest.mark.parametrize('content', MALFORMED_BODIES, ids=[
+    f'body-{index}' for index in range(len(MALFORMED_BODIES))
+])
 @pytest.mark.parametrize('status', [403, 503])
 def test_malformed_payload_uses_status_fallback(content, status):
     """Bad JSON, shape, size or spoofed text never breaks failure handling."""
