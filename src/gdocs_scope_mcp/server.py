@@ -175,6 +175,9 @@ EDITING TOOLS:
     temporary nesting tabs and root paragraphs. Mixed subtrees use separate
     native list IDs while parent numbering continues. Reads cannot reconstruct
     logical item membership from indentation alone.
+    Reads emit contiguous lists as nested HTML ol/ul/li groups, preserving
+    marker kinds and nesting for rich reinsertion. Unmarked paragraphs end
+    groups; native IDs and custom numbering are not preserved by copying.
     Markdown images and HTML img[src] insert native inline images using public
     HTTP(S) URLs (PNG/JPEG/GIF; Google's size limits apply). HTML width/height
     accept positive pixel numbers; CSS sizes and responsive sources fail before

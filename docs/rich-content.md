@@ -402,10 +402,32 @@ numbering. Tight lists use zero paragraph spacing; loose lists use 6 pt above
 each paragraph and zero below, without inserting empty items. This applies to
 all three rich insertion tools. Reads preserve text and order, but indentation
 alone cannot reconstruct the original Markdown item membership losslessly.
-The current reader's display indentation is not a canonical Markdown encoding
-for reinsertion; improving list read-to-write round trips is tracked in
-[#51](https://github.com/dm0/gdocs-scope-mcp/issues/51). Insertion does not change
-that existing reader limitation.
+
+Reads serialize contiguous native list paragraphs as explicit HTML `ol`/`ul`
+and `li` elements within the returned Markdown. This preserves item order,
+marker kind, nested levels and adjacent independent list groups when passed
+back to a rich insertion tool. Inline HTML styles/links and literal text remain
+escaped; detected inline code uses `code` elements inside lists.
+
+For example, a numbered parent with a numbered child is returned as:
+
+```html
+<ol><li>Parent<ol><li>Child</li></ol></li><li>Next parent</li></ol>
+```
+
+This is a structural round trip, not a lossless native-document copy:
+
+- Ordinary unmarked paragraphs end the current list group. Their indentation
+  does not prove that they continue an earlier item. A list resuming after such
+  a paragraph becomes a new group; parent numbering can restart on reinsertion.
+- A fragment starting below level 0, or skipping ancestor levels, is normalized
+  to the available HTML hierarchy without inventing empty parent items.
+- Copying creates new native list IDs. Custom glyph formats, start numbers,
+  counters continuing across separate groups and exact visual spacing are not
+  retained; ordered lists use the insertion presets described above.
+- Headings, tables and cell boundaries close open list groups. Lists inside
+  native table cells remain readable HTML; inserting lists into new table cells
+  is still outside the supported table-writing subset.
 
 Custom starting numbers, empty items, interactive task checkboxes, and
 arbitrary block content inside items return `INVALID_ARGUMENT` before writing.

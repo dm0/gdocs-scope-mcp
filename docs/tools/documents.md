@@ -116,6 +116,12 @@ including their nested subsections. Omit `heading_ids` to read the whole
 selected tab.
 Heading lines include HTML anchors carrying their structural IDs.
 
+Contiguous native lists use explicit nested HTML `ol`/`ul`/`li` groups in the
+Markdown output. Reusing that content with rich insertion preserves item order,
+marker kind, nesting and adjacent independent list groups. Unmarked paragraphs
+end groups; continuation membership, non-default numbering and original native
+IDs are not copied losslessly. See [native list limits](../rich-content.md#native-lists).
+
 Omitted or null `heading_ids` returns the whole selected tab (`partial=false`,
 `selected_headings=null`), including any preamble before the first heading as
 an entry with `heading_id=null`. A document without headings has only that

@@ -30,9 +30,9 @@ def test_complete_mcp_contract():
 
     data = asyncio.run(capture())
     encoded = json.dumps(data, sort_keys=True, ensure_ascii=False).encode()
-    # #47 intentionally updates list support descriptions and instructions.
+    # #47/#51 intentionally update list descriptions and instructions.
     assert hashlib.sha256(encoded).hexdigest() == (
-        'a3b718399a5b71cb77e3f2430d31818daa93d3c2367790271b31542442508f1e'
+        'df926aada2ab391918ebb225c2cda1eef6d99b8a35a6d65fc76695e71a0a0cd2'
     )
 
 

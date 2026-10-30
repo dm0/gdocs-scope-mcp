@@ -124,6 +124,11 @@ def register_reading(mcp):
         options. tab_id selects a root or nested tab; omit for the first tab.
         Discover IDs with docs_tabs_list; returned tab_id identifies this view.
 
+        Contiguous native lists use nested HTML ol/ul/li elements to preserve
+        marker kind, nesting and adjacent independent groups in rich reinsertion.
+        Unmarked paragraphs end list groups; continuation membership, custom
+        numbering and original native list IDs are not reconstructed losslessly.
+
         Table HTML includes data-mcp-table-ref when its native position can be
         validated, including nested tables. Unsafe refs are omitted with an
         explicit suggestions.warnings entry. Pass a
