@@ -18,6 +18,8 @@ from gdocs_scope_mcp.google_api import clients
 
 EXPECTED_HTML_POINTS = 24
 
+pytestmark = pytest.mark.live
+
 
 def test_temporary_drive_url_survives_source_deletion(
     live_test_doc, image_png, isolated_mcp,

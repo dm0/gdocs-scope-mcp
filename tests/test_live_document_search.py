@@ -8,6 +8,8 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = pytest.mark.live
+
 
 @pytest.mark.skipif(
     os.environ.get('GDOCS_SCOPE_MCP_LIVE_SEARCH') != '1',

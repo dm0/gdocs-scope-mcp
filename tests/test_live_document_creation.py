@@ -11,6 +11,8 @@ import pytest
 
 from gdocs_scope_mcp.google_api import clients
 
+pytestmark = pytest.mark.live
+
 
 @pytest.mark.skipif(
     os.environ.get('GDOCS_SCOPE_MCP_LIVE_CREATE') != '1',

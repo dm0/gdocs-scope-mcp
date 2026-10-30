@@ -11,6 +11,8 @@ from bs4 import BeautifulSoup
 from gdocs_scope_mcp.entities import ENTITY_KINDS
 from gdocs_scope_mcp.google_api import clients
 
+pytestmark = pytest.mark.live
+
 
 @pytest.mark.parametrize('kind', ['person', 'dateElement', 'richLink'])
 @pytest.mark.parametrize('tool', ['docs_append', 'docs_insert_before',

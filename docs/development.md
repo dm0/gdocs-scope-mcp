@@ -57,7 +57,7 @@ Run the CI commands from the repository root:
 uv sync --locked
 ruff check --config pyproject.toml src .github/scripts
 ruff check --config pyproject.toml tests/conftest.py tests/test_ci_network.py
-uv run --locked pytest -q --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,::1
+uv run --locked pytest -q -m "not live" --strict-markers --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,::1
 uv build
 uv run --locked python .github/scripts/check_artifacts.py dist
 ```
@@ -179,6 +179,20 @@ stderr in its logs.
 
 ## Live verification
 
+Live scenarios have the registered `live` pytest marker. Ask pytest for their
+collected node IDs, including every parameter combination, or select the offline
+suite explicitly:
+
+```bash
+uv run --locked pytest --collect-only -q -m live --strict-markers
+uv run --locked pytest -q -m "not live" --strict-markers
+```
+
+The marker selects tests; it does not grant Google access or replace the
+existing opt-in environment variables. Fixture-configuration tests remain
+offline even though their module name includes `live`. The table-identity probe
+module also keeps its two pure helper tests in the offline selection.
+
 The Drive-to-Docs mechanism and retained embedded copy after source deletion
 were verified on the designated development document. Optional live regressions
 upload only a generated fixture image, temporarily share it, edit the explicitly
@@ -186,7 +200,7 @@ selected test document and remove the source files:
 
 ```bash
 GDOCS_SCOPE_MCP_LIVE_TEST_DOC='your-test-document-id' \
-  uv run --locked pytest -q tests/test_live_drive_images.py tests/test_live_tables.py
+  uv run --locked pytest -q -m live --strict-markers
 ```
 
 `GDOCS_SCOPE_MCP_LIVE_TEST_DOC` both enables live tests and selects their target.
@@ -194,6 +208,13 @@ Pass the raw Google Doc ID, not a URL. There is no hard-coded target or fallback
 When the variable is unset, live tests are skipped; an empty value, URL or
 whitespace fails before accessing Google. The former
 `GDOCS_SCOPE_MCP_LIVE_DRIVE_IMAGES` flag is no longer used.
+
+The bounded search smoke additionally requires `GDOCS_SCOPE_MCP_LIVE_SEARCH=1`.
+Creating and trashing a disposable document requires separate authorization
+and `GDOCS_SCOPE_MCP_LIVE_CREATE=1`. Optional manual UI waits remain disabled
+unless explicitly enabled. Release verification runs both the complete offline
+suite and every authorized automated live scenario; use unfiltered `pytest`
+with the corresponding opt-ins for the final combined release run.
 
 Choose a disposable document that you are authorized to modify. Test insertions
 remain in the document; temporary source images are deleted. Follow any workspace

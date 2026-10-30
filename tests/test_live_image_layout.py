@@ -12,6 +12,8 @@ import pytest
 from .native_snapshot_assertions import assert_tabs_unchanged
 from .test_live_table_identity import paragraph_text, table_probe  # noqa: F401
 
+pytestmark = pytest.mark.live
+
 
 def selected(native, tab_id):
     """Find the temporary top-level tab without using the layout calculator."""

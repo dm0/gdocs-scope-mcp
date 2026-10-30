@@ -7,10 +7,13 @@
 import asyncio
 import uuid
 
+import pytest
 from bs4 import BeautifulSoup
 
 from .native_snapshot_assertions import assert_tabs_unchanged
 from .test_live_table_identity import table_probe  # noqa: F401
+
+pytestmark = pytest.mark.live
 
 
 def markdown(read):

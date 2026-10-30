@@ -18,6 +18,8 @@ from .test_live_table_identity import paragraph_text, table_probe  # noqa: F401
 ORDERED = 'NUMBERED_DECIMAL_ALPHA_ROMAN'
 UNORDERED = 'BULLET_DISC_CIRCLE_SQUARE'
 
+pytestmark = pytest.mark.live
+
 
 def probe_rows(document, marker):
     """Select only synthetic probe paragraphs with their original indices."""

@@ -15,6 +15,8 @@ from .test_live_table_identity import (
     table_probe,  # noqa: F401
 )
 
+pytestmark = pytest.mark.live
+
 
 async def discover(probe, doc_id):
     """Select the first of two probe-owned tables by its returned ref."""

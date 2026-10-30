@@ -13,6 +13,8 @@ from .test_live_table_identity import (
 )
 from .test_live_table_patch import discover
 
+pytestmark = pytest.mark.live
+
 
 async def snapshot(probe, doc_id, ref, cells, *, deletion=False):
     """Read current state to prepare the next structural intent."""

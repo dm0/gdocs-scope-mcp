@@ -11,7 +11,11 @@ import time
 import uuid
 from pathlib import Path
 
+import pytest
+
 from .test_live_table_identity import table_probe  # noqa: F401
+
+pytestmark = pytest.mark.live
 
 
 def test_live_native_comment_lifecycle(live_test_doc, table_probe):

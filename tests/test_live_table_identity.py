@@ -280,6 +280,7 @@ def assert_lifecycle_observations(report):
         assert row[0]['column_span'] == (2 if step == 'merge' else 1)
 
 
+@pytest.mark.live
 def test_live_named_range_lifecycle(live_test_doc, table_probe):
     """Observe named ranges through cell and structural transformations."""
     async def run():
@@ -371,6 +372,7 @@ def test_live_named_range_lifecycle(live_test_doc, table_probe):
     asyncio.run(run())
 
 
+@pytest.mark.live
 def test_live_revision_interleavings(live_test_doc, table_probe):
     """Reject stale writes and rebase independent edits after validation."""
     async def run():
@@ -511,6 +513,7 @@ def test_cell_identity_does_not_fall_back_to_duplicate_text():
     assert containing_cells(document, None) == []
 
 
+@pytest.mark.live
 def test_live_read_only_table_discovery(live_test_doc, table_probe):
     """Share references across processes and read native merged geometry."""
     async def run():
@@ -582,6 +585,7 @@ def test_live_read_only_table_discovery(live_test_doc, table_probe):
     asyncio.run(run())
 
 
+@pytest.mark.live
 def test_live_positional_table_references(
     live_test_doc, table_probe, isolated_mcp,
 ):
@@ -674,6 +678,7 @@ def test_live_positional_table_references(
     asyncio.run(run())
 
 
+@pytest.mark.live
 def test_live_positional_structure_invalidation(live_test_doc, table_probe):
     """Guard merge/unmerge state changes and removed original cells."""
     async def run():
@@ -751,6 +756,7 @@ async def raced_edit(probe, tool, arguments, mutation,
 @pytest.mark.parametrize('scenario', ['shift', 'overlap', 'append', 'table',
                                       'strict'])
 @pytest.mark.parametrize('mode', ['required', 'target'])
+@pytest.mark.live
 def test_live_public_edit_revision_race(live_test_doc, table_probe, scenario,
                                        mode):
     """Exercise actual guarded public tools, not only raw API probes."""

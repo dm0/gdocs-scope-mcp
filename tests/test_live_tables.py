@@ -10,6 +10,8 @@ import pytest
 
 from gdocs_scope_mcp.google_api import clients
 
+pytestmark = pytest.mark.live
+
 
 @pytest.mark.parametrize('tool', [
     'docs_append', 'docs_insert_before', 'docs_insert_after',

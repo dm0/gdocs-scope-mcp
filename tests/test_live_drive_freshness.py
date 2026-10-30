@@ -18,6 +18,8 @@ from .test_live_table_identity import table_probe  # noqa: F401
 
 UI_OBSERVATION_SECONDS = 120
 
+pytestmark = pytest.mark.live
+
 
 def test_live_drive_freshness(table_probe, monkeypatch):
     """Record three rapid edits and poll Drive metadata for a minute."""

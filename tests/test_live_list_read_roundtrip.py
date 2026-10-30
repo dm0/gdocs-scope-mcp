@@ -13,6 +13,8 @@ from gdocs_scope_mcp.rich_text.parsing import markdown_to_html
 
 from .test_live_table_identity import paragraph_text, table_probe  # noqa: F401
 
+pytestmark = pytest.mark.live
+
 
 def scoped_rows(document, marker, start, end):
     """Inspect only synthetic paragraphs in a verified source/copy interval."""

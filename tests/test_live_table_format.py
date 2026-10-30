@@ -16,6 +16,8 @@ from .test_live_table_identity import (
 )
 from .test_live_table_patch import discover
 
+pytestmark = pytest.mark.live
+
 
 def test_live_native_table_format_fields(live_test_doc, table_probe):
     """Verify border/row/column styles and pinned row readback."""

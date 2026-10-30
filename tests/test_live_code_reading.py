@@ -15,6 +15,8 @@ from gdocs_scope_mcp.documents import (
 )
 from gdocs_scope_mcp.google_api import clients
 
+pytestmark = pytest.mark.live
+
 
 def _markdown(result):
     """Join sections without normalizing code whitespace."""
