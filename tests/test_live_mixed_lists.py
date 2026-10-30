@@ -245,7 +245,8 @@ def test_live_mixed_insertion(live_test_doc, table_probe, tool, ordered):
             assert all(marker + ' ' + label in visible for label in labels)
             # Reads expose the existing depth/marker display. Canonical
             # read-to-write list serialization is tracked separately in #51.
-            plain_markup = markdown.replace('*', '')
+            plain_markup = BeautifulSoup(markdown, 'html.parser').get_text(
+            ).replace('*', '')
             for label, depth, is_ordered in [
                 ('Parent😀', 0, ordered), ('Next parent', 0, ordered),
                 ('Child', 1, not ordered), ('Grandchild', 2, ordered),

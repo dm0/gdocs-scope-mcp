@@ -268,7 +268,8 @@ docs_insert_after(
 Insert Markdown or literal text after the paragraph containing `anchor`.
 Pass `heading_id` to search only that section subtree; `rich=False` inserts literal text.
 Rich heading mapping: `# -> TITLE`, `## -> SUBTITLE`, `### -> HEADING_1`,
-and so on. Native homogeneous lists and rectangular tables are supported.
+and so on. Native lists with homogeneous or mixed nesting and rectangular tables
+are supported.
 
 ```
 docs_insert_after(
@@ -308,7 +309,8 @@ docs_insert_before(
 Insert Markdown or literal text before the paragraph containing `anchor`.
 Pass `heading_id` to search only that section subtree; `rich=False` inserts literal text.
 Rich heading mapping: `# -> TITLE`, `## -> SUBTITLE`, `### -> HEADING_1`,
-and so on. Native homogeneous lists and rectangular tables are supported.
+and so on. Native lists with homogeneous or mixed nesting and rectangular tables
+are supported.
 
 ```
 docs_insert_before(
