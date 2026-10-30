@@ -4,13 +4,16 @@
 from http import HTTPStatus
 
 from fastmcp.tools.base import ToolResult
-from google.auth.exceptions import RefreshError
 from googleapiclient.errors import HttpError
 from mcp.types import CallToolResult
 from pydantic import ValidationError
 
 from gdocs_scope_mcp.contracts import EditFailedResponse
 from gdocs_scope_mcp.errors import ToolFailureError
+from gdocs_scope_mcp.google_api.failures import (
+    classify_failure,
+    exception_chain,
+)
 
 
 class ErrorToolResult(ToolResult):
@@ -30,13 +33,12 @@ def failure_from_exception(
     error: Exception, tool_name: str
 ) -> EditFailedResponse:
     """Classify known exceptions without exposing API bodies or internals."""
-    # FastMCP wraps backend exceptions in ToolError, preserving their cause.
-    while not isinstance(error, ToolFailureError) and isinstance(
-        error.__cause__, Exception,
-    ):
-        error = error.__cause__
-    if isinstance(error, ToolFailureError):
-        return error.failure
+    # Keep a structured write failure even when it chains a transport cause.
+    chain = exception_chain(error)
+    for cause in chain:
+        if isinstance(cause, ToolFailureError):
+            return cause.failure
+    error = chain[-1]
     # Callable argument validation is titled with the function name. Model
     # validation inside the backend is an internal failure, not bad input.
     if (
@@ -52,35 +54,18 @@ def failure_from_exception(
             description=f'Invalid tool arguments: {fields}.',
             suggested_action='Check required fields and types in inputSchema.',
         )
-    if isinstance(error, RefreshError):
-        return EditFailedResponse(
-            code='AUTHENTICATION_REQUIRED',
-            description='Google credentials could not be refreshed.',
-            suggested_action='Run gdocs-scope-mcp-auth, then retry the call.',
-        )
-    if isinstance(error, HttpError):
-        status = error.resp.status
-        code, action = {
-            400: (
-                'INVALID_ARGUMENT',
-                'Check the tool arguments and document state.',
-            ),
-            401: ('AUTHENTICATION_REQUIRED', 'Run gdocs-scope-mcp-auth.'),
-            403: (
-                'PERMISSION_DENIED',
-                'Check document access, OAuth scopes and quota limits.',
-            ),
-            404: (
-                'RESOURCE_NOT_FOUND',
-                'Check the document/comment ID and access permissions.',
-            ),
-            429: ('RATE_LIMITED', 'Wait for the quota to recover.'),
-        }.get(
-            status,
-            (
-                'GOOGLE_API_ERROR',
-                'Inspect server logs and Google API availability.',
-            ),
+    for cause in chain:
+        failure = classify_failure(cause)
+        if failure is not None:
+            error = cause
+            break
+    else:
+        failure = None
+    if failure is not None:
+        action = failure.suggested_action
+        status = (
+            getattr(error.resp, 'status', None)
+            if isinstance(error, HttpError) else None
         )
         if status == HTTPStatus.BAD_REQUEST and tool_name in {
             'docs_list', 'docs_read_comments',
@@ -98,12 +83,10 @@ def failure_from_exception(
                 'accessible PNG, JPEG or GIF smaller than 50 MB and no more '
                 'than 25 megapixels; Google must be able to fetch the URL.'
             )
-        return EditFailedResponse(
-            code=code,
-            description=f'Google API request failed with HTTP {status}.',
-            suggested_action=action
-            + ' Verify document/comment state before retrying a write.',
-        )
+        return failure.model_copy(update={
+            'suggested_action': action + ' A failed write may have committed; '
+            'verify document/comment state before retrying a write.',
+        })
     return EditFailedResponse(
         code='INTERNAL_ERROR',
         description='The tool could not complete the operation.',

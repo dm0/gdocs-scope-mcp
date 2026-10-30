@@ -30,9 +30,9 @@ def test_complete_mcp_contract():
 
     data = asyncio.run(capture())
     encoded = json.dumps(data, sort_keys=True, ensure_ascii=False).encode()
-    # #47/#51 update lists; #50 search; #49 adds partial-creation errors.
+    # #47/#51 lists; #50 search; #49 partial creation; #53 failure codes.
     assert hashlib.sha256(encoded).hexdigest() == (
-        '5358f17fcd3f830467c6eba98ea52daf07d1c10c87d7904a0a1221c271dcc064'
+        'df680ed2621f9316955e062f8a90a784bb3aa8be604f2a547472d9531e279b32'
     )
 
 

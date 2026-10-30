@@ -40,6 +40,35 @@ Continue until the token is null, even if a page has zero returned items.
 Clients using the previous JSON-string
 or `result`-wrapped outputs must switch to the direct structured objects.
 
+## Google API failures and recovery
+
+| Code | Meaning | Recovery |
+| --- | --- | --- |
+| `AUTHENTICATION_REQUIRED` | HTTP 401, a structured OAuth `invalid_grant`, or an explicit reauthentication failure | Run `gdocs-scope-mcp-auth` again. |
+| `AUTH_CONFIGURATION_ERROR` | Structured OAuth client or scope configuration rejection | Check the Desktop client configuration and scopes before authorizing again. |
+| `PERMISSION_DENIED` | HTTP 403 without a recognized quota/rate-limit reason | Check file access, granted scopes and domain policy; inspect diagnostics for unknown reasons. |
+| `RATE_LIMITED` | HTTP 429 or a documented per-user/project throttling reason on HTTP 403 | Retry safe reads later with bounded exponential backoff. |
+| `QUOTA_EXCEEDED` | A documented daily cap or storage quota reason on HTTP 403 | Check quota caps/reset or storage capacity; immediate retries do not fix the limit. |
+| `TEMPORARILY_UNAVAILABLE` | Recognized service/transport failures or temporary credential-refresh failure | Check connectivity or service availability and retry safe reads with bounded backoff. |
+| `GOOGLE_API_ERROR` | Unclassified API or credential-refresh failure | Inspect server diagnostics; an unknown refresh failure does not establish token revocation. |
+
+Classification uses structured reason codes, status and known exception types,
+never free-text message matching. Unknown/malformed 403 bodies retain the
+status-based fallback; conflicting reasons do not establish retryable
+throttling. API bodies, tokens and private diagnostics are not returned.
+The complete classification policy and references are in
+[API failure classification](development/api-failure-classification.md).
+
+The server adds no automatic request retries for these classifications. A
+temporary failure does not prove a write was rejected: inspect document/comment
+state before retrying a write. Existing structured `PARTIAL_WRITE`,
+`WRITE_OUTCOME_UNKNOWN`, revision-conflict errors and their committed-batch
+counts take precedence. Document creation also retains its
+[partial-creation identity](tools/documents.md#docs_create). Apply recovery for
+that confirmed outcome before considering a retry.
+
+## Document reading contracts
+
 `docs_read` reports the selected `tab_id`/`tab_title` and total `tab_count`.
 `partial=false` means all content in that tab, not all document tabs.
 `docs_get_tree` supplies the complete compact `tabs` inventory in its usual
