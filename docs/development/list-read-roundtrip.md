@@ -61,12 +61,13 @@ Measured on 2026-10-30 with `tiktoken==0.12.0`, encoding `o200k_base`. These are
 estimates for this encoding, not exact counts for the current agent model.
 Only raw list fragments are counted: no MCP/JSON envelope, instructions,
 surrounding document or terminal paragraph separator.
+The synthetic inputs are English-only; token counts depend on language.
 
 "Short" and "long" describe the text length of each item, not item count:
 
 - Short: **24 Unicode characters per item**, using the synthetic text
-  `Проверить входные данные`.
-- Long: **735 characters per item**, using a synthetic Russian paragraph
+  `Check the input document`.
+- Long: **787 characters per item**, using a synthetic English paragraph
   repeated four times. The exact paragraph is in the measurement script.
 - Nested: eight short items at levels `0, 1, 2, 1, 0, 1, 2, 0`.
 
@@ -75,11 +76,11 @@ indentation and inter-item line breaks in Markdown, or tags in compact HTML.
 
 | Case | Items | Characters/item | Markdown chars | HTML chars | Markdown tokens | HTML tokens | HTML increase | Selective reader tokens |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Short | 10 | 24 | 279 | 339 | 79 | 115 | +45.6% | 79 |
-| Long | 10 | 735 | 7389 | 7449 | 1429 | 1465 | +2.5% | 1429 |
-| Nested short | 8 | 24 | 251 | 309 | 73 | 109 | +49.3% | 73 |
+| Short | 10 | 24 | 279 | 339 | 69 | 95 | +37.7% | 69 |
+| Long | 10 | 787 | 7909 | 7969 | 1349 | 1365 | +1.2% | 1349 |
+| Nested short | 8 | 24 | 251 | 309 | 65 | 93 | +43.1% | 65 |
 
-The compact HTML counts match the earlier unconditional HTML renderer. With
+The compact HTML reference represents unconditional HTML rendering. With
 selective rendering, these unambiguous examples use Markdown and incur no
 additional list-format tokens compared with the Markdown reference. Ambiguous
 groups still pay the HTML overhead to retain their boundaries. Relative cost

@@ -12,11 +12,11 @@ import tiktoken
 from gdocs_scope_mcp.documents.native_models import GoogleDocument
 from gdocs_scope_mcp.rich_text.parsing import markdown_to_html
 
-SHORT = 'Проверить входные данные'
+SHORT = 'Check the input document'
 LONG = ' '.join([
-    'Агент проверяет входные данные и сопоставляет результат с требованиями '
-    'задачи Затем он сохраняет изменения и проверяет что структура документа '
-    'и содержание каждого раздела сохранились',
+    'The agent checks the input data and compares the result with the task '
+    'requirements Then it saves the changes and verifies that the document '
+    'structure and the content of every section remain intact',
 ] * 4)
 
 
