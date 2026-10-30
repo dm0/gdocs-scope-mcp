@@ -690,11 +690,11 @@ def test_empty_document_append_has_structured_failure(mock_docs):
 
 
 @pytest.mark.usefixtures('contract_api')
-def test_expired_credentials_have_authentication_guidance(monkeypatch):
-    """Credential refresh errors tell the agent how to authenticate again."""
+def test_revoked_credentials_have_authentication_guidance(monkeypatch):
+    """A structured invalid grant tells the agent to authorize again."""
 
     def expired():
-        raise RefreshError('private-token-details')
+        raise RefreshError('private-token-details', {'error': 'invalid_grant'})
 
     monkeypatch.setattr(clients, 'get_service', lambda *_args: expired())
     _, response = call_tool(

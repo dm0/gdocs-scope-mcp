@@ -16,6 +16,7 @@ application operation merely to reuse one of its helpers.
 | `auth_setup.py` | Desktop authorization CLI, bounded loopback listener and headless session lifecycle. |
 | `google_api/clients.py` | Construct discovery clients; cache Docs reads by default, with explicit uncached construction where required. |
 | `google_api/files.py` | Document listing and creation workflows, independent of transport. |
+| `google_api/failures.py` | Pure Google API, credential-refresh and transport failure classification; no request execution or retries. |
 | `cache/` | Immutable entries, shared revision-validation algorithm, memory/disk storage, lazy backend selection and service wrapping. |
 | `contracts.py`, `errors.py` | Shared receipts, failure data, pagination and application exceptions, without MCP dependencies. |
 | `documents/native_models.py`, `styles.py` | Validate and normalize native Google Docs payloads and native style values. |
@@ -76,6 +77,11 @@ prohibited dependencies. Extend it when introducing a new boundary.
   The `docs_create` schema includes this additional failure branch; other tool
   schemas retain the common failure model. Creation is not a committed update
   batch. Neither creation nor the initial insertion is replayed or rolled back.
+- `google_api.failures.classify_failure` consumes only documented structured
+  reasons, known exception types and status codes. It returns sanitized common
+  failures without inspecting free-text messages or replaying requests.
+  `tool_errors` retains structured write receipts before classifying chained
+  Google errors and adds tool-specific recovery guidance at the boundary.
 - `documents.fetching.get_document(service, doc_id, tab_id=...)` obtains native
   inline-suggestion coordinates, selects the pinned/explicit tab and remembers
   the revision snapshot. `documents.tabs.select`, `discover`, `scope_requests`
