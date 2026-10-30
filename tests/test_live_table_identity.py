@@ -187,6 +187,24 @@ class Probe:
         if requests:
             await self.batch(requests, document)
         cleaned = await self.read()
+        # Deleting the appended paragraphs can transfer their style onto the
+        # original terminal newline. Restore that boundary before comparing
+        # the entire body; all earlier content must remain exactly unchanged.
+        original_tail = self.initial_body['content'][-1]
+        restored_tail = cleaned['body']['content'][-1]
+        original_style = original_tail['paragraph']['paragraphStyle']
+        restored_style = restored_tail['paragraph']['paragraphStyle']
+        if original_style != restored_style:
+            fields = sorted((original_style.keys() | restored_style.keys())
+                            - {'headingId'})
+            await self.batch([{'updateParagraphStyle': {
+                'range': {'startIndex': self.start,
+                          'endIndex': self.start + 1},
+                'paragraphStyle': {k: v for k, v in original_style.items()
+                                   if k != 'headingId'},
+                'fields': ','.join(fields),
+            }}], cleaned)
+            cleaned = await self.read()
         assert cleaned['body'] == self.initial_body
         assert all(named(cleaned, range_id) is None
                    for range_id in self.bindings.values())
