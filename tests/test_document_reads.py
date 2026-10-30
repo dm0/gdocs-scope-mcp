@@ -98,11 +98,11 @@ def test_targeted_edits_work_without_empty_lists(
 
 
 @pytest.mark.parametrize(
-    ('glyph', 'prefix'),
-    [('DECIMAL', '1.'), ('GLYPH_TYPE_UNSPECIFIED', '-')],
+    ('glyph', 'tag'),
+    [('DECIMAL', 'ol'), ('GLYPH_TYPE_UNSPECIFIED', 'ul')],
 )
 def test_supplied_list_definitions_keep_rendering(
-    simple_document, glyph, prefix,
+    simple_document, glyph, tag,
 ):
     """Preserve supplied list IDs and numbering metadata."""
     simple_document['body']['content'][0]['paragraph']['bullet'] = {
@@ -113,7 +113,9 @@ def test_supplied_list_definitions_keep_rendering(
     }}}
     document = GoogleDocument.model_validate(simple_document)
     assert document.body.content[0].bullet.list_id == 'list-id'
-    assert document.to_markdown().startswith(f'{prefix} Introduction\n')
+    assert document.to_markdown().startswith(
+        f'<{tag}><li>Introduction</li></{tag}>\n\n',
+    )
 
 
 @pytest.mark.parametrize('omit_lists', [False, True])
