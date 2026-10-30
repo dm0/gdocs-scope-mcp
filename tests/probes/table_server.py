@@ -36,6 +36,7 @@ ALLOWED = {
     'unmergeTableCells', 'updateTextStyle', 'updateParagraphStyle',
     'updateTableCellStyle',
     'updateTableColumnProperties', 'updateTableRowStyle', 'pinTableHeaderRows',
+    'createParagraphBullets', 'deleteParagraphBullets',
 }
 
 
@@ -61,6 +62,18 @@ def probe_tabs_document() -> dict:
         documentId=_document_id(), includeTabsContent=True,
         suggestionsViewMode='SUGGESTIONS_INLINE',
     ).execute()
+
+
+@mcp.tool
+def probe_list_export(marker: str) -> dict:
+    """Return synthetic probe lines from the authorized Doc text export."""
+    if not re.fullmatch(r'MIXED_[0-9a-f]{32}', marker):
+        raise ValueError('A namespaced mixed-list probe marker is required')
+    exported = clients.get_service('drive', 'v3').files().export_media(
+        fileId=_document_id(), mimeType='text/plain',
+    ).execute().decode('utf-8')
+    return {'lines': [line for line in exported.splitlines()
+                      if marker in line][:20]}
 
 
 @mcp.tool
