@@ -32,7 +32,7 @@ def test_complete_mcp_contract():
     encoded = json.dumps(data, sort_keys=True, ensure_ascii=False).encode()
     # #47/#51 intentionally update list descriptions and instructions.
     assert hashlib.sha256(encoded).hexdigest() == (
-        'df926aada2ab391918ebb225c2cda1eef6d99b8a35a6d65fc76695e71a0a0cd2'
+        '5c7f2ad7f4013c2e954a2392c9ad318178c2da1afb0e7b6f863dcc569cc52579'
     )
 
 

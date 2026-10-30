@@ -44,9 +44,10 @@ and selected tab IDs and a specific selector recovery action; it does not
 report a structural change. See [document tabs](tools/documents.md#document-tabs).
 
 Document reads accept omitted empty `lists` and `inlineObjects` collections.
-Contiguous native lists render as nested HTML `ol`/`ul`/`li` groups inside the
-Markdown output, preserving marker kind, nesting and independent group
-boundaries. Native definitions and IDs remain in the source model; copying
+Native lists prefer Markdown with four spaces per nesting level. Ambiguous
+group boundaries, incomplete ancestor chains and HTML table cells use explicit
+nested HTML `ol`/`ul`/`li` groups to retain structure. Native definitions and IDs
+remain in the source model; copying
 the rendered output creates new IDs and normalizes custom numbering. See
 [list round-trip limits](rich-content.md#native-lists). If a paragraph references
 a missing list definition, Markdown rendering fails rather than guessing its

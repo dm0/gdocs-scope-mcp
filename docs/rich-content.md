@@ -403,17 +403,33 @@ each paragraph and zero below, without inserting empty items. This applies to
 all three rich insertion tools. Reads preserve text and order, but indentation
 alone cannot reconstruct the original Markdown item membership losslessly.
 
-Reads serialize contiguous native list paragraphs as explicit HTML `ol`/`ul`
-and `li` elements within the returned Markdown. This preserves item order,
-marker kind, nested levels and adjacent independent list groups when passed
-back to a rich insertion tool. Inline HTML styles/links and literal text remain
-escaped; detected inline code uses `code` elements inside lists.
+Reads prefer Markdown lists, using four spaces per nesting level, whenever
+the available ancestors and group boundaries are unambiguous. This applies to
+ordinary homogeneous and mixed nesting. For example:
 
-For example, a numbered parent with a numbered child is returned as:
+```markdown
+1. Parent
+    1. Child
+1. Next parent
+```
+
+HTML `ol`/`ul`/`li` is selected for a contiguous run if Markdown would lose a
+group boundary, such as adjacent independent lists of the same kind. Empty
+native paragraphs do not count as reliable Markdown list separators. Explicit
+HTML is also used for incomplete ancestor chains and lists inside HTML tables,
+where ordinary Markdown list syntax would not be parsed as lists. The choice
+is local to the run; other lists in the document remain Markdown. For example,
+two independent numbered groups are returned as:
 
 ```html
-<ol><li>Parent<ol><li>Child</li></ol></li><li>Next parent</li></ol>
+<ol><li>First list</li></ol><ol><li>Second list</li></ol>
 ```
+
+Both formats preserve supported item order, marker kind and nesting in rich
+reinsertion. Inline styles/links and literal text remain escaped. Detected
+inline code uses Markdown code spans in Markdown lists and `code` elements
+inside HTML lists. See [token measurements](development/list-read-roundtrip.md#token-measurements)
+for the measured overhead of unconditional HTML and the selective policy.
 
 This is a structural round trip, not a lossless native-document copy:
 

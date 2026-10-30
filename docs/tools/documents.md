@@ -116,9 +116,10 @@ including their nested subsections. Omit `heading_ids` to read the whole
 selected tab.
 Heading lines include HTML anchors carrying their structural IDs.
 
-Contiguous native lists use explicit nested HTML `ol`/`ul`/`li` groups in the
-Markdown output. Reusing that content with rich insertion preserves item order,
-marker kind, nesting and adjacent independent list groups. Unmarked paragraphs
+Native lists prefer Markdown with four spaces per nesting level. Explicit
+nested HTML `ol`/`ul`/`li` is used for runs with ambiguous group boundaries,
+incomplete ancestors and lists inside HTML tables. Reusing supported content
+with rich insertion preserves item order, marker kind and nesting. Unmarked paragraphs
 end groups; continuation membership, non-default numbering and original native
 IDs are not copied losslessly. See [native list limits](../rich-content.md#native-lists).
 
