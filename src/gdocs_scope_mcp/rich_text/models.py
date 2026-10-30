@@ -72,6 +72,7 @@ class InsertionParagraph(GoogleDocumentParagraph):
     bullet_preset: str | None = None
     nesting_level: int = 0
     list_key: int | None = None
+    list_component_path: tuple[int, ...] = ()
     item_key: int | None = None
     continuation: bool = False
     loose_list: bool = False
