@@ -17,6 +17,12 @@ are not JSON-encoded strings, and edit results have no outer `result` wrapper.
 - `docs_list` returns `{count, documents, next_page_token, has_more}`. Document
   fields retain `id`, `name`, `modifiedTime`, and `webViewLink`; the latter two
   are nullable when Drive omits them.
+- `docs_create` keeps `{id, title, webViewLink}` on success. When creation is
+  confirmed but initial insertion fails, its error also carries
+  `created_document` with those identity fields and `initial_content`:
+  `not_attempted`, `rejected`, or `unknown`. Follow recovery guidance using
+  that existing document; never blindly repeat creation. See
+  [creation recovery](tools/documents.md#docs_create).
 - `docs_read_comments` returns document/revision metadata, `page_kind`, `count`,
   `comments`, `next_page_token`, and `has_more`. Native thread summaries expose
   text, author, native anchor ranges/tab and resolution state. Selecting a

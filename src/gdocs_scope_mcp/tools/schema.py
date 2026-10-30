@@ -5,9 +5,15 @@ from pydantic import BaseModel, TypeAdapter
 from gdocs_scope_mcp.contracts import EditFailedResponse
 
 
-def tool_response_schema(success_model: type[BaseModel]) -> dict:
+def tool_response_schema(
+    success_model: type[BaseModel], *,
+    additional_failure: type[BaseModel] | None = None,
+) -> dict:
     """Expose success/error objects without FastMCP's result wrapper."""
-    schema = TypeAdapter(success_model | EditFailedResponse).json_schema(
+    response_type = success_model | EditFailedResponse
+    if additional_failure is not None:
+        response_type |= additional_failure
+    schema = TypeAdapter(response_type).json_schema(
         mode='serialization',
     )
     # Both branches are objects. Explicitly stating this prevents FastMCP

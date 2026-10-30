@@ -71,6 +71,11 @@ prohibited dependencies. Extend it when introducing a new boundary.
   the API client seam. Tests usually replace `clients.build` and
   `credentials.load_credentials`; tests for a specific workflow may replace
   `clients.get_service`. Do not patch helpers in document-edit orchestration.
+- `google_api.files.create_document` retains confirmed identity across initial
+  insertion failures using a feature-owned `DocumentCreationFailedResponse`.
+  The `docs_create` schema includes this additional failure branch; other tool
+  schemas retain the common failure model. Creation is not a committed update
+  batch. Neither creation nor the initial insertion is replayed or rolled back.
 - `documents.fetching.get_document(service, doc_id, tab_id=...)` obtains native
   inline-suggestion coordinates, selects the pinned/explicit tab and remembers
   the revision snapshot. `documents.tabs.select`, `discover`, `scope_requests`

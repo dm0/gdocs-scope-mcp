@@ -6,6 +6,7 @@
 from gdocs_scope_mcp.google_api import files
 from gdocs_scope_mcp.google_api.models import (
     CreateDocumentResponse,
+    DocumentCreationFailedResponse,
     ListDocumentsResponse,
 )
 from gdocs_scope_mcp.tool_inputs import (
@@ -53,7 +54,10 @@ def register(mcp):
 
 
     @mcp.tool(
-        output_schema=tool_response_schema(CreateDocumentResponse),
+        output_schema=tool_response_schema(
+            CreateDocumentResponse,
+            additional_failure=DocumentCreationFailedResponse,
+        ),
         annotations={
             'readOnlyHint': False,
             'destructiveHint': False,
@@ -72,5 +76,9 @@ def register(mcp):
         Returns
         -------
             A structured object with id, title, and webViewLink.
+            If initial insertion fails after confirmed creation, an MCP error
+            also includes created_document (id, title, webViewLink) and
+            initial_content (not_attempted, rejected or unknown). Do not repeat
+            docs_create; inspect that document and add only missing text.
         """
         return files.create_document(title, initial_text)
