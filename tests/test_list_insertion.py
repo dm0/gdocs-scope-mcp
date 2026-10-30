@@ -152,7 +152,6 @@ def test_list_receipt_describes_final_text(mock_docs, operation, rich):
 
 
 @pytest.mark.parametrize('markdown', [
-    '- Parent\n  1. Mixed',
     '3. Custom start',
     '- ',
 ])

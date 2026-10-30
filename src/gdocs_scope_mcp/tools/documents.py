@@ -273,8 +273,8 @@ def register_editing(mcp):
 
         Converts Markdown paragraphs and # / ## / ### / ... headings, with
         **bold**, *italic*, and ***bold italic*** inline styles. Heading mapping:
-        # is TITLE, ## is SUBTITLE, ### is HEADING_1, and so on. Native homogeneous
-        lists, rectangular Markdown/HTML tables, Markdown images and HTML img[src]
+        # is TITLE, ## is SUBTITLE, ### is HEADING_1, and so on. Native lists with
+        homogeneous or mixed nesting, rectangular Markdown/HTML tables and images
         are supported. Tables preserve inline formatting, br line breaks and
         column alignment;
         merged/nested tables and block content in cells are unsupported. Tables
@@ -369,8 +369,8 @@ def register_editing(mcp):
 
         Converts Markdown paragraphs and # / ## / ### / ... headings, with
         **bold**, *italic*, and ***bold italic*** inline styles. Heading mapping:
-        # is TITLE, ## is SUBTITLE, ### is HEADING_1, and so on. Native homogeneous
-        lists, rectangular Markdown/HTML tables, Markdown images and HTML img[src]
+        # is TITLE, ## is SUBTITLE, ### is HEADING_1, and so on. Native lists with
+        homogeneous or mixed nesting, rectangular Markdown/HTML tables and images
         are supported. Tables preserve inline formatting, br line breaks and
         column alignment;
         merged/nested tables and block content in cells are unsupported. Tables
@@ -504,7 +504,8 @@ def register_editing(mcp):
         A paragraph break is added before the appended content automatically.
         With rich=True, separate Markdown paragraphs with blank lines. Headings
         map as follows: # is TITLE, ## is SUBTITLE, ### is HEADING_1, and so on.
-        Bold, italic, combined emphasis and native homogeneous lists are supported.
+        Bold, italic, combined emphasis and native lists with homogeneous or mixed
+        nesting are supported.
         Markdown images and HTML img[src] create native images from public HTTP(S)
         PNG/JPEG/GIF URLs. HTML width/height accept pixel numbers; alt/title
         metadata is not preserved. CSS/responsive images are unsupported.

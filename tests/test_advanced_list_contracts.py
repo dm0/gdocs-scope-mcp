@@ -71,6 +71,12 @@ class ListReplay:
                 continue
             assert len(request) == 1
             kind, update = next(iter(request.items()))
+            if kind == 'deleteContentRange':
+                span = update['range']
+                start, end = span['startIndex'], span['endIndex']
+                assert 0 <= start < end <= len(self.units)
+                del self.units[start:end]
+                continue
             assert kind in {
                 'updateTextStyle', 'updateParagraphStyle',
                 'createParagraphBullets', 'deleteParagraphBullets',

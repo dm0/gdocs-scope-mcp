@@ -97,6 +97,11 @@ prohibited dependencies. Extend it when introducing a new boundary.
   `rich_text.parsing.html_to_gpars`; cell conversion uses the primitive without
   table dispatch. `paragraph_requests.compile_paragraphs` and `paragraph_text`
   compile and describe pure paragraph requests.
+  Mixed-list component ancestry is insertion-only metadata. The compiler
+  formats ancestor components before descendants and creates/removes temporary
+  root paragraphs in the same atomic batch, preserving parent list identity.
+  Preview replay uses request order and net text changes, including those
+  temporary insertions and deletions.
 - `rich_text.cells.convert_table` validates rectangular inline cell content and
   uses those same paragraph primitives. Existing-table patching shares it and
   does not depend on insertion execution.

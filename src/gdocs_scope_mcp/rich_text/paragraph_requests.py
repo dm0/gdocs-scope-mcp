@@ -19,6 +19,54 @@ from gdocs_scope_mcp.settings import get_code_settings
 from gdocs_scope_mcp.text_indices import utf16_length
 
 
+def _mixed_list_requests(paragraphs: list[tuple]) -> list[dict]:
+    """Replace mixed subtrees without renumbering their enclosing lists."""
+    components = {}
+    for start, end, paragraph in paragraphs:
+        path = paragraph.list_component_path
+        for length in range(1, len(path) + 1):
+            components.setdefault(path[:length], []).append(
+                (start, end, paragraph),
+            )
+    requests = []
+    # Ancestors must be formatted before descendants. Each replacement has
+    # zero net text length, so all subsequent component coordinates stay valid.
+    for rows in components.values():
+        left, right = rows[0][0], rows[-1][1]
+        requests.append({'deleteParagraphBullets': {'range': {
+            'startIndex': left, 'endIndex': right,
+        }}})
+        tabs = 0
+        for start, _, paragraph in reversed(rows):
+            depth = paragraph.nesting_level
+            tabs += depth
+            requests.append({'insertText': {
+                'location': {'index': start}, 'text': '\t' * depth,
+            }})
+        # Google normalizes a newly created list's first nesting level to 0.
+        # A temporary root preserves absolute native depths after its removal.
+        # Keep all requests, including removal, in the same atomic batch.
+        root = 'ROOT\n'
+        requests.append({'insertText': {
+            'location': {'index': left}, 'text': root,
+        }})
+        span = {'startIndex': left, 'endIndex': right + tabs + len(root)}
+        zero = {'magnitude': 0, 'unit': 'PT'}
+        requests.append({'updateParagraphStyle': {
+            'range': span,
+            'paragraphStyle': {'indentStart': zero, 'indentFirstLine': zero,
+                               'indentEnd': zero},
+            'fields': 'indentStart,indentFirstLine,indentEnd',
+        }})
+        requests.append({'createParagraphBullets': {
+            'range': span, 'bulletPreset': rows[0][2].bullet_preset,
+        }})
+        requests.append({'deleteContentRange': {'range': {
+            'startIndex': left, 'endIndex': left + len(root),
+        }}})
+    return requests
+
+
 def compile_paragraphs(
     paragraphs: list[InsertionParagraph | InsertionTable], *,
     newline_before: bool = True,
@@ -161,7 +209,7 @@ def compile_paragraphs(
                     'paragraphs': [],
                 })
             list_ranges[-1]['paragraphs'].append((
-                content_start, content_end, indent, p.continuation,
+                content_start, content_end, p,
             ))
         if not newline_before:
             offset += 1
@@ -181,14 +229,19 @@ def compile_paragraphs(
                 'bulletPreset': item['preset'],
             }})
             removed = 0
-            for start, end, depth, continuation in item['paragraphs']:
+            final_paragraphs = []
+            for start, end, p in item['paragraphs']:
                 final_start = start - removed
-                removed += depth
-                if not continuation:
+                removed += p.nesting_level
+                final_paragraphs.append((final_start, end - removed, p))
+            requests.extend(_mixed_list_requests(final_paragraphs))
+            for start, end, p in final_paragraphs:
+                if not p.continuation:
                     continue
-                span = {'startIndex': final_start, 'endIndex': end - removed}
+                span = {'startIndex': start, 'endIndex': end}
                 requests.append({'deleteParagraphBullets': {'range': span}})
-                indent = {'magnitude': 36 * (depth + 1), 'unit': 'PT'}
+                indent = {'magnitude': 36 * (p.nesting_level + 1),
+                          'unit': 'PT'}
                 requests.append({'updateParagraphStyle': {
                     'range': span,
                     'paragraphStyle': {'indentStart': indent,
@@ -214,25 +267,29 @@ def paragraph_text(
     requests: list[dict],
 ) -> str:
     """Render final text, using U+FFFC for each native image or smart chip."""
-    insertions = []
+    start = None
+    buffer = b''
     for request in requests:
         kind, payload = next(iter(request.items()))
-        if kind == 'insertText':
-            insertions.append(payload)
-        elif kind in {'insertInlineImage', 'insertPerson', 'insertRichLink',
-                      'insertDate', 'insertDropdown'}:
-            insertions.append({'location': payload['location'],
-                               'text': '\ufffc'})
-    if not insertions:
-        return ''
-    start = insertions[0]['location']['index']
-    buffer = ''.join(item['text'] for item in insertions).encode('utf-16-le')
-    for request in requests:
-        if 'createParagraphBullets' not in request:
+        if kind in {'insertText', 'insertInlineImage', 'insertPerson',
+                    'insertRichLink', 'insertDate', 'insertDropdown'}:
+            index = payload['location']['index']
+            if start is None:
+                start = index
+            at = (index - start) * 2
+            text = payload['text'] if kind == 'insertText' else '\ufffc'
+            buffer = buffer[:at] + text.encode('utf-16-le') + buffer[at:]
             continue
-        span = request['createParagraphBullets']['range']
+        if start is None or kind not in {
+            'createParagraphBullets', 'deleteContentRange',
+        }:
+            continue
+        span = payload['range']
         left = (span['startIndex'] - start) * 2
         right = (span['endIndex'] - start) * 2
+        if kind == 'deleteContentRange':
+            buffer = buffer[:left] + buffer[right:]
+            continue
         text = buffer[left:right].decode('utf-16-le')
         text = re.sub(r'(?m)^\t+', '', text)
         buffer = buffer[:left] + text.encode('utf-16-le') + buffer[right:]

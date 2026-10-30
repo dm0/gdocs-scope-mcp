@@ -356,15 +356,33 @@ and [dropdown definitions and instances](https://developers.google.com/workspace
 
 Markdown unordered lists (`-`, `*`, `+`) and ordered lists starting at 1 create
 native Google Docs lists with separate item paragraphs. Nested lists of the
-same kind retain their nesting; supported inline styles and links are preserved.
+same or different kinds retain their native nesting; supported inline styles
+and links are preserved.
 Soft-wrapped Markdown lines stay within the same item paragraph.
 Unordered lists use disc/circle/square glyphs; ordered lists use decimal/alpha/
 roman numbering according to nesting level. Neighbouring prose stays outside
 the list. Previews and character counts describe the final text without the
-temporary tabs used to set nesting.
+temporary tabs and root paragraphs used to set nesting. Mixed subtrees have
+separate native list IDs; the enclosing list retains its identity and ordered
+numbering continues after children. These temporary edits are created and
+removed within the same atomic batch.
+
+For example, both forms are supported in Markdown and equivalent HTML:
+
+```markdown
+1. Prepare the document.
+   - Collect the inputs.
+   - Check the headings.
+2. Publish the result.
+
+- Deployment procedure:
+  1. Run the checks.
+  2. Deploy the package.
+- Follow-up work.
+```
 
 Items may contain several ordinary paragraphs, including continuations after
-homogeneous nested lists:
+homogeneous or mixed nested lists:
 
 ```markdown
 1. First paragraph.
@@ -384,8 +402,12 @@ numbering. Tight lists use zero paragraph spacing; loose lists use 6 pt above
 each paragraph and zero below, without inserting empty items. This applies to
 all three rich insertion tools. Reads preserve text and order, but indentation
 alone cannot reconstruct the original Markdown item membership losslessly.
+The current reader's display indentation is not a canonical Markdown encoding
+for reinsertion; improving list read-to-write round trips is tracked in
+[#51](https://github.com/dm0/gdocs-scope-mcp/issues/51). Insertion does not change
+that existing reader limitation.
 
-Mixed ordered/unordered nesting, custom starting numbers, empty items, and
+Custom starting numbers, empty items, interactive task checkboxes, and
 arbitrary block content inside items return `INVALID_ARGUMENT` before writing.
 Use separate homogeneous lists, ordinary paragraphs, or choose `rich=False`
 to insert the original syntax literally.

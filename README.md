@@ -38,7 +38,7 @@ well suited to large Google Docs with structured headings.
 - **Read and write rich content.** Read documents as Markdown with HTML for
   supported formatting, and insert headings, emphasis, links, strikethrough,
   and supported reader-generated HTML through one shared converter.
-- **Create native lists and tables.** Write homogeneous nested lists with
+- **Create native lists and tables.** Write homogeneous or mixed nested lists with
   multiple paragraphs per item and continuations after nested lists. Insert
   rectangular Markdown or HTML tables with column alignment, inline formatting,
   line breaks, and optional borders.

@@ -81,6 +81,7 @@ def _convert_image(element: Tag, start: int) -> InsertionImage:
 
 def _convert_list(
     element: Tag, start: int, *, level: int = 0, list_key: int | None = None,
+    component_path: tuple[int, ...] = (),
 ) -> list[InsertionParagraph]:
     """Preserve logical item membership and paragraph roles in source order."""
     if list_key is None:
@@ -112,6 +113,7 @@ def _convert_list(
                 if not len(part):
                     continue
                 part.list_key = list_key
+                part.list_component_path = component_path
                 part.item_key = item_key
                 part.nesting_level = level
                 part.continuation = item_paragraphs > 0
@@ -132,11 +134,12 @@ def _convert_list(
                 if not item_paragraphs:
                     unsupported_list('List items must start with a nonempty '
                                       'ordinary paragraph.')
+                child_path = component_path
                 if child.name != element.name:
-                    unsupported_list('Mixed ordered/unordered nesting is '
-                                      'not supported in a single list.')
+                    child_path += (start,)
                 children = _convert_list(
                     child, start, level=level + 1, list_key=list_key,
+                    component_path=child_path,
                 )
                 result.extend(children)
                 if children:

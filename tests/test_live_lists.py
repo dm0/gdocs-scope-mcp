@@ -4,6 +4,7 @@ import asyncio
 import json
 import re
 import uuid
+from html import unescape
 from pathlib import Path
 
 import pytest
@@ -95,7 +96,7 @@ def test_native_continuation_lists(live_test_doc, isolated_mcp, tool, ordered):
             })
             markdown = '\n'.join(s['markdown'] for s in
                                  read.structured_content['sections'])
-            assert marker + ' after child' in markdown
+            assert marker + ' after child' in unescape(markdown)
             if ordered:
                 exported = clients.get_service('drive', 'v3').files(
                 ).export_media(fileId=live_test_doc,
