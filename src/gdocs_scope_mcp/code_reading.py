@@ -4,6 +4,7 @@
 import json
 import re
 from collections.abc import Iterator
+from html import escape
 from itertools import pairwise
 from urllib.parse import quote, unquote
 from uuid import uuid4
@@ -81,7 +82,7 @@ def inline_style(style: dict) -> bool:
                 settings.read_inline_code_match]
 
 
-def inline_markdown(elements: list, doc) -> str:
+def inline_markdown(elements: list, doc, *, html_code: bool = False) -> str:
     """Join adjacent code runs despite unrelated emphasis or link styles."""
     result = []
     pending = ''
@@ -92,11 +93,13 @@ def inline_markdown(elements: list, doc) -> str:
             pending += element.content
             continue
         if pending:
-            result.append(code_span(pending))
+            result.append(f'<code>{escape(pending)}</code>' if html_code
+                          else code_span(pending))
             pending = ''
         result.append(element.to_markdown(doc))
     if pending:
-        result.append(code_span(pending))
+        result.append(f'<code>{escape(pending)}</code>' if html_code
+                      else code_span(pending))
     return ''.join(result)
 
 

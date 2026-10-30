@@ -124,6 +124,12 @@ def register_reading(mcp):
         options. tab_id selects a root or nested tab; omit for the first tab.
         Discover IDs with docs_tabs_list; returned tab_id identifies this view.
 
+        Native lists use Markdown with four-space nesting when group boundaries
+        are unambiguous. Ambiguous groups, incomplete ancestors and lists inside
+        HTML tables use nested ol/ul/li elements for structural preservation.
+        Unmarked paragraphs end list groups; continuation membership, custom
+        numbering and original native list IDs are not reconstructed losslessly.
+
         Table HTML includes data-mcp-table-ref when its native position can be
         validated, including nested tables. Unsafe refs are omitted with an
         explicit suggestions.warnings entry. Pass a

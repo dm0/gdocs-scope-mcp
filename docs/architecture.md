@@ -84,6 +84,13 @@ prohibited dependencies. Extend it when introducing a new boundary.
 - `documents.rendering` escapes literal text separately from generated markup,
   including Markdown syntax and HTML attributes. Character references belong
   only to display output; source maps retain original native characters.
+  Contextual list fragments live in excluded presentation state. Complete,
+  unambiguous body runs use Markdown with four spaces per nesting level;
+  ambiguous group boundaries, incomplete ancestors and HTML table cells use
+  nested HTML lists. Whitespace-only native separators cannot merge groups.
+  Frames are local to a body/table cell and close
+  before prose, headings and structural boundaries; native IDs and source
+  coordinates remain unchanged.
 - `tables.geometry.walk_tables` and `cell_geometry` describe native paths and
   conservative span geometry. `tables.refs.Layout` and
   `tables.references.reference_map` construct checked references independently

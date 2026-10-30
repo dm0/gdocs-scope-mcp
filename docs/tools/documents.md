@@ -116,6 +116,13 @@ including their nested subsections. Omit `heading_ids` to read the whole
 selected tab.
 Heading lines include HTML anchors carrying their structural IDs.
 
+Native lists prefer Markdown with four spaces per nesting level. Explicit
+nested HTML `ol`/`ul`/`li` is used for runs with ambiguous group boundaries,
+incomplete ancestors and lists inside HTML tables. Reusing supported content
+with rich insertion preserves item order, marker kind and nesting. Unmarked paragraphs
+end groups; continuation membership, non-default numbering and original native
+IDs are not copied losslessly. See [native list limits](../rich-content.md#native-lists).
+
 Omitted or null `heading_ids` returns the whole selected tab (`partial=false`,
 `selected_headings=null`), including any preamble before the first heading as
 an entry with `heading_id=null`. A document without headings has only that

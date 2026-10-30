@@ -402,10 +402,48 @@ numbering. Tight lists use zero paragraph spacing; loose lists use 6 pt above
 each paragraph and zero below, without inserting empty items. This applies to
 all three rich insertion tools. Reads preserve text and order, but indentation
 alone cannot reconstruct the original Markdown item membership losslessly.
-The current reader's display indentation is not a canonical Markdown encoding
-for reinsertion; improving list read-to-write round trips is tracked in
-[#51](https://github.com/dm0/gdocs-scope-mcp/issues/51). Insertion does not change
-that existing reader limitation.
+
+Reads prefer Markdown lists, using four spaces per nesting level, whenever
+the available ancestors and group boundaries are unambiguous. This applies to
+ordinary homogeneous and mixed nesting. For example:
+
+```markdown
+1. Parent
+    1. Child
+1. Next parent
+```
+
+HTML `ol`/`ul`/`li` is selected for a contiguous run if Markdown would lose a
+group boundary, such as adjacent independent lists of the same kind. Empty
+native paragraphs do not count as reliable Markdown list separators. Explicit
+HTML is also used for incomplete ancestor chains and lists inside HTML tables,
+where ordinary Markdown list syntax would not be parsed as lists. The choice
+is local to the run; other lists in the document remain Markdown. For example,
+two independent numbered groups are returned as:
+
+```html
+<ol><li>First list</li></ol><ol><li>Second list</li></ol>
+```
+
+Both formats preserve supported item order, marker kind and nesting in rich
+reinsertion. Inline styles/links and literal text remain escaped. Detected
+inline code uses Markdown code spans in Markdown lists and `code` elements
+inside HTML lists. See [token measurements](development/list-read-roundtrip.md#token-measurements)
+for the measured overhead of unconditional HTML and the selective policy.
+
+This is a structural round trip, not a lossless native-document copy:
+
+- Ordinary unmarked paragraphs end the current list group. Their indentation
+  does not prove that they continue an earlier item. A list resuming after such
+  a paragraph becomes a new group; parent numbering can restart on reinsertion.
+- A fragment starting below level 0, or skipping ancestor levels, is normalized
+  to the available HTML hierarchy without inventing empty parent items.
+- Copying creates new native list IDs. Custom glyph formats, start numbers,
+  counters continuing across separate groups and exact visual spacing are not
+  retained; ordered lists use the insertion presets described above.
+- Headings, tables and cell boundaries close open list groups. Lists inside
+  native table cells remain readable HTML; inserting lists into new table cells
+  is still outside the supported table-writing subset.
 
 Custom starting numbers, empty items, interactive task checkboxes, and
 arbitrary block content inside items return `INVALID_ARGUMENT` before writing.

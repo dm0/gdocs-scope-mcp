@@ -243,16 +243,18 @@ def test_live_mixed_insertion(live_test_doc, table_probe, tool, ordered):
             visible = BeautifulSoup(markdown_to_html(markdown),
                                     'html.parser').get_text()
             assert all(marker + ' ' + label in visible for label in labels)
-            # Reads expose the existing depth/marker display. Canonical
-            # read-to-write list serialization is tracked separately in #51.
-            plain_markup = BeautifulSoup(markdown, 'html.parser').get_text(
-            ).replace('*', '')
-            for label, depth, is_ordered in [
-                ('Parent😀', 0, ordered), ('Next parent', 0, ordered),
-                ('Child', 1, not ordered), ('Grandchild', 2, ordered),
+            # #51 emits explicit HTML groups. Unmarked continuations split
+            # groups because native indentation does not prove item membership.
+            html = BeautifulSoup(markdown_to_html(markdown), 'html.parser')
+            for label, is_ordered in [
+                ('Parent😀', ordered), ('Next parent', ordered),
+                ('Child', not ordered), ('Grandchild', ordered),
             ]:
-                prefix = ' ' * depth + ('1.' if is_ordered else '-')
-                assert (prefix + ' ' + marker + ' ' + label) in plain_markup
+                item = next(li for li in html.find_all('li')
+                            if ''.join(str(s) for s in li.find_all(string=True)
+                                       if s.find_parent('li') is li).strip()
+                            == marker + ' ' + label)
+                assert item.parent.name == ('ol' if is_ordered else 'ul')
             probe.report['exported_lines'] = exported['lines']
             probe.report['checks_passed'] = True
 
