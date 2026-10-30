@@ -81,3 +81,12 @@ GDOCS_SCOPE_MCP_LIVE_CREATE=1 uv run --locked pytest -q tests/test_live_document
 The fixture writes identity, cleanup and process-reaping results to
 `/tmp/gdocs-scope-mcp-document-creation.json` and server stderr to the matching
 `.log` file. Full local check logs use `/tmp/gdocs-49-*.log`.
+
+Live verification on 2026-10-30 passed after explicit permission to create
+and trash one disposable document. The isolated server's package path and
+source fingerprint matched the assigned worktree. `docs_create` returned the
+expected identity and `docs_read` confirmed the initial text. Native Drive
+cleanup verified that only the newly returned ID was moved to trash; the
+fixture confirmed subprocess reaping. Server stderr contained successful
+calls without warnings, errors or tracebacks. The pytest run completed with
+one passed test in 29.31 seconds.
