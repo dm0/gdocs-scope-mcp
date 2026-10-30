@@ -183,11 +183,6 @@ for all authentication settings.
 | The browser did not open | Open the printed URL manually, or use `--headless`. |
 | The server uses an old account or client | Check `GDOCS_SCOPE_MCP_TOKEN`, then restart the MCP server. |
 
-During document operations, a temporary token-refresh failure does not mean
-that authorization was revoked. Follow the structured error code and recovery
-action before running authorization again; see
-[Google API failures and recovery](protocol.md#google-api-failures-and-recovery).
-
 ## Migrating from google-docs-mcp
 
 Install this repository and change your MCP launch command to
