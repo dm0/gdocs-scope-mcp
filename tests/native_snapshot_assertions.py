@@ -1,7 +1,39 @@
-"""Compare native tab snapshots without temporary image download URLs."""
+"""Compare live snapshots without temporary image download URLs."""
 
 
 from copy import deepcopy
+
+from bs4 import BeautifulSoup
+
+from gdocs_scope_mcp.rich_text.parsing import markdown_to_html
+
+
+def _stable_sections(sections):
+    """Retain rendered content, literal code and stable image attributes."""
+    result = deepcopy(sections)
+    for section in result:
+        html = BeautifulSoup(markdown_to_html(section['markdown']),
+                             'html.parser')
+        for image in html.find_all('img'):
+            source = image.get('src')
+            if isinstance(source, str) and source.startswith(
+                ('https://', 'http://'),
+            ):
+                image['src'] = '<temporary image download URL>'
+        section['markdown'] = str(html)
+    return result
+
+
+def assert_read_sections_equivalent(before, after):
+    """Require equal rendered sections apart from renewable image sources.
+
+    Use alongside native snapshot preservation checks, which retain image
+    identity, source URI, geometry and order. Markdown is parsed first so image
+    examples inside code remain literal text and are never normalized.
+    """
+    differences = _differing_paths(_stable_sections(before),
+                                   _stable_sections(after))
+    assert not differences, differences
 
 
 def _stable_tabs(tabs):

@@ -10,7 +10,10 @@ import uuid
 import pytest
 from bs4 import BeautifulSoup
 
-from .native_snapshot_assertions import assert_tabs_unchanged
+from .native_snapshot_assertions import (
+    assert_read_sections_equivalent,
+    assert_tabs_unchanged,
+)
 from .test_live_table_identity import table_probe  # noqa: F401
 
 pytestmark = pytest.mark.live
@@ -309,15 +312,16 @@ def test_live_document_tabs(live_test_doc, table_probe):
                     },
                 )
                 assert default['tab_id'] == original_read['tab_id']
-                # Compare selectors on the current snapshot: Markdown image
-                # URLs from the initial read may already have rotated. Native
-                # preservation is checked separately in the cleanup below.
+                # Even consecutive reads at the same revision can return
+                # different temporary image URLs. Compare rendered content;
+                # native image preservation is checked in cleanup below.
                 explicit = await probe.call(1, 'docs_read', {
                     'doc_id': live_test_doc,
                     'tab_id': original_read['tab_id'],
                 })
                 assert default['revision_id'] == explicit['revision_id']
-                assert default['sections'] == explicit['sections']
+                assert_read_sections_equivalent(default['sections'],
+                                                explicit['sections'])
                 probe.report['checks_passed'] = True
             finally:
                 if comment_id:

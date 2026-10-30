@@ -5,7 +5,64 @@ from copy import deepcopy
 
 import pytest
 
-from .native_snapshot_assertions import assert_tabs_unchanged
+from .native_snapshot_assertions import (
+    assert_read_sections_equivalent,
+    assert_tabs_unchanged,
+)
+
+
+@pytest.fixture
+def read_sections():
+    """Mix actual images with source-like text that must stay significant."""
+    return [{'heading_id': 'heading', 'markdown': (
+        '## Heading\n\nKeep this text.\n\n'
+        '<img src="https://temporary.example/old" alt="first" width="100">'
+        '<img src="https://temporary.example/second" alt="second">\n\n'
+        '[Link](https://link.example/original)\n\n'
+        '```html\n<img src="https://code.example/original">\n```\n\n'
+        '`<img src="https://inline.example/original">`'
+    )}]
+
+
+def test_read_sections_allow_rotated_image_urls(read_sections):
+    """Renewable URLs can differ without changing either input snapshot."""
+    original = deepcopy(read_sections)
+    after = deepcopy(read_sections)
+    after[0]['markdown'] = after[0]['markdown'].replace(
+        'https://temporary.example/old', 'https://temporary.example/renewed',
+    )
+    assert_read_sections_equivalent(read_sections, after)
+    assert read_sections == original
+    assert 'https://temporary.example/renewed' in after[0]['markdown']
+
+
+@pytest.mark.parametrize(('old', 'new'), [
+    ('Keep this text.', 'Changed text.'),
+    ('## Heading', '### Heading'),
+    ('alt="first"', 'alt="changed"'),
+    ('width="100"', 'width="200"'),
+    ('alt="first"', 'alt="second"'),
+    ('src="https://temporary.example/old"', ''),
+    ('https://temporary.example/old', ''),
+    ('https://link.example/original', 'https://link.example/changed'),
+    ('https://code.example/original', 'https://code.example/changed'),
+    ('https://inline.example/original', 'https://inline.example/changed'),
+])
+def test_read_sections_reject_other_changes(read_sections, old, new):
+    """Keep content, image attributes, hyperlinks and code in comparisons."""
+    after = deepcopy(read_sections)
+    after[0]['markdown'] = after[0]['markdown'].replace(old, new)
+    with pytest.raises(AssertionError) as error:
+        assert_read_sections_equivalent(read_sections, after)
+    assert 'https://' not in str(error.value)
+
+
+def test_read_sections_reject_changed_heading_identity(read_sections):
+    """Matching rendered content cannot hide a different selected section."""
+    after = deepcopy(read_sections)
+    after[0]['heading_id'] = 'another-heading'
+    with pytest.raises(AssertionError):
+        assert_read_sections_equivalent(read_sections, after)
 
 
 @pytest.fixture(params=['inline', 'positioned'])
