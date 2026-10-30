@@ -1175,7 +1175,7 @@ def test_two_page_listing_preserves_request_options(
         monkeypatch.setenv('GDOCS_SCOPE_MCP_DRIVE_ID', 'shared-drive')
     if name == 'docs_list':
         resource = contract_api.files.return_value
-        arguments = {'query': 'Example', 'limit': 150}
+        arguments = {'query': "Example's \\ draft", 'limit': 150}
         collection, key = 'documents', 'files'
         first = {'id': 'first', 'name': 'First'}
         second = {'id': 'second', 'name': 'Second'}
@@ -1227,7 +1227,10 @@ def test_two_page_listing_preserves_request_options(
     assert first_request['pageSize'] == EXPECTED_LIST_PAGE_SIZE
     assert 'nextPageToken' in first_request['fields']
     if name == 'docs_list':
-        assert 'fullText contains "Example"' in first_request['q']
+        assert first_request['q'] == (
+            'mimeType="application/vnd.google-apps.document" and trashed=false'
+            " and fullText contains 'Example\\'s \\\\ draft'"
+        )
         assert first_request['orderBy'] == 'modifiedTime desc'
         if shared_drive:
             assert first_request['driveId'] == 'shared-drive'

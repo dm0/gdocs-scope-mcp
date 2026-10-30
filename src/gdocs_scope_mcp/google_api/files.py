@@ -8,6 +8,12 @@ from gdocs_scope_mcp.google_api.models import (
 from gdocs_scope_mcp.settings import optional_env
 
 
+def _query_literal(value: str) -> str:
+    """Quote a Drive query value, escaping backslashes before apostrophes."""
+    escaped = value.replace('\\', '\\\\').replace("'", "\\'")
+    return f"'{escaped}'"
+
+
 def list_documents(
     query: str = '', limit: int = 20, page_token: str | None = None,
 ):
@@ -34,7 +40,7 @@ def list_documents(
 
     q = 'mimeType="application/vnd.google-apps.document" and trashed=false'
     if query:
-        q += f' and fullText contains "{query}"'
+        q += f' and fullText contains {_query_literal(query)}'
 
     drive = clients.get_service('drive', 'v3', cached=False)
     results = (
