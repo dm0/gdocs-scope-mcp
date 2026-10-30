@@ -163,11 +163,18 @@ List Google Docs from Drive, optionally filtered by a search query.
 
 | Param | Type | Default | Description |
 |-------|------|---------|-------------|
-| `query` | string | `""` | Search terms (searches title and content) |
+| `query` | string | `""` | Literal search text (searches title and content), not a raw Drive query |
 | `limit` | int | `20` | Positive per-page maximum; values above 100 are capped |
 | `page_token` | string or null | null | Continuation token from the previous page |
 
 Returns `{count, documents, next_page_token, has_more}`.
+The search text is passed as one escaped `fullText contains` value. Apostrophes
+and backslashes are escaped automatically; expression-like text cannot add
+query clauses or change the document-type and trash filters. Empty input omits
+the text filter. Matching still follows Google's full-text search rules,
+including double-quoted phrases; this is not a literal substring search.
+See [Drive search syntax](https://developers.google.com/workspace/drive/api/guides/search-files).
+
 Each document has `id`, `name`, `modifiedTime`,
 and `webViewLink`; the last two can be null. Only one page is fetched, and
 `count` is the number returned, not the total number of matching documents.

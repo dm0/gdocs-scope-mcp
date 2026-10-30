@@ -35,7 +35,8 @@ def register(mcp):
         List Google Docs from Drive, optionally filtered by a search query.
 
         Args:
-            query: Optional search terms (searches title and content)
+            query: Optional literal search text for title and content, not a raw
+                Drive query. Quotes and backslashes are escaped automatically.
             limit: Positive per-page maximum (default 20, above 100 capped).
             page_token: Opaque token from the previous response. Omit for page one;
                 preserve query, limit and shared-drive settings across pages.
