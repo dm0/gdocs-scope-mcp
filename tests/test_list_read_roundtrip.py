@@ -208,3 +208,51 @@ def test_orphan_depths_do_not_invent_empty_parent_items():
               if p.bullet_preset]
     assert len(parsed) == 2
     assert [p.nesting_level for p in parsed] == [0, 1]
+
+
+def test_heading_boundaries_close_list_fragments_before_selection():
+    """Each selected section must contain complete list markup."""
+    source = native_document(ITEMS, ordered=False)
+    source['body']['content'][-1]['paragraph']['paragraphStyle'] = {
+        'namedStyleType': 'HEADING_1', 'headingId': 'tail',
+    }
+    tree = parsing.parse_document_tree(source)
+    scope = tree.headings['scope'].markdown
+    tail = tree.headings['tail'].markdown
+    assert scope.endswith('</li></ul>\n\n')
+    assert tail.startswith('### <a id="tail"></a>After\n\n')
+    html = BeautifulSoup(markdown_to_html(scope), 'html.parser')
+    assert len(html.find_all('ul', recursive=False)) == 2
+    assert html.find('h3').find_parent('li') is None
+
+
+def test_table_cells_keep_independent_list_frames():
+    """A native list ID reused in two cells must not join their HTML frames."""
+    source = native_document([
+        ('Cell parent', 0, 'first'), ('Cell child', 1, 'first'),
+    ], ordered=False)
+    first = source['body']['content'][2:-1]
+    second = deepcopy(first)
+    for paragraph in second:
+        for key in ['startIndex', 'endIndex']:
+            paragraph[key] += 200
+        for element in paragraph['paragraph']['elements']:
+            element['startIndex'] += 200
+            element['endIndex'] += 200
+    source['body']['content'] = [{
+        'startIndex': 1, 'endIndex': 500,
+        'table': {'rows': 1, 'columns': 2, 'tableRows': [{
+            'startIndex': 2, 'endIndex': 499, 'tableCells': [
+                {'startIndex': 3, 'endIndex': 199, 'content': first},
+                {'startIndex': 200, 'endIndex': 498, 'content': second},
+            ],
+        }]},
+    }]
+    html = BeautifulSoup(GoogleDocument.model_validate(
+        deepcopy(source),
+    ).to_markdown(), 'html.parser')
+    assert len(html.find_all('td')) == 2
+    for cell in html.find_all('td'):
+        assert len(cell.find_all('ul', recursive=False)) == 1
+        assert len(cell.find_all('li')) == 2
+        assert cell.ul.li.ul.li.get_text() == 'Cell child'
