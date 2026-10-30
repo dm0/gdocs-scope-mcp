@@ -70,6 +70,21 @@ suite passed with 1719 tests and 91 skips after bundling the client. Ruff passed
 Earlier wheel/sdist builds and both installed entry points passed;
 installed-wheel discovery exposed 32 MCP tools.
 
+### Environment-name migration
+
+Environment-name migration (#45) was verified on 2026-10-29 with
+`tests/test_live_environment_prefix.py`. An isolated STDIO server used an
+existing authorized token through `GDOCS_SCOPE_MCP_TOKEN`, loaded a JSON file
+through `GDOCS_SCOPE_MCP_CONFIG`, and emitted DEBUG call-start records selected
+by `GDOCS_SCOPE_MCP_LOG_LEVEL`. Deliberately invalid former token/config/logging
+variables were ignored. Credential refresh and the bounded `docs_get_tree`
+read succeeded; no new consent or document mutation was performed. The fixture
+verified the worktree source fingerprint and subprocess cleanup. Identity and
+check results are in `/tmp/gdocs-45-canonical-environment.json`, with server
+stderr in the adjacent `.log`. The configured user MCP was not restarted or
+reconfigured. See the [environment migration guide](../configuration.md#environment-name-migration-and-validation)
+for renamed variables and unchanged credential file locations.
+
 ## Distribution considerations
 
 The package distributes the shared Desktop client ID and matching secret in

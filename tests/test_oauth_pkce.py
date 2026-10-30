@@ -22,7 +22,7 @@ from gdocs_scope_mcp.settings import default_token_path, get_settings
 @pytest.fixture(autouse=True)
 def isolated_config(monkeypatch, tmp_path):
     """Separate client configuration from the developer's actual settings."""
-    monkeypatch.delenv('GOOGLE_DOCS_MCP_CONFIG', raising=False)
+    monkeypatch.delenv('GDOCS_SCOPE_MCP_CONFIG', raising=False)
     monkeypatch.setenv('XDG_CONFIG_HOME', str(tmp_path / 'config'))
     get_settings.cache_clear()
     yield
@@ -177,8 +177,8 @@ def test_real_google_auth_refresh_and_reload(
         data['client_secret'] = legacy_secret
         data.pop('auth_method')
     path.write_text(json.dumps(data))
-    monkeypatch.setenv('GOOGLE_DOCS_MCP_TOKEN', str(path))
-    monkeypatch.setenv('GOOGLE_DOCS_MCP_CLIENT_SECRET', 'unrelated-secret')
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_TOKEN', str(path))
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_CLIENT_SECRET', 'unrelated-secret')
     requests = []
 
     def request(url, method, body, **_kwargs):
@@ -268,16 +268,16 @@ def test_client_selection_precedence(source, monkeypatch, tmp_path):
     """Custom IDs never inherit the shared Desktop client's secret."""
     monkeypatch.setattr(oauth, 'PROJECT_CLIENT_ID', 'project')
     monkeypatch.setattr(oauth, 'PROJECT_CLIENT_SECRET', 'project-secret')
-    for name in (*auth_setup.CLIENT_ID_ENV_ALIASES,
-                 *auth_setup.CLIENT_SECRET_ENV_ALIASES):
+    for name in (auth_setup.CLIENT_ID_ENV_VAR,
+                 auth_setup.CLIENT_SECRET_ENV_VAR):
         monkeypatch.delenv(name, raising=False)
     args = ['auth']
     if source in {'json', 'env', 'cli', 'file'}:
         config = tmp_path / 'config.json'
         config.write_text('{"client_id":"json"}')
-        monkeypatch.setenv('GOOGLE_DOCS_MCP_CONFIG', str(config))
+        monkeypatch.setenv('GDOCS_SCOPE_MCP_CONFIG', str(config))
     if source in {'env', 'cli', 'file'}:
-        monkeypatch.setenv('GOOGLE_DOCS_MCP_CLIENT_ID', 'env')
+        monkeypatch.setenv('GDOCS_SCOPE_MCP_CLIENT_ID', 'env')
     if source in {'cli', 'file'}:
         args += ['--client-id', 'cli']
     if source == 'file':
@@ -301,11 +301,11 @@ def test_client_pair_for_local_and_saved_session(
     """Saved sessions use their originating pair, never another client's."""
     monkeypatch.setattr(oauth, 'PROJECT_CLIENT_ID', 'project')
     monkeypatch.setattr(oauth, 'PROJECT_CLIENT_SECRET', 'shared')
-    for name in (*auth_setup.CLIENT_ID_ENV_ALIASES,
-                 *auth_setup.CLIENT_SECRET_ENV_ALIASES):
+    for name in (auth_setup.CLIENT_ID_ENV_VAR,
+                 auth_setup.CLIENT_SECRET_ENV_VAR):
         monkeypatch.delenv(name, raising=False)
     if ambient_secret:
-        monkeypatch.setenv('GOOGLE_DOCS_MCP_CLIENT_SECRET', ambient_secret)
+        monkeypatch.setenv('GDOCS_SCOPE_MCP_CLIENT_SECRET', ambient_secret)
     args = ['auth', '--out', str(tmp_path / 'token.json')]
     if callback:
         session = oauth.AuthorizationSession.create(
@@ -357,8 +357,7 @@ def test_default_token_path_ignores_invalid_xdg(xdg, monkeypatch, tmp_path):
 
 def test_token_path_precedence_preserves_legacy_files(monkeypatch, tmp_path):
     """Prefer explicit paths, then XDG, retaining legacy read fallback."""
-    for name in (*credentials.TOKEN_ENV_ALIASES, 'GOOGLE_DOCS_TOKEN_FILE'):
-        monkeypatch.delenv(name, raising=False)
+    monkeypatch.delenv(credentials.TOKEN_ENV_VAR, raising=False)
     old = tmp_path / 'old-token.json'
     older = tmp_path / 'older-token.json'
     old.write_text('{"source":"old"}')
@@ -369,7 +368,7 @@ def test_token_path_precedence_preserves_legacy_files(monkeypatch, tmp_path):
     new.parent.mkdir(parents=True)
     new.write_text('{"source":"xdg"}')
     assert credentials.load_token() == {'source': 'xdg'}
-    monkeypatch.setenv('GOOGLE_DOCS_MCP_TOKEN', str(older))
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_TOKEN', str(older))
     assert credentials.load_token() == {'source': 'older'}
     assert old.read_text() == '{"source":"old"}'
     assert older.read_text() == '{"source":"older"}'
@@ -380,11 +379,10 @@ def test_server_uses_config_only_when_token_has_no_client(
     stored_client, monkeypatch, tmp_path,
 ):
     """Configuration cannot rebind an existing refresh token's client."""
-    for name in credentials.CLIENT_ID_ENV_ALIASES:
-        monkeypatch.delenv(name, raising=False)
+    monkeypatch.delenv(credentials.CLIENT_ID_ENV_VAR, raising=False)
     config = tmp_path / 'config.json'
     config.write_text('{"client_id":"configured-client"}')
-    monkeypatch.setenv('GOOGLE_DOCS_MCP_CONFIG', str(config))
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_CONFIG', str(config))
     token = {'refresh_token': 'refresh', 'client_secret': 'secret'}
     if stored_client:
         token['client_id'] = stored_client

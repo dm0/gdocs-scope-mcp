@@ -25,6 +25,16 @@ FontName = Annotated[
 HexColor = Annotated[str, StringConstraints(pattern=r'^#[0-9a-fA-F]{6}$')]
 
 
+def optional_env(name: str) -> str | None:
+    """Treat empty optional credentials as unset and reject blank values."""
+    value = os.environ.get(name)
+    if value is None or value == '':
+        return None
+    if not value.strip():
+        raise ValueError(f'{name} must not be whitespace-only')
+    return value
+
+
 def config_directory() -> Path:
     """Resolve the application's XDG configuration directory."""
     configured = os.environ.get('XDG_CONFIG_HOME')
@@ -40,14 +50,14 @@ def default_token_path() -> Path:
 
 def config_path() -> Path:
     """Find the default config or require an explicitly chosen file."""
-    explicit = os.environ.get('GOOGLE_DOCS_MCP_CONFIG')
+    explicit = os.environ.get('GDOCS_SCOPE_MCP_CONFIG')
     if explicit is not None:
         if not explicit.strip():
-            raise ValueError('GOOGLE_DOCS_MCP_CONFIG must name a JSON file')
+            raise ValueError('GDOCS_SCOPE_MCP_CONFIG must name a JSON file')
         path = Path(explicit).expanduser()
         if not path.is_file():
             raise ValueError(
-                f'GOOGLE_DOCS_MCP_CONFIG file does not exist: {path}'
+                f'GDOCS_SCOPE_MCP_CONFIG file does not exist: {path}'
             )
         return path
     return config_directory() / 'config.json'
@@ -57,7 +67,7 @@ class Settings(BaseSettings):
     """Configure the application; environment overrides JSON."""
 
     model_config = SettingsConfigDict(
-        env_prefix='GOOGLE_DOCS_MCP_', extra='forbid', frozen=True,
+        env_prefix='GDOCS_SCOPE_MCP_', extra='forbid', frozen=True,
     )
     client_id: Annotated[
         str, StringConstraints(strip_whitespace=True, min_length=1),

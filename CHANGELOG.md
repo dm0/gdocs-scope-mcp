@@ -4,6 +4,19 @@ User-facing changes to `gdocs-scope-mcp` are listed in descending version order,
 starting with v0.3.0. The upstream 0.2.0 baseline is documented separately for
 provenance; it is not a release of this independent project.
 
+## Unreleased
+
+### Changed
+
+- Application-owned environment variables now exclusively use the
+  `GDOCS_SCOPE_MCP_*` prefix. Rename previous `GOOGLE_DOCS_MCP_*` and
+  `GOOGLE_DRIVE_MCP_*` entries; these names and `GOOGLE_DOCS_TOKEN_FILE` are
+  ignored. Shared-drive switches are `GDOCS_SCOPE_MCP_USE_DRIVE` and
+  `GDOCS_SCOPE_MCP_DRIVE_ID`. JSON keys, token/configuration paths, third-party
+  variables, and existing live-test controls are unchanged. See the
+  [migration guide](docs/configuration.md#environment-name-migration-and-validation)
+  for validation and restart requirements.
+
 ## [v0.6.1] - 2026-10-29
 
 ### Fixed

@@ -202,8 +202,8 @@ comments can still return a null revision.
   `apps_script_id` option. Unknown legacy inputs are rejected.
 - Removed `named_range_id`, `bookmark_id`, `bookmark_url`, and
   `apps_script_id` result fields. Native results expose `anchor_id` and post IDs.
-- Removed the Apps Script probe and bridge. The old
-  `GOOGLE_DOCS_MCP_APPS_SCRIPT_ID` setting and its Drive-prefixed alias have no effect.
+- Removed the Apps Script probe and bridge. Former bridge environment settings
+  have no effect; native comments need no bridge configuration.
 - Discard old Drive pagination tokens. Reread native comment and post IDs;
   old Drive IDs are not assumed interchangeable with native IDs.
 - Existing threads exposed by the native API remain readable/manageable subject

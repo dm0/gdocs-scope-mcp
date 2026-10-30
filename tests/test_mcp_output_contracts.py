@@ -1169,10 +1169,10 @@ def test_two_page_listing_preserves_request_options(
     contract_api, monkeypatch, *, name, include_resolved, shared_drive,
 ):
     """Reach page two with the same filters and shared-drive options."""
-    monkeypatch.setenv('GOOGLE_DOCS_USE_DRIVE', 'false')
-    monkeypatch.delenv('GOOGLE_DOCS_DRIVE_ID', raising=False)
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_USE_DRIVE', 'false')
+    monkeypatch.delenv('GDOCS_SCOPE_MCP_DRIVE_ID', raising=False)
     if shared_drive:
-        monkeypatch.setenv('GOOGLE_DOCS_DRIVE_ID', 'shared-drive')
+        monkeypatch.setenv('GDOCS_SCOPE_MCP_DRIVE_ID', 'shared-drive')
     if name == 'docs_list':
         resource = contract_api.files.return_value
         arguments = {'query': 'Example', 'limit': 150}

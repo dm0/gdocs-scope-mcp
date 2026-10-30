@@ -28,7 +28,7 @@ def test_probe_server_discovers_without_google_access(
     isolated_mcp, tmp_path, monkeypatch,
 ):
     """Validate live-test launchers and their seams without Google access."""
-    monkeypatch.setenv('GOOGLE_DOCS_MCP_TOKEN', str(tmp_path / 'missing.json'))
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_TOKEN', str(tmp_path / 'missing.json'))
 
     async def check():
         async with isolated_mcp(tmp_path / 'probe.log', probe=True) as session:

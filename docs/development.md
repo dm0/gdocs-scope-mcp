@@ -156,19 +156,19 @@ Edit responses with `ok: false` also log at `ERROR`, including their failure
 code. Cancelled calls use `WARNING`. Arguments and returned document
 contents are not included in our tool-call log messages.
 
-Set `GOOGLE_DOCS_MCP_LOG_LEVEL` to `DEBUG`, `INFO` (default), `WARNING`, `ERROR`,
+Set `GDOCS_SCOPE_MCP_LOG_LEVEL` to `DEBUG`, `INFO` (default), `WARNING`, `ERROR`,
 or `CRITICAL`. For example:
 
 ```bash
-GOOGLE_DOCS_MCP_LOG_LEVEL=DEBUG uv run gdocs-scope-mcp
+GDOCS_SCOPE_MCP_LOG_LEVEL=DEBUG uv run gdocs-scope-mcp
 ```
 
 For a Codex STDIO connection, add the variable to the server's environment:
 
 ```toml
 [mcp_servers.gdocs_scope.env]
-GOOGLE_DOCS_MCP_TOKEN = "/home/you/.config/gdocs-scope-mcp/token.json"
-GOOGLE_DOCS_MCP_LOG_LEVEL = "INFO"
+GDOCS_SCOPE_MCP_TOKEN = "/home/you/.config/gdocs-scope-mcp/token.json"
+GDOCS_SCOPE_MCP_LOG_LEVEL = "INFO"
 ```
 
 Restart the MCP server after changing its environment. Use `INFO` to observe

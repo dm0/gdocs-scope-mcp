@@ -11,7 +11,7 @@ application operation merely to reuse one of its helpers.
 | --- | --- |
 | `server.py`, `__main__.py` | Construct the server, capture startup identity, configure middleware, register tools and start STDIO. |
 | `tools/` | Thin MCP contracts, descriptions, schemas, annotations and explicit registration functions. |
-| `google_api/credentials.py` | Token precedence, legacy aliases, gog fallback and OAuth refresh. |
+| `google_api/credentials.py` | Token precedence, canonical environment overrides, legacy token-file paths, gog fallback and OAuth refresh. |
 | `google_api/oauth.py` | Shared Desktop client configuration, PKCE sessions, callback validation, private session files, token exchange and the google-auth public-client refresh adapter. |
 | `auth_setup.py` | Desktop authorization CLI, bounded loopback listener and headless session lifecycle. |
 | `google_api/clients.py` | Construct discovery clients; cache Docs reads by default, with explicit uncached construction where required. |
@@ -151,8 +151,10 @@ initialization text from revision `096c27e`. Behavior tests retain native
 request, rendered-content, receipt and failure assertions at API-client seams.
 Do not update these contracts simply to make a structural change pass.
 
-Preserve both console entry points, `python -m gdocs_scope_mcp`, configuration
-and legacy token aliases. Old flat private module paths are implementation
+Preserve both console entry points, `python -m gdocs_scope_mcp`, JSON keys,
+token/configuration paths, and the `GDOCS_SCOPE_MCP_*` environment contract.
+Removed environment names have no compatibility aliases. Old flat private
+module paths are implementation
 details; do not add blanket compatibility re-export layers. Recursive source
 fingerprinting and setuptools package discovery must include every subpackage.
 

@@ -190,7 +190,7 @@ checked = docs_table_snapshot(doc_id="...", table_ref=table_ref,
 
 Table refs have no time expiry. Snapshot tokens expire after 86,400 seconds by
 default; set JSON
-`table_snapshot_ttl_seconds` or `GOOGLE_DOCS_MCP_TABLE_SNAPSHOT_TTL_SECONDS`
+`table_snapshot_ttl_seconds` or `GDOCS_SCOPE_MCP_TABLE_SNAPSHOT_TTL_SECONDS`
 to an integer between 1 and 604,800 seconds.
 
 See [positional references, dependency groups and limits](../table-references.md).

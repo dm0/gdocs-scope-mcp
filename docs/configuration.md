@@ -5,7 +5,7 @@
 An optional JSON config sets the OAuth client, editing and formatting. By default, the
 server reads `~/.config/gdocs-scope-mcp/config.json`, or
 `$XDG_CONFIG_HOME/gdocs-scope-mcp/config.json` when `XDG_CONFIG_HOME` is set.
-Select another file with `GOOGLE_DOCS_MCP_CONFIG=/absolute/path/config.json`.
+Select another file with `GDOCS_SCOPE_MCP_CONFIG=/absolute/path/config.json`.
 An absent default file is allowed; an explicitly selected file must exist.
 
 ```json
@@ -80,36 +80,36 @@ Environment variables override individual file settings:
 
 | Environment variable | JSON field | Default |
 |---|---|---|
-| `GOOGLE_DOCS_MCP_CLIENT_ID` | `client_id` | `null` (bundled client for new authorization) |
-| `GOOGLE_DOCS_MCP_WRITE_REVISION_MODE` | `write_revision_mode` | `required` |
-| `GOOGLE_DOCS_MCP_DOCUMENT_CACHE_ENABLED` | `document_cache_enabled` | `false` |
-| `GOOGLE_DOCS_MCP_DOCUMENT_CACHE_STORAGE` | `document_cache_storage` | `disk` |
-| `GOOGLE_DOCS_MCP_DOCUMENT_CACHE_DIRECTORY` | `document_cache_directory` | Platform cache directory |
-| `GOOGLE_DOCS_MCP_DOCUMENT_CACHE_DATABASE_MAX_BYTES` | `document_cache_database_max_bytes` | `67108864` |
-| `GOOGLE_DOCS_MCP_DOCUMENT_CACHE_TTL_SECONDS` | `document_cache_ttl_seconds` | `300` |
-| `GOOGLE_DOCS_MCP_DOCUMENT_CACHE_MAX_ENTRIES` | `document_cache_max_entries` | `128` |
-| `GOOGLE_DOCS_MCP_DOCUMENT_CACHE_MAX_BYTES` | `document_cache_max_bytes` | `33554432` |
-| `GOOGLE_DOCS_MCP_TABLE_SNAPSHOT_TTL_SECONDS` | `table_snapshot_ttl_seconds` | `86400` |
-| `GOOGLE_DOCS_MCP_CODE_FONT_FAMILY` | `code_font_family` | `Roboto Mono` |
-| `GOOGLE_DOCS_MCP_INLINE_CODE_COLOR` | `inline_code_color` | `#188038` |
-| `GOOGLE_DOCS_MCP_CODE_BLOCK_HIGHLIGHTING` | `code_block_highlighting` | `true` |
-| `GOOGLE_DOCS_MCP_CODE_BLOCK_STYLE` | `code_block_style` | `default` |
-| `GOOGLE_DOCS_MCP_CODE_BLOCK_LINE_SPACING` | `code_block_line_spacing` | `1.0` |
-| `GOOGLE_DOCS_MCP_CODE_BLOCK_THEME_BACKGROUND` | `code_block_theme_background` | `false` |
-| `GOOGLE_DOCS_MCP_CODE_BLOCK_NAMED_RANGES` | `code_block_named_ranges` | `true` |
-| `GOOGLE_DOCS_MCP_READ_INLINE_CODE` | `read_inline_code` | `true` |
-| `GOOGLE_DOCS_MCP_READ_INLINE_CODE_FONTS` | `read_inline_code_fonts` | `null` (insertion font) |
-| `GOOGLE_DOCS_MCP_READ_INLINE_CODE_COLORS` | `read_inline_code_colors` | `null` (insertion color) |
-| `GOOGLE_DOCS_MCP_READ_INLINE_CODE_MATCH` | `read_inline_code_match` | `both` |
-| `GOOGLE_DOCS_MCP_READ_CODE_BLOCK_HEURISTIC` | `read_code_block_heuristic` | `true` |
-| `GOOGLE_DOCS_MCP_READ_NATIVE_CODE_BLOCKS` | `read_native_code_blocks` | `true` |
-| `GOOGLE_DOCS_MCP_READ_CODE_BLOCK_FONTS` | `read_code_block_fonts` | `null` (insertion font) |
-| `GOOGLE_DOCS_MCP_READ_CODE_BLOCK_LINE_SPACING` | `read_code_block_line_spacing` | `1.0` |
-| `GOOGLE_DOCS_MCP_READ_CODE_BLOCK_REQUIRE_BACKGROUND` | `read_code_block_require_background` | `false` |
-| `GOOGLE_DOCS_MCP_READ_CODE_BLOCK_MIN_LINES` | `read_code_block_min_lines` | `2` |
+| `GDOCS_SCOPE_MCP_CLIENT_ID` | `client_id` | `null` (bundled client for new authorization) |
+| `GDOCS_SCOPE_MCP_WRITE_REVISION_MODE` | `write_revision_mode` | `required` |
+| `GDOCS_SCOPE_MCP_DOCUMENT_CACHE_ENABLED` | `document_cache_enabled` | `false` |
+| `GDOCS_SCOPE_MCP_DOCUMENT_CACHE_STORAGE` | `document_cache_storage` | `disk` |
+| `GDOCS_SCOPE_MCP_DOCUMENT_CACHE_DIRECTORY` | `document_cache_directory` | Platform cache directory |
+| `GDOCS_SCOPE_MCP_DOCUMENT_CACHE_DATABASE_MAX_BYTES` | `document_cache_database_max_bytes` | `67108864` |
+| `GDOCS_SCOPE_MCP_DOCUMENT_CACHE_TTL_SECONDS` | `document_cache_ttl_seconds` | `300` |
+| `GDOCS_SCOPE_MCP_DOCUMENT_CACHE_MAX_ENTRIES` | `document_cache_max_entries` | `128` |
+| `GDOCS_SCOPE_MCP_DOCUMENT_CACHE_MAX_BYTES` | `document_cache_max_bytes` | `33554432` |
+| `GDOCS_SCOPE_MCP_TABLE_SNAPSHOT_TTL_SECONDS` | `table_snapshot_ttl_seconds` | `86400` |
+| `GDOCS_SCOPE_MCP_CODE_FONT_FAMILY` | `code_font_family` | `Roboto Mono` |
+| `GDOCS_SCOPE_MCP_INLINE_CODE_COLOR` | `inline_code_color` | `#188038` |
+| `GDOCS_SCOPE_MCP_CODE_BLOCK_HIGHLIGHTING` | `code_block_highlighting` | `true` |
+| `GDOCS_SCOPE_MCP_CODE_BLOCK_STYLE` | `code_block_style` | `default` |
+| `GDOCS_SCOPE_MCP_CODE_BLOCK_LINE_SPACING` | `code_block_line_spacing` | `1.0` |
+| `GDOCS_SCOPE_MCP_CODE_BLOCK_THEME_BACKGROUND` | `code_block_theme_background` | `false` |
+| `GDOCS_SCOPE_MCP_CODE_BLOCK_NAMED_RANGES` | `code_block_named_ranges` | `true` |
+| `GDOCS_SCOPE_MCP_READ_INLINE_CODE` | `read_inline_code` | `true` |
+| `GDOCS_SCOPE_MCP_READ_INLINE_CODE_FONTS` | `read_inline_code_fonts` | `null` (insertion font) |
+| `GDOCS_SCOPE_MCP_READ_INLINE_CODE_COLORS` | `read_inline_code_colors` | `null` (insertion color) |
+| `GDOCS_SCOPE_MCP_READ_INLINE_CODE_MATCH` | `read_inline_code_match` | `both` |
+| `GDOCS_SCOPE_MCP_READ_CODE_BLOCK_HEURISTIC` | `read_code_block_heuristic` | `true` |
+| `GDOCS_SCOPE_MCP_READ_NATIVE_CODE_BLOCKS` | `read_native_code_blocks` | `true` |
+| `GDOCS_SCOPE_MCP_READ_CODE_BLOCK_FONTS` | `read_code_block_fonts` | `null` (insertion font) |
+| `GDOCS_SCOPE_MCP_READ_CODE_BLOCK_LINE_SPACING` | `read_code_block_line_spacing` | `1.0` |
+| `GDOCS_SCOPE_MCP_READ_CODE_BLOCK_REQUIRE_BACKGROUND` | `read_code_block_require_background` | `false` |
+| `GDOCS_SCOPE_MCP_READ_CODE_BLOCK_MIN_LINES` | `read_code_block_min_lines` | `2` |
 
 Font/color lists in environment variables use JSON arrays, for example
-`GOOGLE_DOCS_MCP_READ_CODE_BLOCK_FONTS='["Roboto Mono", "Consolas"]'`.
+`GDOCS_SCOPE_MCP_READ_CODE_BLOCK_FONTS='["Roboto Mono", "Consolas"]'`.
 
 Precedence is per-call overrides (theme/background only), environment, JSON
 file, then built-in defaults. Server settings are
@@ -148,7 +148,7 @@ For isolated FastMCP CLI tests, pass them explicitly to the child command:
 
 ```bash
 uv run --locked fastmcp call \
-  --command 'env GOOGLE_DOCS_MCP_CONFIG=/absolute/path/config.json gdocs-scope-mcp' \
+  --command 'env GDOCS_SCOPE_MCP_CONFIG=/absolute/path/config.json gdocs-scope-mcp' \
   --target server_info --json
 ```
 
@@ -159,34 +159,63 @@ the STDIO server; FastMCP's subprocess environment is filtered.
 
 | Variable | Description |
 |----------|-------------|
-| `GOOGLE_DOCS_MCP_TOKEN` | Path to token file (preferred for standalone use) |
-| `GOOGLE_DOCS_MCP_CLIENT_ID` | Optional OAuth client ID override |
-| `GOOGLE_DOCS_MCP_CLIENT_SECRET` | Optional OAuth client secret override |
-| `GOOGLE_DOCS_TOKEN_FILE` | Legacy alias |
+| `GDOCS_SCOPE_MCP_TOKEN` | Path to token file (preferred for standalone use) |
+| `GDOCS_SCOPE_MCP_CLIENT_ID` | Optional OAuth client ID override |
+| `GDOCS_SCOPE_MCP_CLIENT_SECRET` | Optional OAuth client secret override |
 | `GOG_KEYRING_PASSWORD` | Auto-export from gog CLI (for personal/OpenClaw use) |
 
-Legacy `GOOGLE_DRIVE_MCP_*` env var aliases still work for retained settings.
-The removed Apps Script bridge IDs (`GOOGLE_DOCS_MCP_APPS_SCRIPT_ID` and its
-Drive-prefixed alias) are no longer used; native comments need no bridge.
-
-Token resolution checks the preferred token environment variables, the legacy
-`GOOGLE_DOCS_TOKEN_FILE`, then `$XDG_CONFIG_HOME/gdocs-scope-mcp/token.json`
+Token resolution checks `GDOCS_SCOPE_MCP_TOKEN`, then
+`$XDG_CONFIG_HOME/gdocs-scope-mcp/token.json`
 (default root: `~/.config`), `~/.google-docs-mcp/token.json`, the older
 `~/.google-drive-mcp/token.json`, then gog export/cache. New authorizations use
 the XDG path unless `--out` is supplied. Empty or relative `XDG_CONFIG_HOME`
-values are ignored. Changing `GOOGLE_DOCS_MCP_CONFIG` selects the settings file,
+values are ignored. Changing `GDOCS_SCOPE_MCP_CONFIG` selects the settings file,
 not the token directory. Existing token files are not moved or rewritten.
-OAuth client overrides accept the corresponding legacy `GOOGLE_DRIVE_MCP_CLIENT_ID` and
-`GOOGLE_DRIVE_MCP_CLIENT_SECRET` aliases. See [authentication](getting-started.md#3-authenticate).
+Token-stored client credentials take precedence over environment client
+overrides; an environment client ID takes precedence over JSON `client_id`,
+followed by the existing gog credentials fallback. Public-client tokens never
+consume a secret override. See [authentication](getting-started.md#3-authenticate).
 
 Desktop authorization uses PKCE S256. Run `gdocs-scope-mcp-auth` to authorize
 with the bundled Desktop client ID and matching secret. These shared Desktop
 credentials are included in the source and installed package; user tokens are
 private and are never included. A custom client ID never inherits the bundled secret.
 For a custom client, provide the matching secret in its credentials JSON or
-through `GOOGLE_DOCS_MCP_CLIENT_SECRET` together with an explicit client ID.
+through `GDOCS_SCOPE_MCP_CLIENT_SECRET` together with an explicit client ID.
 Existing token files retain their client credentials; changing settings does
 not switch their OAuth client or document-access permissions.
+
+### Environment name migration and validation
+
+Application-owned environment variables exclusively use `GDOCS_SCOPE_MCP_*`.
+Replace `GOOGLE_DOCS_MCP_*` names in MCP host configuration and shell commands
+with their corresponding new names. The old prefix, `GOOGLE_DRIVE_MCP_*`
+aliases, and `GOOGLE_DOCS_TOKEN_FILE` are ignored, including when their values
+are invalid. There is no compatibility fallback to these variables.
+The former `GOOGLE_DOCS_USE_DRIVE` and `GOOGLE_DOCS_DRIVE_ID` switches are now
+`GDOCS_SCOPE_MCP_USE_DRIVE` and `GDOCS_SCOPE_MCP_DRIVE_ID`.
+
+Restart the server after changing its environment. JSON keys and token/config
+locations are unchanged; this migration does not move or rewrite existing
+files. `XDG_CONFIG_HOME`, `GOG_KEYRING_PASSWORD`, and existing
+`GDOCS_SCOPE_MCP_*` live-test controls retain their meanings. Former Apps Script
+bridge settings remain unused; no replacement bridge variable is introduced.
+
+- An explicitly empty, whitespace-only, or missing `GDOCS_SCOPE_MCP_CONFIG`
+  file selection fails rather than falling back to another config.
+- `GDOCS_SCOPE_MCP_LOG_LEVEL` accepts the documented levels case-insensitively,
+  with surrounding whitespace ignored. Empty and unknown levels fail.
+- Typed Settings overrides retain field validation and environment-over-JSON
+  precedence. Empty client IDs, fonts, booleans, numeric values, enums, colors,
+  and list strings are invalid; a provided override is not silently discarded.
+- Empty optional `TOKEN`, `CLIENT_SECRET`, `USE_DRIVE`, and `DRIVE_ID` values
+  mean unset. Whitespace-only values fail when consumed. A nonempty explicit
+  token path that is unreadable or contains malformed JSON fails without
+  trying another token source.
+- Environment client IDs are trimmed. The authorization CLI keeps its existing
+  credentials-file, CLI, environment, JSON, and bundled-client priority;
+  credentials JSON supplies its own pair without consulting lower-priority
+  client overrides.
 
 ## Drive listing
 
@@ -195,14 +224,18 @@ server settings and must remain unchanged while following a pagination token:
 
 | Variable | Default | Effect |
 | --- | --- | --- |
-| `GOOGLE_DOCS_USE_DRIVE` | `false` | Set to `true` to include shared-drive items |
-| `GOOGLE_DOCS_DRIVE_ID` | Unset | Select one shared-drive corpus and enable shared-drive support |
+| `GDOCS_SCOPE_MCP_USE_DRIVE` | `false` | Set to `true` to include shared-drive items |
+| `GDOCS_SCOPE_MCP_DRIVE_ID` | Unset | Select one shared-drive corpus and enable shared-drive support |
+
+`USE_DRIVE` accepts `true` or `false` case-insensitively; other nonempty values
+fail before authentication. A nonempty `DRIVE_ID` enables shared-drive support
+even when `USE_DRIVE=false`.
 
 ## Document snapshot cache
 
 The document snapshot cache is disabled by default. Enable it explicitly with
 `document_cache_enabled: true` in JSON configuration or
-`GOOGLE_DOCS_MCP_DOCUMENT_CACHE_ENABLED=true` in the server environment.
+`GDOCS_SCOPE_MCP_DOCUMENT_CACHE_ENABLED=true` in the server environment.
 When enabled, the server caches full native document responses on disk for
 repeated reads across MCP processes and Codex chats. Before every reuse it requests only
 `revisionId` from Google, validating current access and revision. An unchanged
@@ -277,7 +310,7 @@ these timings. See the [Google Docs revision contract](https://developers.google
 
 ## Logging
 
-Set `GOOGLE_DOCS_MCP_LOG_LEVEL` to `DEBUG`, `INFO` (default), `WARNING`, `ERROR` or `CRITICAL`. Restart after changing it. See [diagnostics and logging](development.md#server-diagnostics-and-logging).
+Set `GDOCS_SCOPE_MCP_LOG_LEVEL` to `DEBUG`, `INFO` (default), `WARNING`, `ERROR` or `CRITICAL`. Restart after changing it. See [diagnostics and logging](development.md#server-diagnostics-and-logging).
 
 ## Live-test target
 
