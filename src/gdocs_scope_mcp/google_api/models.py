@@ -1,6 +1,6 @@
 """Models owned by google_api.models."""
 
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import (
     BaseModel,
@@ -8,7 +8,7 @@ from pydantic import (
     Field,
 )
 
-from gdocs_scope_mcp.contracts import ListingPage
+from gdocs_scope_mcp.contracts import EditFailedResponse, ListingPage
 
 
 class DocumentListItem(BaseModel):
@@ -36,3 +36,11 @@ class CreateDocumentResponse(BaseModel):
     id: str
     title: str
     web_view_link: Annotated[str, Field(alias='webViewLink')]
+
+
+class DocumentCreationFailedResponse(EditFailedResponse):
+    """Identify a created document after unconfirmed initial insertion."""
+
+    code: Literal['PARTIAL_WRITE', 'WRITE_OUTCOME_UNKNOWN']
+    created_document: CreateDocumentResponse
+    initial_content: Literal['not_attempted', 'rejected', 'unknown']

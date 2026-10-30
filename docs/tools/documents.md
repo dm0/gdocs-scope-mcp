@@ -473,6 +473,24 @@ docs_create(title="Q2 Board Deck", initial_text="Confidential — not for distri
 
 Returns `{id, title, webViewLink}`.
 
+Creation and initial-text insertion are separate requests. If creation succeeds
+but insertion cannot be confirmed, the tool returns an MCP error containing
+`created_document: {id, title, webViewLink}` and `initial_content`:
+
+- `not_attempted`: constructing the insertion request failed before execution.
+- `rejected`: Google explicitly rejected the insertion request.
+- `unknown`: the request may have committed, for example after a timeout or
+  service failure. Inspect the document before adding any text.
+
+The error code is `PARTIAL_WRITE` for `not_attempted`/`rejected`, or
+`WRITE_OUTCOME_UNKNOWN` for `unknown`. `committed_batches` remains zero because
+document creation is not a Docs update batch. Do not repeat `docs_create`:
+use the returned ID to inspect and fill the existing document. The server does
+not replay creation or insertion and does not delete the document as rollback.
+Initial text is inserted literally, without Markdown conversion. If the create
+request itself fails, the ordinary error has no confirmed document identity;
+verify Drive state before deciding whether to create again.
+
 ---
 
 ## Typical workflows
