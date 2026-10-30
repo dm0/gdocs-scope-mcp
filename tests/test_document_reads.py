@@ -113,9 +113,8 @@ def test_supplied_list_definitions_keep_rendering(
     }}}
     document = GoogleDocument.model_validate(simple_document)
     assert document.body.content[0].bullet.list_id == 'list-id'
-    assert document.to_markdown().startswith(
-        f'<{tag}><li>Introduction</li></{tag}>\n\n',
-    )
+    marker = '1.' if tag == 'ol' else '-'
+    assert document.to_markdown().startswith(f'{marker} Introduction\n\n')
 
 
 @pytest.mark.parametrize('omit_lists', [False, True])

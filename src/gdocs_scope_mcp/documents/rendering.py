@@ -31,6 +31,7 @@ class PresentationState(BaseModel):
     plain_native_code: set[int] = Field(default_factory=set)
     table_refs: dict[int, str] = Field(default_factory=dict)
     list_markup: dict[int, tuple[str, str]] = Field(default_factory=dict)
+    html_lists: set[int] = Field(default_factory=set)
     lists_prepared: bool = False
 
 
@@ -193,11 +194,67 @@ def _prepare_lists(doc) -> None:
     if doc.presentation.lists_prepared:
         return
     markup = {}
+    html_lists = set()
 
-    def container(content):
+    def eligible(item):
+        """Keep headings and structural content outside ordinary list runs."""
+        return (item.type == 'paragraph' and item.bullet is not None
+                and not item.paragraph_style.heading_id
+                and item.paragraph_style.named_style_type.level
+                >= len(HEADING_LEVELS))
+
+    def blank(item):
+        """Recognize whitespace barriers that Markdown would ignore."""
+        return (item.type == 'paragraph' and not item.bullet
+                and not item.paragraph_style.heading_id
+                and item.paragraph_style.named_style_type.level
+                >= len(HEADING_LEVELS)
+                and item.paragraph_style.alignment not in {
+                    GoogleDocumentAlignment.CENTER,
+                    GoogleDocumentAlignment.JUSTIFIED,
+                    GoogleDocumentAlignment.END,
+                }
+                and all(e.type == 'textRun' and not e.content.strip()
+                        for e in item.elements))
+
+    def markdown_safe(run, content):
+        """Require complete ancestors and unambiguous list-group boundaries."""
+        frames = []
+        for _, item in run:
+            depth = item.bullet.nesting_level
+            frame = (item.bullet.list_id, _list_tag(item, doc))
+            if depth > len(frames):
+                return False
+            if depth < len(frames):
+                if (frames[depth][0] != frame[0]
+                        and frames[depth][1] == frame[1]):
+                    return False
+                frames[depth:] = [frame]
+            else:
+                frames.append(frame)
+        # Blank native paragraphs do not reliably separate Markdown lists.
+        # Keep both neighboring groups explicit when their root kinds match.
+        first, last = run[0][0], run[-1][0]
+        left, right = first - 1, last + 1
+        while left >= 0 and blank(content[left]):
+            left -= 1
+        if left < first - 1 and left >= 0 and eligible(content[left]):
+            while left > 0 and eligible(content[left - 1]):
+                left -= 1
+            if _list_tag(content[left], doc) == _list_tag(run[0][1], doc):
+                return False
+        while right < len(content) and blank(content[right]):
+            right += 1
+        return not (right > last + 1 and right < len(content)
+                    and eligible(content[right])
+                    and _list_tag(content[right], doc)
+                    == _list_tag(run[0][1], doc))
+
+    def container(content, *, html_context=False):
         """Keep list frames local to one body or physical table cell."""
         frames = []
         previous = None
+        run = []
 
         def close():
             """Finish the current list before a structural/section boundary."""
@@ -209,12 +266,38 @@ def _prepare_lists(doc) -> None:
                     + '\n\n',
                 )
                 frames.clear()
+                if not html_context and markdown_safe(run, content):
+                    for _, item in run:
+                        marker = '1.' if _list_tag(item, doc) == 'ol' else '-'
+                        markup[item.start_index] = (
+                            '    ' * item.bullet.nesting_level + marker + ' ',
+                            '\n',
+                        )
+                    prefix, _ = markup[previous]
+                    markup[previous] = (prefix, '\n\n')
+                    first_index, first_item = run[0]
+                    if first_index:
+                        before = content[first_index - 1]
+                        separator = ''
+                        if before.type != 'paragraph':
+                            separator = '\n\n'
+                        elif before.paragraph_style.alignment in {
+                            GoogleDocumentAlignment.CENTER,
+                            GoogleDocumentAlignment.JUSTIFIED,
+                            GoogleDocumentAlignment.END,
+                        }:
+                            separator = '\n'
+                        prefix, suffix = markup[first_item.start_index]
+                        markup[first_item.start_index] = (
+                            separator + prefix, suffix,
+                        )
+                else:
+                    html_lists.update(item.start_index for _, item in run)
+                run.clear()
 
-        for item in content:
-            if (item.type == 'paragraph' and item.bullet
-                    and not item.paragraph_style.heading_id
-                    and item.paragraph_style.named_style_type.level
-                    >= len(HEADING_LEVELS)):
+        for index, item in enumerate(content):
+            if eligible(item):
+                run.append((index, item))
                 depth = item.bullet.nesting_level
                 tag = _list_tag(item, doc)
                 frame = (depth, item.bullet.list_id, tag)
@@ -237,11 +320,12 @@ def _prepare_lists(doc) -> None:
                 if item.type == 'table':
                     for row in item.table_rows:
                         for cell in row.table_cells:
-                            container(cell.content)
+                            container(cell.content, html_context=True)
         close()
 
     container(doc.body.content)
     doc.presentation.list_markup = markup
+    doc.presentation.html_lists = html_lists
     doc.presentation.lists_prepared = True
 
 
@@ -250,13 +334,17 @@ def paragraph_to_markdown(self, doc) -> str:  # noqa: PLR0911
     style = self.paragraph_style
     if doc is not None and self.start_index in doc.code_markdown:
         return doc.code_markdown[self.start_index]
+    html_list = False
+    if self.bullet:
+        _prepare_lists(doc)
+        html_list = (self.start_index in doc.presentation.html_lists
+                     or self.start_index not in doc.presentation.list_markup)
     if doc is not None and self.start_index in doc.plain_native_code:
         text = ''.join(el.to_markdown(doc) for el in self.elements
                        if not (el.type == 'textRun'
                                and el.content == NATIVE_CODE_BOUNDARY))
     else:
-        text = inline_markdown(self.elements, doc,
-                               html_code=self.bullet is not None)
+        text = inline_markdown(self.elements, doc, html_code=html_list)
     if style.heading_id or style.named_style_type.level < len(
         HEADING_LEVELS
     ):
@@ -268,7 +356,6 @@ def paragraph_to_markdown(self, doc) -> str:  # noqa: PLR0911
         )
         return f'{prefix} {anchor}{text}\n\n'
     if self.bullet:
-        _prepare_lists(doc)
         tag = _list_tag(self, doc)
         prefix, suffix = doc.presentation.list_markup.get(
             self.start_index, (f'<{tag}><li>', f'</li></{tag}>\n\n'),

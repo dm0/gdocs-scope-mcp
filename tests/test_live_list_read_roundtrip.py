@@ -43,7 +43,10 @@ def list_shape(document, rows, marker):
 
 
 @pytest.mark.parametrize('ordered', [False, True])
-def test_live_native_list_read_roundtrip(live_test_doc, table_probe, ordered):
+@pytest.mark.parametrize('independent', [False, True])
+def test_live_native_list_read_roundtrip(
+    live_test_doc, table_probe, ordered, independent,
+):
     """Keep native levels, independent groups, styles and edit targeting."""
     marker = 'READLIST_' + uuid.uuid4().hex
     tag = 'ol' if ordered else 'ul'
@@ -64,9 +67,12 @@ def test_live_native_list_read_roundtrip(live_test_doc, table_probe, ordered):
         f'<li>{marker} Independent sibling</li></{tag}>\n\n'
         f'{marker} After\n\n### {marker} Boundary'
     )
+    if not independent:
+        source = source.replace(f'</{tag}><{tag}>', '')
 
     async def run():
-        mode = 'ordered' if ordered else 'unordered'
+        mode = ('ordered' if ordered else 'unordered') + (
+            '-html' if independent else '-markdown')
         async with table_probe('list-read-roundtrip-' + mode) as probe:
             before = await probe.read()
             probe.initial_body = before['body']
@@ -83,7 +89,8 @@ def test_live_native_list_read_roundtrip(live_test_doc, table_probe, ordered):
             assert [r['depth'] for r in expected_shape] == [
                 0, 1, 2, 1, 0, 0, 1, 0,
             ]
-            assert [r['group'] for r in expected_shape] == [0] * 5 + [1] * 3
+            assert [r['group'] for r in expected_shape] == (
+                [0] * 5 + [1] * 3 if independent else [0] * 8)
             assert all(r['ordered'] == ordered for r in expected_shape)
             read = await probe.call(1, 'docs_read', {
                 'doc_id': live_test_doc, 'heading_ids': [heading],
@@ -91,7 +98,9 @@ def test_live_native_list_read_roundtrip(live_test_doc, table_probe, ordered):
             assert len(read['sections']) == 1
             markup = read['sections'][0]['markdown']
             html = BeautifulSoup(markdown_to_html(markup), 'html.parser')
-            assert len(html.find_all(tag, recursive=False)) == 2
+            assert (f'<{tag}>' in markup) is independent
+            assert len(html.find_all(tag, recursive=False)) == (
+                2 if independent else 1)
             assert len(html.find_all('li')) == 8
             assert marker + ' Boundary' not in html.get_text()
             copy_at = document['body']['content'][-1]['endIndex'] - 1

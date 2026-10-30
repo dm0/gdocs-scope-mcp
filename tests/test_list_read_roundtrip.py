@@ -153,22 +153,29 @@ def test_adjacent_marker_kind_changes_stay_independent(ordered):
     assert parsed[4].list_key != parsed[5].list_key
 
 
-def test_inline_code_and_soft_breaks_remain_html_inside_lists(monkeypatch):
-    """Do not turn code backticks into literal text inside an HTML block."""
+@pytest.mark.parametrize('force_html', [False, True])
+def test_inline_code_and_soft_breaks_survive_both_formats(
+    monkeypatch, force_html,
+):
+    """Use code spans in Markdown and code elements inside HTML blocks."""
     monkeypatch.setenv('GDOCS_SCOPE_MCP_READ_INLINE_CODE_MATCH', 'font')
     monkeypatch.setenv('GDOCS_SCOPE_MCP_READ_INLINE_CODE_FONTS',
                        '["Fixture Mono"]')
     get_settings.cache_clear()
     try:
-        source = native_document([
+        items = [
             ('x😀 <b> & `code`', 0, 'first'),
             ('Child\u000bsoft', 1, 'first'),
-        ], ordered=False)
+        ]
+        if force_html:
+            items.append(('Independent', 0, 'second'))
+        source = native_document(items, ordered=False)
         parent = source['body']['content'][2]['paragraph']
         parent['elements'][0]['textRun']['textStyle'] = {
             'weightedFontFamily': {'fontFamily': 'Fixture Mono'},
         }
         markup = parsing.parse_document_tree(source).tree_markdown()
+        assert ('<ul>' in markup) is force_html
         html = BeautifulSoup(markdown_to_html(markup), 'html.parser')
         assert html.code.get_text() == 'x😀 <b> & `code`'
         assert html.find('br') is not None
@@ -178,7 +185,7 @@ def test_inline_code_and_soft_breaks_remain_html_inside_lists(monkeypatch):
         assert replay.styled_text('weightedFontFamily') == 'x😀 <b> & `code`'
         assert 'Child\u000bsoft' in replay.text
         assert [r['bullet']['level'] for r in replay.rows()
-                if r['bullet']] == [0, 1]
+                if r['bullet']] == [0, 1] + ([0] if force_html else [])
     finally:
         get_settings.cache_clear()
 
@@ -256,3 +263,129 @@ def test_table_cells_keep_independent_list_frames():
         assert len(cell.find_all('ul', recursive=False)) == 1
         assert len(cell.find_all('li')) == 2
         assert cell.ul.li.ul.li.get_text() == 'Cell child'
+
+
+@pytest.mark.parametrize('ordered', [False, True])
+def test_unambiguous_nested_lists_use_markdown(ordered):
+    """Avoid list HTML when Markdown can retain all groups and ancestors."""
+    source = native_document(ITEMS[:5], ordered=ordered)
+    markup = parsing.parse_document_tree(source).tree_markdown()
+    assert '<ol>' not in markup and '<ul>' not in markup
+    marker = '1.' if ordered else '-'
+    assert f'{marker} <b>Parent😀</b>\n' in markup
+    assert f'    {marker} <i>Child🦷</i>\n' in markup
+    parsed = [p for p in html_to_gpars(markdown_to_html(markup))
+              if p.bullet_preset]
+    assert [p.nesting_level for p in parsed] == [0, 1, 2, 1, 0]
+    assert len({p.list_key for p in parsed}) == 1
+
+
+@pytest.mark.parametrize('ordered', [False, True])
+def test_marker_kind_changes_do_not_force_html(ordered):
+    """Let Markdown express adjacent groups of different marker kinds."""
+    source = native_document(ITEMS, ordered=ordered)
+    source['lists']['second']['listProperties']['nestingLevels'] = [
+        {'glyphSymbol': '●'} if ordered else {'glyphType': 'DECIMAL'}
+        for _ in range(9)
+    ]
+    markup = parsing.parse_document_tree(source).tree_markdown()
+    assert '<ol>' not in markup and '<ul>' not in markup
+    parsed = [p for p in html_to_gpars(markdown_to_html(markup))
+              if p.bullet_preset]
+    assert [p.nesting_level for p in parsed] == [r[1] for r in ITEMS]
+    assert parsed[0].list_key != parsed[-1].list_key
+
+
+@pytest.mark.parametrize('ordered', [False, True])
+def test_blank_native_paragraphs_do_not_merge_independent_lists(ordered):
+    """Blank lines alone cannot distinguish two Markdown lists of one kind."""
+    source = native_document([
+        ('First', 0, 'first'), ('', None, None), ('Second', 0, 'second'),
+    ], ordered=ordered)
+    markup = parsing.parse_document_tree(source).tree_markdown()
+    tag = 'ol' if ordered else 'ul'
+    assert markup.count(f'<{tag}>') == 2
+    parsed = [p for p in html_to_gpars(markdown_to_html(markup))
+              if p.bullet_preset]
+    assert len(parsed) == 2
+    assert parsed[0].list_key != parsed[1].list_key
+
+
+def test_html_fallback_is_local_to_the_ambiguous_run():
+    """Keep Markdown around a run requiring explicit independent groups."""
+    source = native_document([
+        ('Simple first', 0, 'simple'), ('Separator', None, None),
+        ('Complex first', 0, 'first'), ('Complex second', 0, 'second'),
+        ('Another separator', None, None), ('Simple last', 0, 'last'),
+    ], ordered=False)
+    markup = parsing.parse_document_tree(source).tree_markdown()
+    assert '- Simple first\n\n' in markup
+    assert '- Simple last\n\n' in markup
+    assert '<ul><li>Complex first</li></ul><ul><li>Complex second' in markup
+
+
+@pytest.mark.parametrize('ordered', [False, True])
+def test_mixed_nesting_uses_markdown_when_unambiguous(ordered):
+    """A change in marker kind does not by itself require HTML lists."""
+    items = [
+        (text, depth, 'child' if depth == 1 else identity)
+        for text, depth, identity in ITEMS[:5]
+    ]
+    source = native_document(items, ordered=ordered)
+    source['lists']['child']['listProperties']['nestingLevels'] = [
+        {'glyphSymbol': '●'} if ordered else {'glyphType': 'DECIMAL'}
+        for _ in range(9)
+    ]
+    markup = parsing.parse_document_tree(source).tree_markdown()
+    assert '<ul>' not in markup and '<ol>' not in markup
+    parsed = [p for p in html_to_gpars(markdown_to_html(markup))
+              if p.bullet_preset]
+    assert [p.nesting_level for p in parsed] == [0, 1, 2, 1, 0]
+    parent, child = (ORDERED, UNORDERED) if ordered else (UNORDERED, ORDERED)
+    assert [p.bullet_preset for p in parsed] == [
+        parent, child, parent, child, parent,
+    ]
+
+
+def test_markdown_list_after_aligned_html_keeps_its_block_boundary():
+    """A Markdown list must start outside the preceding raw HTML block."""
+    source = native_document([
+        ('Aligned before', None, None), ('Simple', 0, 'first'),
+    ], ordered=False)
+    source['body']['content'][2]['paragraph']['paragraphStyle'][
+        'alignment'] = 'CENTER'
+    markup = parsing.parse_document_tree(source).tree_markdown()
+    assert '</p>\n\n- Simple\n\n' in markup
+    html = BeautifulSoup(markdown_to_html(markup), 'html.parser')
+    assert html.ul.li.get_text() == 'Simple'
+    assert html.ul.find_parent('p') is None
+
+
+def test_markdown_list_after_html_table_keeps_its_block_boundary():
+    """End a table's raw HTML block before starting compact list markup."""
+    source = native_document([('Simple', 0, 'first')], ordered=False)
+    source['body']['content'] = [{
+        'startIndex': 1, 'endIndex': 10,
+        'table': {'rows': 1, 'columns': 1, 'tableRows': [{
+            'startIndex': 2, 'endIndex': 9, 'tableCells': [{
+                'startIndex': 3, 'endIndex': 8, 'content': [{
+                    'startIndex': 4, 'endIndex': 7,
+                    'paragraph': {'paragraphStyle': {}, 'elements': [{
+                        'startIndex': 4, 'endIndex': 7,
+                        'textRun': {'content': 'X\n', 'textStyle': {}},
+                    }]},
+                }],
+            }],
+        }]},
+    }, {
+        'startIndex': 11, 'endIndex': 18,
+        'paragraph': {'paragraphStyle': {}, 'elements': [{
+            'startIndex': 11, 'endIndex': 18,
+            'textRun': {'content': 'Simple\n', 'textStyle': {}},
+        }], 'bullet': {'listId': 'first', 'textStyle': {}}},
+    }]
+    markup = GoogleDocument.model_validate(source).to_markdown()
+    assert '</table>\n\n- Simple\n\n' in markup
+    html = BeautifulSoup(markdown_to_html(markup), 'html.parser')
+    assert html.ul.li.get_text() == 'Simple'
+    assert html.ul.find_parent('table') is None
