@@ -48,10 +48,14 @@ files available to the application, including previously selected and
 application-created files. It is not an account-wide inventory or an allowlist
 limited to the latest selection. A pasted URL does not grant access.
 
+`docs_authorize` and `docs_authorization_status` are available in both modes.
+`docs_select_files` is available only in the `selected_files` tool catalog.
+Changing modes requires restarting the server to update tool registration.
+
 Call `docs_select_files(open_browser=True)` only for an explicit selection
 workflow. It returns `session_id`, `status`, `expires_at`, `browser_opened` and
 `authorization_url` immediately. Present the URL when manual opening is needed.
-Call `docs_selection_status(session_id)` in the same server process to read the
+Call `docs_authorization_status(session_id)` in the same server process to read the
 result. Polling never opens a browser, exchanges a code or retries a write.
 Terminal states are `completed`, `cancelled`, `expired` and `failed`.
 Completion returns verified document `id`, `name` and `url`; failures expose
@@ -79,7 +83,7 @@ without a mode label. Explain the broader permissions and call
 `docs_authorize(open_browser=True)` for explicit user consent. This tool also
 supports initial authorization; in selected-file mode it opens Picker.
 Agents cannot choose the mode through its arguments. Poll the existing
-`docs_selection_status` tool with the returned session ID. Successful full-drive
+`docs_authorization_status` tool with the session ID. Successful full-drive
 authorization returns `completed` with an empty `documents` list. It does not
 select documents or perform a failed document operation again.
 
@@ -94,7 +98,7 @@ full token is saved to the full-mode destination.
 
 | Code | Meaning | Recovery |
 | --- | --- | --- |
-| `AUTHENTICATION_REQUIRED` | Missing credentials/token file, insufficient mode scopes, HTTP 401, structured OAuth `invalid_grant`, or explicit reauthentication failure | Request user consent with `docs_authorize`, then poll `docs_selection_status` in the same server process. CLI authorization remains an alternative. |
+| `AUTHENTICATION_REQUIRED` | Missing credentials/token file, insufficient mode scopes, HTTP 401, structured OAuth `invalid_grant`, or explicit reauthentication failure | Request user consent with `docs_authorize`, then poll `docs_authorization_status` in the same server process. CLI authorization remains an alternative. |
 | `AUTH_CONFIGURATION_ERROR` | Structured OAuth client or scope configuration rejection | Check the Desktop client configuration and scopes before authorizing again. |
 | `PERMISSION_DENIED` | HTTP 403 without a recognized quota/rate-limit reason | Check file access, granted scopes and domain policy; inspect diagnostics for unknown reasons. |
 | `RATE_LIMITED` | HTTP 429 or a documented per-user/project throttling reason on HTTP 403 | Retry safe reads later with bounded exponential backoff. |

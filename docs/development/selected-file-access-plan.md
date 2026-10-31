@@ -79,7 +79,7 @@ Proposed names:
 - `docs_select_files`: start a bounded selection session in selected-file
   mode, with optional browser launch. Return `session_id`, status, expiry,
   browser-launch outcome and a manual-open authorization URL immediately.
-- `docs_selection_status`: accept only `session_id` and return current status.
+- `docs_authorization_status`: accept only `session_id` and return current status.
   On completion return verified document IDs, names and URLs. Do not expose
   credentials, callback URLs, authorization codes or PKCE verifiers.
 

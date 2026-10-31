@@ -148,6 +148,9 @@ Register it explicitly from the feature registration function. Keep the
 intentional feature registration sequence in `server.py`; do not register via
 import side effects. Add behavior, failure and schema tests through the MCP
 client, and review deliberate changes to the frozen transport contract.
+Access tools register from the startup access mode: common authorization and
+status tools are always present, while file selection is registered only for
+`selected_files`. Verify each catalog through a fresh STDIO server.
 
 ### Add a document feature
 

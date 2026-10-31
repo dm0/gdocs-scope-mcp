@@ -137,14 +137,15 @@ DOCUMENT ACCESS:
     default) or selected_files. Tools cannot change this setting. In
     selected_files mode, docs_list covers files available to the application,
     including files it created. A pasted URL grants no additional access.
-    Use docs_select_files to start an explicit browser selection; present its
+    In selected_files mode only, docs_select_files starts browser selection.
+    It is absent from the tool catalog in full_drive mode. Present the returned
     authorization_url if browser opening is unavailable. Poll
-    docs_selection_status with that session_id in the same server process.
+    docs_authorization_status with that session_id in the same server process.
     Completed status returns verified document metadata. Selection adds grants;
     it does not revoke older grants or override sharing/domain restrictions.
     After changing selected_files to full_drive, an existing narrow grant
     requires consent: call docs_authorize, explain the broader access
-    to the user and poll docs_selection_status. The tool requests only the
+    to the user and poll docs_authorization_status. The tool requests only the
     configured mode; agents cannot override it. Full authorization completes
     with an empty documents list. The old token is retained on denial/failure.
     Do not launch selection automatically for every permission error or retry

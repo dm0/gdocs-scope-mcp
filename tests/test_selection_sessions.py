@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import os
 import socket
 import webbrowser
 from http import HTTPStatus
@@ -11,7 +12,7 @@ from urllib.parse import parse_qs, urlencode, urlsplit
 from urllib.request import urlopen
 
 import pytest
-from fastmcp import Client
+from fastmcp import Client, FastMCP
 from jsonschema import validate
 
 from gdocs_scope_mcp.errors import ToolFailureError
@@ -26,8 +27,16 @@ from gdocs_scope_mcp.google_api.access import (
     DRIVE_FULL,
     FULL_SCOPES,
 )
-from gdocs_scope_mcp.server import mcp
 from gdocs_scope_mcp.settings import default_token_path, get_settings
+from gdocs_scope_mcp.tool_logging import ToolCallLoggingMiddleware
+from gdocs_scope_mcp.tools import access as access_tools
+
+
+def access_server():
+    """Register a fresh catalog using the test's configured startup mode."""
+    app = FastMCP('access-tests', middleware=[ToolCallLoggingMiddleware()])
+    access_tools.register(app)
+    return app
 
 
 @pytest.fixture
@@ -175,28 +184,28 @@ def test_mcp_selection_contract(sessions, monkeypatch):
     manager, _, _ = sessions
     monkeypatch.setattr(selection, 'manager', manager)
     async def run():
-        async with Client(mcp) as client:
+        async with Client(access_server()) as client:
             tools = {tool.name: tool for tool in await client.list_tools()}
             assert not tools['docs_select_files'].annotations.readOnlyHint
-            assert tools['docs_selection_status'].annotations.readOnlyHint
+            assert tools['docs_authorization_status'].annotations.readOnlyHint
             started = await client.call_tool('docs_select_files', {
                 'open_browser': False,
             })
             validate(started.structured_content,
                      tools['docs_select_files'].outputSchema)
             session_id = started.structured_content['session_id']
-            result = await client.call_tool('docs_selection_status', {
+            result = await client.call_tool('docs_authorization_status', {
                 'session_id': session_id,
             })
             assert result.structured_content['status'] == 'pending'
             validate(result.structured_content,
-                     tools['docs_selection_status'].outputSchema)
-            missing = await client.call_tool('docs_selection_status', {
+                     tools['docs_authorization_status'].outputSchema)
+            missing = await client.call_tool('docs_authorization_status', {
                 'session_id': 'unknown',
             }, raise_on_error=False)
             assert missing.is_error
             validate(missing.structured_content,
-                     tools['docs_selection_status'].outputSchema)
+                     tools['docs_authorization_status'].outputSchema)
     asyncio.run(run())
 
 
@@ -230,7 +239,7 @@ def test_mcp_full_drive_upgrade(sessions, monkeypatch, outcome):
     }
     monkeypatch.setattr(selection, 'manager', manager)
     async def start():
-        async with Client(mcp) as client:
+        async with Client(access_server()) as client:
             tools = {tool.name: tool for tool in await client.list_tools()}
             assert not tools['docs_authorize'].annotations.readOnlyHint
             result = await client.call_tool('docs_authorize', {
@@ -319,7 +328,7 @@ def test_mcp_initial_authorization(sessions, monkeypatch, mode):
     monkeypatch.setattr(authorization, 'build', Mock(return_value=drive))
     monkeypatch.setattr(selection, 'manager', manager)
     async def start():
-        async with Client(mcp) as client:
+        async with Client(access_server()) as client:
             result = await client.call_tool('docs_authorize', {
                 'open_browser': False,
             })
@@ -334,3 +343,29 @@ def test_mcp_initial_authorization(sessions, monkeypatch, mode):
     result = finish(manager, public)
     assert result.status == 'completed'
     assert json.loads(path.read_text())['scopes'] == [expected]
+
+
+@pytest.mark.parametrize('mode', ['full_drive', 'selected_files'])
+def test_stdio_catalog_matches_mode(isolated_mcp, tmp_path, mode):
+    """Fresh STDIO servers advertise only tools available in their mode."""
+    config = tmp_path / 'config.json'
+    config.write_text('{}')
+    environment = {
+        **os.environ,
+        'GDOCS_SCOPE_MCP_CONFIG': str(config),
+        'GDOCS_SCOPE_MCP_ACCESS_MODE': mode,
+        'GDOCS_SCOPE_MCP_TOKEN': str(tmp_path / 'missing-token.json'),
+    }
+    async def check():
+        async with isolated_mcp(tmp_path / 'server.stderr',
+                                environment=environment) as (client, info):
+            assert info['access_mode'] == mode
+            tools = {tool.name: tool for tool in await client.list_tools()}
+            assert 'docs_authorize' in tools
+            assert 'docs_authorization_status' in tools
+            assert 'docs_selection_status' not in tools
+            assert ('docs_select_files' in tools) == (mode == 'selected_files')
+            assert tools['docs_authorization_status'].annotations.readOnlyHint
+            assert not tools['docs_authorize'].annotations.readOnlyHint
+    asyncio.run(check())
+    assert not (tmp_path / 'missing-token.json').exists()

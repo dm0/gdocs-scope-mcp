@@ -46,7 +46,7 @@ def test_live_picker_selection_and_restart(isolated_mcp, live_test_doc):
             while state['status'] == 'pending':
                 assert time.monotonic() < deadline, 'Picker wait expired'
                 await asyncio.sleep(1)
-                result = await client.call_tool('docs_selection_status', {
+                result = await client.call_tool('docs_authorization_status', {
                     'session_id': state['session_id'],
                 })
                 assert not result.is_error

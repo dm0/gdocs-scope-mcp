@@ -13,7 +13,7 @@ FULL_SCOPES = [
 ]
 AUTHORIZATION_ACTION = (
     'Call docs_authorize to request user consent for the configured '
-    'access_mode, then poll docs_selection_status with its session_id in '
+    'access_mode, then poll docs_authorization_status with its session_id in '
     'the same MCP process. Present authorization_url if manual browser '
     'opening is needed. Alternatively run gdocs-scope-mcp-auth with the '
     'same mode and token destination. Inspect the outcome of any failed '

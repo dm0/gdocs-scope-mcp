@@ -286,7 +286,7 @@ def test_read_authentication_recovery(mode, cause, monkeypatch, tmp_path):
     assert data['code'] == 'AUTHENTICATION_REQUIRED'
     assert data['suggested_action'].startswith(AUTHORIZATION_ACTION)
     assert 'docs_authorize' in data['suggested_action']
-    assert 'docs_selection_status' in data['suggested_action']
+    assert 'docs_authorization_status' in data['suggested_action']
     assert PRIVATE not in result.content[0].text
     assert json.loads(result.content[0].text) == data
     validate(data, tool.outputSchema)

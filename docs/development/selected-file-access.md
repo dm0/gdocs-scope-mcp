@@ -13,6 +13,12 @@ account/file metadata and installs private tokens atomically. `selection.py`
 owns bounded background workers, loopback listeners and public session state.
 `tools/access.py` only adapts these operations to MCP.
 
+Registration uses the startup access mode. `docs_select_files` is advertised
+only in `selected_files`; `docs_authorize` and `docs_authorization_status` are
+registered in both modes. The status tool serves ordinary consent and Picker
+sessions. A server restart is needed after a mode change to update its catalog.
+Permanent STDIO catalog tests cover both modes and verify process cleanup.
+
 Both the CLI and server read `access_mode`. Full-drive lookup remains compatible
 with legacy files and gog. Selected-file lookup uses its separate default token
 and never falls back to a broad grant. Token exchange and each refresh must
@@ -112,7 +118,7 @@ part of the pending live acceptance matrix.
 
 Missing credentials, a missing configured token file, HTTP 401 and confirmed
 refresh-token rejection share the authorization recovery guidance from
-`google_api/access.py`: use `docs_authorize`, then `docs_selection_status`.
+`google_api/access.py`: use `docs_authorize`, then `docs_authorization_status`.
 The CLI remains an alternative. Only the credential loader maps a missing
 token file to authentication; unrelated local IO failures are not reclassified.
 Network failures, unknown refresh failures and document permission failures do

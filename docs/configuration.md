@@ -194,6 +194,11 @@ not switch their OAuth client or document-access permissions.
 in JSON or through `GDOCS_SCOPE_MCP_ACCESS_MODE`, then restart the MCP server.
 An agent cannot override it through tool arguments.
 
+`docs_authorize` and `docs_authorization_status` are available in both modes.
+`docs_select_files` is registered only in `selected_files`; it is absent from
+the `full_drive` tool catalog. A mode change requires a server restart to
+update the catalog. The old `docs_selection_status` name is not registered.
+
 - `full_drive` preserves the existing broad authorization and token lookup.
 - `selected_files` requests only `drive.file` through Desktop Google Picker.
   The default token is `selected-files-token.json` in the same XDG application
@@ -211,7 +216,7 @@ Separate token paths retain each mode's saved credentials. When switching from
 authorization.
 The server returns `AUTHENTICATION_REQUIRED` with guidance to use
 `docs_authorize`; the user then grants broader access in the browser. Poll
-`docs_selection_status` to confirm completion. The same configured token file
+`docs_authorization_status` to confirm completion. The same configured token file
 can be upgraded: replacement occurs only after sufficient scopes and the
 previously bound account/client are verified. Denial or failure preserves it.
 Alternatively run `gdocs-scope-mcp-auth` with `access_mode=full_drive` and the

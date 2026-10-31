@@ -32,7 +32,7 @@ def test_complete_mcp_contract():
     encoded = json.dumps(data, sort_keys=True, ensure_ascii=False).encode()
     # #40 adds access-mode diagnostics, selection tools and access guidance.
     assert hashlib.sha256(encoded).hexdigest() == (
-        '396513fd57fd20f677074c0efbf2397cef347f8adcd6ac9f14c77c3f13fbdf6d'
+        '4f1068dd4d01bd07c17420deb345af5555ef634874b87cb8e6cf966942c62ffb'
     )
 
 
