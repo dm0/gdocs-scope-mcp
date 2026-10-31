@@ -5,6 +5,7 @@
 import json
 from http.client import IncompleteRead, RemoteDisconnected
 from socket import gaierror
+from unittest.mock import MagicMock, Mock
 
 import pytest
 from google.auth.exceptions import (
@@ -18,7 +19,13 @@ from jsonschema import validate
 
 from gdocs_scope_mcp.contracts import EditFailedResponse
 from gdocs_scope_mcp.errors import ToolFailureError
+from gdocs_scope_mcp.google_api import clients, credentials, selection
+from gdocs_scope_mcp.google_api.access import (
+    AUTHORIZATION_ACTION,
+    scopes_for_mode,
+)
 from gdocs_scope_mcp.google_api.failures import classify_failure
+from gdocs_scope_mcp.settings import get_settings
 from gdocs_scope_mcp.tool_errors import failure_from_exception
 
 from .test_mcp_output_contracts import call_tool, contract_api  # noqa: F401
@@ -84,6 +91,10 @@ def test_google_http_classification(status, reasons, expected):
     assert result.code == expected
     assert result.description.endswith(f'HTTP {status}.')
     assert PRIVATE not in result.model_dump_json()
+    if expected == 'AUTHENTICATION_REQUIRED':
+        assert result.suggested_action == AUTHORIZATION_ACTION
+    else:
+        assert 'docs_authorize' not in result.suggested_action
 
 
 MALFORMED_BODIES = [
@@ -148,6 +159,7 @@ def test_refresh_classification(body, retryable, expected):
     assert PRIVATE not in result.model_dump_json()
     if expected in {'TEMPORARILY_UNAVAILABLE', 'GOOGLE_API_ERROR'}:
         assert 'gdocs-scope-mcp-auth' not in result.suggested_action
+        assert 'docs_authorize' not in result.suggested_action
 
 
 @pytest.mark.parametrize('error_type', [
@@ -219,6 +231,68 @@ def test_local_io_errors_are_not_temporary_network_errors(error_type):
     assert failure_from_exception(error_type(PRIVATE), 'docs_read').code == (
         'INTERNAL_ERROR'
     )
+
+
+@pytest.fixture
+def isolated_auth_environment(monkeypatch, tmp_path):
+    """Exclude real credentials, credential export and browser launch."""
+    for name in ('GDOCS_SCOPE_MCP_CONFIG', 'GDOCS_SCOPE_MCP_TOKEN'):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv('XDG_CONFIG_HOME', str(tmp_path))
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_DOCUMENT_CACHE_ENABLED', 'false')
+    monkeypatch.setattr(credentials, 'STANDALONE_TOKEN_PATHS', [])
+    monkeypatch.setattr(credentials, 'GOG_TOKEN_CACHE', tmp_path / 'gog.json')
+    monkeypatch.setattr(credentials, 'export_gog_token', Mock(
+        side_effect=RuntimeError('No test export available'),
+    ))
+    monkeypatch.setattr(selection.webbrowser, 'open', Mock(
+        side_effect=AssertionError('Reading must not open a browser'),
+    ))
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
+
+
+@pytest.mark.usefixtures('isolated_auth_environment')
+@pytest.mark.parametrize('mode', ['full_drive', 'selected_files'])
+@pytest.mark.parametrize('cause', [
+    'missing_default', 'missing_explicit', 'invalid_grant', 'http401',
+])
+def test_read_authentication_recovery(mode, cause, monkeypatch, tmp_path):
+    """Real read adapters consistently direct agents to MCP authorization."""
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_ACCESS_MODE', mode)
+    build = Mock(side_effect=AssertionError('Must fail before API build'))
+    monkeypatch.setattr(clients, 'build', build)
+    if cause == 'missing_explicit':
+        monkeypatch.setenv('GDOCS_SCOPE_MCP_TOKEN', str(tmp_path / 'missing'))
+    elif cause == 'invalid_grant':
+        monkeypatch.setattr(credentials, 'load_token', lambda: {
+            'client_id': 'client', 'client_secret': 'secret',
+            'refresh_token': 'refresh', 'scopes': scopes_for_mode(mode),
+        })
+        monkeypatch.setattr(credentials.Credentials, 'refresh', Mock(
+            side_effect=RefreshError(PRIVATE, {'error': 'invalid_grant'}),
+        ))
+    elif cause == 'http401':
+        monkeypatch.setattr(credentials, 'load_credentials', object)
+        api = MagicMock()
+        api.documents().get().execute.side_effect = http_error(401)
+        build.side_effect = None
+        build.return_value = api
+    tool, result = call_tool('docs_read', {'doc_id': 'example'},
+                             raise_on_error=False)
+    assert result.is_error
+    data = result.structured_content
+    assert data['code'] == 'AUTHENTICATION_REQUIRED'
+    assert data['suggested_action'].startswith(AUTHORIZATION_ACTION)
+    assert 'docs_authorize' in data['suggested_action']
+    assert 'docs_selection_status' in data['suggested_action']
+    assert PRIVATE not in result.content[0].text
+    assert json.loads(result.content[0].text) == data
+    validate(data, tool.outputSchema)
+    selection.webbrowser.open.assert_not_called()
+    if cause != 'http401':
+        build.assert_not_called()
 
 
 @pytest.mark.parametrize(('status', 'reasons', 'expected'), HTTP_CASES)

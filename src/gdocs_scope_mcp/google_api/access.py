@@ -11,6 +11,14 @@ FULL_SCOPES = [
     'https://www.googleapis.com/auth/drive.readonly',
     DRIVE_FILE,
 ]
+AUTHORIZATION_ACTION = (
+    'Call docs_authorize to request user consent for the configured '
+    'access_mode, then poll docs_selection_status with its session_id in '
+    'the same MCP process. Present authorization_url if manual browser '
+    'opening is needed. Alternatively run gdocs-scope-mcp-auth with the '
+    'same mode and token destination. Inspect the outcome of any failed '
+    'write before retrying it.'
+)
 
 
 def scopes_for_mode(mode):
@@ -27,8 +35,10 @@ def require_selected_scopes(scopes):
             code='AUTHENTICATION_REQUIRED',
             description='Selected-file mode requires a verified drive.file '
             'grant without additional scopes.',
-            suggested_action='Run gdocs-scope-mcp-auth with '
-            'GDOCS_SCOPE_MCP_ACCESS_MODE=selected_files. If Google retains '
+            suggested_action=AUTHORIZATION_ACTION + ' In selected_files '
+            'mode, incompatible broad credentials require a separate narrow '
+            'token destination or explicit grant revocation and '
+            'reauthorization. If Google retains '
             'broader grants, revoke the application grant in your Google '
             'account and authorize again. '
             'Configuration does not revoke grants.',
@@ -51,10 +61,5 @@ def require_full_scopes(scopes):
             code='AUTHENTICATION_REQUIRED',
             description='Full-drive mode requires additional Google Drive '
             'permissions; the existing grant is insufficient.',
-            suggested_action='Call docs_authorize and ask the user to grant '
-            'the additional permissions, then poll docs_selection_status. '
-            'Alternatively run gdocs-scope-mcp-auth with '
-            'access_mode=full_drive '
-            'and the same configured token destination. Do not retry a failed '
-            'write without first checking its outcome.',
+            suggested_action=AUTHORIZATION_ACTION,
         ))

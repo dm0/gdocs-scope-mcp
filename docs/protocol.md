@@ -94,7 +94,7 @@ full token is saved to the full-mode destination.
 
 | Code | Meaning | Recovery |
 | --- | --- | --- |
-| `AUTHENTICATION_REQUIRED` | HTTP 401, a structured OAuth `invalid_grant`, or an explicit reauthentication failure | Run `gdocs-scope-mcp-auth` again. |
+| `AUTHENTICATION_REQUIRED` | Missing credentials/token file, insufficient mode scopes, HTTP 401, structured OAuth `invalid_grant`, or explicit reauthentication failure | Request user consent with `docs_authorize`, then poll `docs_selection_status` in the same server process. CLI authorization remains an alternative. |
 | `AUTH_CONFIGURATION_ERROR` | Structured OAuth client or scope configuration rejection | Check the Desktop client configuration and scopes before authorizing again. |
 | `PERMISSION_DENIED` | HTTP 403 without a recognized quota/rate-limit reason | Check file access, granted scopes and domain policy; inspect diagnostics for unknown reasons. |
 | `RATE_LIMITED` | HTTP 429 or a documented per-user/project throttling reason on HTTP 403 | Retry safe reads later with bounded exponential backoff. |

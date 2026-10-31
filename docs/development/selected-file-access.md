@@ -110,6 +110,15 @@ scopes, account mismatch, cancellation, and loading the installed broad token.
 These checks do not establish production Google consent behavior; that remains
 part of the pending live acceptance matrix.
 
+Missing credentials, a missing configured token file, HTTP 401 and confirmed
+refresh-token rejection share the authorization recovery guidance from
+`google_api/access.py`: use `docs_authorize`, then `docs_selection_status`.
+The CLI remains an alternative. Only the credential loader maps a missing
+token file to authentication; unrelated local IO failures are not reclassified.
+Network failures, unknown refresh failures and document permission failures do
+not imply that a new authorization session is needed. Read-error regressions
+verify these distinctions through MCP without opening a browser automatically.
+
 Live acceptance is pending until browser selection and the narrow-scope
 operation matrix succeed. Do not infer compatibility from broad-token tests,
 offline mocks, artifact discovery or an authorization URL alone.

@@ -56,7 +56,7 @@ def test_no_legacy_fallback(monkeypatch, tmp_path):
     monkeypatch.setattr(credentials, 'export_gog_token', export)
     with pytest.raises(ToolFailureError) as raised:
         credentials.load_token()
-    assert 'docs_select_files' in raised.value.failure.suggested_action
+    assert 'docs_authorize' in raised.value.failure.suggested_action
     export.assert_not_called()
 
 

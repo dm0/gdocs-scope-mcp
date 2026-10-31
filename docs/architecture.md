@@ -12,7 +12,7 @@ application operation merely to reuse one of its helpers.
 | `server.py`, `__main__.py` | Construct the server, capture startup identity, configure middleware, register tools and start STDIO. |
 | `tools/` | Thin MCP contracts, descriptions, schemas, annotations and explicit registration functions. |
 | `google_api/credentials.py` | Token precedence, canonical environment overrides, legacy token-file paths, gog fallback and OAuth refresh. |
-| `google_api/access.py` | Shared access-mode scope policy and narrow-grant validation, independent of MCP. |
+| `google_api/access.py` | Shared access-mode scope policy, grant validation and authorization recovery guidance, independent of MCP. |
 | `google_api/authorization.py` | Desktop client selection, narrow-to-full grant upgrades, account/file verification and private atomic token installation. |
 | `google_api/selection.py` | Bounded asynchronous consent and Desktop Picker sessions, callback listeners and credential destination locks. |
 | `google_api/oauth.py` | Shared Desktop client configuration, PKCE sessions, callback validation, private session files, token exchange and the google-auth public-client refresh adapter. |
