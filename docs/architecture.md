@@ -13,6 +13,7 @@ application operation merely to reuse one of its helpers.
 | `tools/` | Thin MCP contracts, descriptions, schemas, annotations and explicit registration functions. |
 | `google_api/credentials.py` | Token precedence, canonical environment overrides, legacy token-file paths, gog fallback and OAuth refresh. |
 | `google_api/access.py` | Shared access-mode scope policy and narrow-grant validation, independent of MCP. |
+| `google_api/authorization.py` | Desktop client selection, account/file verification and private atomic token installation. |
 | `google_api/oauth.py` | Shared Desktop client configuration, PKCE sessions, callback validation, private session files, token exchange and the google-auth public-client refresh adapter. |
 | `auth_setup.py` | Desktop authorization CLI, bounded loopback listener and headless session lifecycle. |
 | `google_api/clients.py` | Construct discovery clients; cache Docs reads by default, with explicit uncached construction where required. |
