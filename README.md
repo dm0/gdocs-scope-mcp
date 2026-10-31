@@ -16,6 +16,11 @@ well suited to large Google Docs with structured headings.
 
 ## Features
 
+- **Choose document access.** Keep broad Drive access or use Google Picker
+  with `drive.file` to connect selected documents. Add files later and retain
+  access across server restarts. Authorization also supports a browser on
+  another computer without an SSH tunnel.
+
 - **Native comments:** attach comments directly to text, read their anchors,
   reply, edit, resolve/reopen, and delete through the Docs API.
 
@@ -85,6 +90,10 @@ section structure; table pagination tokens bind the document revision.
 See the [tool reference](docs/tools/documents.md) for operation-specific details.
 
 ## Quick start
+
+The default uses broad Drive access. To use Google Picker with `drive.file`,
+configure [selected-file access](docs/getting-started.md#access-only-selected-documents)
+before authorizing.
 
 1. Authenticate using the bundled Desktop OAuth client:
 

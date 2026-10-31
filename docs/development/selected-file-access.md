@@ -96,6 +96,31 @@ within the explicitly authorized development document. A later grant to a
 second existing document requires separate authorization for that document.
 Public OAuth verification remains outside this issue.
 
+The separately gated `test_live_additional_selection` uses an existing narrow
+token. Set `GDOCS_SCOPE_MCP_LIVE_ADDITIONAL_SELECTION=1` only with explicit
+permission to create and trash one synthetic Google Doc. Run the test with the
+normal broad configuration and `GDOCS_SCOPE_MCP_LIVE_SELECTED_TOKEN` pointing
+at the narrow token. It creates the temporary document through isolated MCP,
+checks its initial narrow-access result, starts another Picker session and
+publishes `SELECT_DOCUMENT`, `PICKER_URL` and `CALLBACK_FILE`. Select only that
+temporary document. The test verifies both document reads before and after a
+process restart, then checks the temporary document's identity before trashing
+it. It does not trash the existing development document.
+
+```bash
+GDOCS_SCOPE_MCP_LIVE_TEST_DOC=AUTHORIZED_DOCUMENT_ID \
+GDOCS_SCOPE_MCP_LIVE_SELECTED_TOKEN=/private/test-directory/token.json \
+GDOCS_SCOPE_MCP_LIVE_ADDITIONAL_SELECTION=1 \
+uv run --locked pytest -s -q -m live \
+  tests/test_live_selected_access.py::test_live_additional_selection
+```
+
+App-created files can already be available to `drive.file`; this test records
+the actual result before selection instead of assuming denial. Run document
+mutation sessions sequentially: the development document has an exclusive
+session lock, and each session restores an empty single-tab document before
+and after its tests.
+
 ### Remote browser completion
 
 Remote Codex clients can open the Google URL on another computer without an SSH
@@ -137,8 +162,9 @@ Permanent regressions in the access-mode, session and Picker authorization
 tests exercise those transitions through real loopback callbacks and the MCP
 adapters with substituted Google responses. They include insufficient returned
 scopes, account mismatch, cancellation, and loading the installed broad token.
-These checks do not establish production Google consent behavior; that remains
-part of the pending live acceptance matrix.
+These checks do not establish production broader-consent or account-switch
+behavior. The live evidence below uses an existing broad grant for full mode;
+it does not exercise a real browser upgrade or a second Google account.
 
 Missing credentials, a missing configured token file, HTTP 401 and confirmed
 refresh-token rejection share the authorization recovery guidance from
@@ -149,6 +175,68 @@ Network failures, unknown refresh failures and document permission failures do
 not imply that a new authorization session is needed. Read-error regressions
 verify these distinctions through MCP without opening a browser automatically.
 
-Live acceptance is pending until browser selection and the narrow-scope
-operation matrix succeed. Do not infer compatibility from broad-token tests,
-offline mocks, artifact discovery or an authorization URL alone.
+## Live evidence (2026-10-31)
+
+The isolated worktree servers reported source fingerprint
+`dc7e4da8fbb32984375a1ec0af91fb57e7da66a5911e1a4708b56ad3b23bf416`,
+Python 3.14.4 and FastMCP 3.3.1. Startup identity verified the worktree package
+path and source snapshot independently of installed development-version
+metadata. The normal MCP configuration and broad token were preserved.
+
+| Mode | Scenario | Result |
+| --- | --- | --- |
+| `selected_files` | Initial Desktop Picker consent with only `drive.file`; manual callback from a browser on another computer | Passed |
+| `selected_files` | Read the selected development document; restart, refresh, read and list | Passed |
+| `selected_files` | Anchored native comment creation, reply/edit, resolve/reopen and deletion | Passed |
+| `selected_files` | Public text/formatting proposals and decisions with `requiredRevisionId` | Passed |
+| `selected_files` | The same proposal workflow with `targetRevisionId` | Passed |
+| `selected_files` | Local image upload, native layout readback and temporary-image cleanup | Passed |
+| `selected_files` | Later Picker session selects a second document; both documents remain readable after restart | Passed |
+| `full_drive` | Bounded document search with literal quote/backslash inputs | Passed |
+| `full_drive` | Native comment lifecycle | Passed |
+| `full_drive` | Public proposal workflow with `requiredRevisionId` | Passed |
+| `full_drive` | Public proposal workflow with `targetRevisionId` | Passed |
+| `full_drive` | Local image upload, layout and cleanup | Passed |
+
+Before the second selection, the narrow token received `RESOURCE_NOT_FOUND`
+for the newly created synthetic document. After selection it could read the
+synthetic text, and the original selected document remained accessible. The
+test restarted the server and read both again, then verified the new file's
+identity, moved only that file to the trash and confirmed `trashed=true`.
+Both manually submitted callback files were removed immediately after use.
+
+Evidence outside the repository:
+
+- Initial selection and restart: `/tmp/gdocs-40-remote-live.xml` and
+  `/tmp/gdocs-40-picker.Y5quD5/selection-report.json`.
+- Narrow-scope operation matrix: `/tmp/gdocs-40-selected-matrix.xml`,
+  `/tmp/gdocs40-selected-evidence.sNBQQq/` and
+  `/tmp/gdocs-scope-mcp-live-session-1ndyawsv/report.json`.
+- Additional selection: `/tmp/gdocs-40-additional-live.xml`,
+  `/tmp/gdocs-40-picker.Y5quD5/additional/selection-report.json` and
+  `/tmp/gdocs-scope-mcp-live-session-bt2r9a3q/report.json`.
+- Full-mode search: `/tmp/gdocs-40-full-search.xml`.
+- Broad-scope operation matrix: `/tmp/gdocs-40-full-matrix.xml` and
+  `/tmp/gdocs-40-full-matrix.log`; its XML records the document cleanup report.
+
+Both operation matrices and browser sessions verified subprocess reaping and
+before/after document cleanup. Cleanup left one empty root tab, no suggestions,
+active comments or named ranges. Current-run stderr had no unexpected errors;
+the second document's pre-selection not-found error was an asserted outcome.
+Table-probe log files can contain older runs, so correlate their lines with the
+reported startup time and PID rather than scanning unrelated historical errors.
+
+Final offline verification passed 2233 tests with external sockets disabled;
+109 live cases were deselected. Global Ruff, explicit changed-test lint and
+`git diff --check` passed. Wheel and sdist checks confirmed 95 identical source
+modules, isolated CLI/auth entry points and the full-mode 35-tool catalog.
+The selected-mode 36-tool catalog has permanent isolated STDIO coverage.
+Across the two browser tests, both operation matrices and the full-mode search,
+11 live tests passed. The narrow token's exact scope, account binding and
+owner-only file permissions were checked without exposing credential contents.
+
+Cancellation, expiry, concurrent completion, account mismatch and broader-scope
+upgrade failures are covered by permanent tests with substituted Google
+responses. They are not additional production-browser observations. Public
+OAuth verification remains separate work in
+[#46](https://github.com/dm0/gdocs-scope-mcp/issues/46).

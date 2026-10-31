@@ -170,8 +170,9 @@ paragraph boundaries; native literal replace-all retains Google's matching.
 
 ## Action annotations and edit receipts
 
-All Google-backed tools declare `openWorldHint=true`; `server_info` is local
-and declares `openWorldHint=false`. These advisory hints describe effects,
+All Google-backed tools declare `openWorldHint=true`; `server_info` and
+`docs_authorization_status` are local and declare `openWorldHint=false`.
+These advisory hints describe effects,
 not authorization or retry guarantees. The per-operation policy is:
 
 | Tools | Read-only | Destructive | Idempotent |
@@ -181,6 +182,8 @@ not authorization or retry guarantees. The per-operation policy is:
 | `docs_delete_paragraph`, `docs_delete_comment`, `docs_delete_comment_reply`, `docs_edit_comment` | false | true | true |
 | `docs_insert_before`, `docs_insert_after`, `docs_append` | false | false | false |
 | `docs_create`, `docs_add_comment`, `docs_reply_to_comment` | false | false | false |
+| `docs_authorize`, `docs_authorization_complete`, `docs_select_files` (selected mode only) | false | false | false |
+| `docs_authorization_status` | true | false | true |
 | `docs_resolve_comment`, `docs_reopen_comment` | false | false | false |
 | `docs_get_entity` | true | false | true |
 | `docs_create_dropdown_definition`, `docs_select_dropdown` | false | false | false |
