@@ -14,6 +14,7 @@ from fastmcp import Client
 from fastmcp.client.transports import StdioTransport
 
 from gdocs_scope_mcp.diagnostics import capture_server_info
+from gdocs_scope_mcp.documents import tabs
 from gdocs_scope_mcp.text_indices import utf16_length
 
 
@@ -185,7 +186,9 @@ class Probe:
                 'startIndex': self.start, 'endIndex': end,
             }}})
         if requests:
-            await self.batch(requests, document)
+            await self.batch(tabs.scope_requests(
+                requests, document['_mcp_tab_id'],
+            ), document)
         cleaned = await self.read()
         # Deleting the appended paragraphs can transfer their style onto the
         # original terminal newline. Restore that boundary before comparing
@@ -197,13 +200,13 @@ class Probe:
         if original_style != restored_style:
             fields = sorted((original_style.keys() | restored_style.keys())
                             - {'headingId'})
-            await self.batch([{'updateParagraphStyle': {
+            await self.batch(tabs.scope_requests([{'updateParagraphStyle': {
                 'range': {'startIndex': self.start,
                           'endIndex': self.start + 1},
                 'paragraphStyle': {k: v for k, v in original_style.items()
                                    if k != 'headingId'},
                 'fields': ','.join(fields),
-            }}], cleaned)
+            }}], cleaned['_mcp_tab_id']), cleaned)
             cleaned = await self.read()
         assert cleaned['body'] == self.initial_body
         assert all(named(cleaned, range_id) is None
