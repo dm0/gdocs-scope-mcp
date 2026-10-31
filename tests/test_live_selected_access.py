@@ -4,13 +4,54 @@ import asyncio
 import json
 import os
 import time
+import uuid
 from pathlib import Path
 
 import pytest
 
+from gdocs_scope_mcp.google_api import clients
 from gdocs_scope_mcp.google_api.authorization import token_path
 
 pytestmark = pytest.mark.live
+
+
+async def complete_selection(client, state, root, report, evidence):
+    """Wait for one browser response without retaining its sensitive URL."""
+    callback_file = root / 'callback-url.txt'
+    assert not callback_file.exists(), 'Remove the stale callback file first'
+    report['selection'] = state
+    report['manual_callback_file'] = str(callback_file)
+    evidence.write_text(json.dumps(report, indent=2))
+    print('PICKER_URL=' + state['authorization_url'], flush=True)
+    print('CALLBACK_FILE=' + str(callback_file), flush=True)
+    deadline = time.monotonic() + 310
+    try:
+        while state['status'] == 'pending':
+            assert time.monotonic() < deadline, 'Picker wait expired'
+            await asyncio.sleep(1)
+            if callback_file.exists():
+                try:
+                    submitted = await client.call_tool(
+                        'docs_authorization_complete', {
+                            'session_id': state['session_id'],
+                            'callback_url': callback_file.read_text().strip(),
+                        },
+                    )
+                    assert not submitted.is_error
+                    report['manual_callback_submitted'] = True
+                finally:
+                    callback_file.unlink(missing_ok=True)
+            result = await client.call_tool('docs_authorization_status', {
+                'session_id': state['session_id'],
+            })
+            assert not result.is_error
+            state = result.structured_content
+        report['selection'] = state
+        evidence.write_text(json.dumps(report, indent=2))
+        assert state['status'] == 'completed', state
+        return state
+    finally:
+        callback_file.unlink(missing_ok=True)
 
 
 def test_live_picker_selection_and_restart(isolated_mcp, live_test_doc):
@@ -41,37 +82,9 @@ def test_live_picker_selection_and_restart(isolated_mcp, live_test_doc):
             })
             assert not started.is_error
             state = started.structured_content
-            report['selection'] = state
-            report['manual_callback_file'] = str(callback_file)
-            evidence.write_text(json.dumps(report, indent=2))
-            print('PICKER_URL=' + state['authorization_url'], flush=True)
-            print('CALLBACK_FILE=' + str(callback_file), flush=True)
-            deadline = time.monotonic() + 310
-            while state['status'] == 'pending':
-                assert time.monotonic() < deadline, 'Picker wait expired'
-                await asyncio.sleep(1)
-                if callback_file.exists():
-                    try:
-                        submitted = await client.call_tool(
-                            'docs_authorization_complete', {
-                                'session_id': state['session_id'],
-                                'callback_url': (
-                                    callback_file.read_text().strip()
-                                ),
-                            },
-                        )
-                        assert not submitted.is_error
-                        report['manual_callback_submitted'] = True
-                    finally:
-                        callback_file.unlink(missing_ok=True)
-                result = await client.call_tool('docs_authorization_status', {
-                    'session_id': state['session_id'],
-                })
-                assert not result.is_error
-                state = result.structured_content
-            report['selection'] = state
-            evidence.write_text(json.dumps(report, indent=2))
-            assert state['status'] == 'completed', state
+            state = await complete_selection(
+                client, state, root, report, evidence,
+            )
             assert live_test_doc in {item['id'] for item in state['documents']}
             read = await client.call_tool('docs_get_tree', {
                 'doc_id': live_test_doc,
@@ -94,4 +107,114 @@ def test_live_picker_selection_and_restart(isolated_mcp, live_test_doc):
         asyncio.run(run())
     finally:
         callback_file.unlink(missing_ok=True)
+        evidence.write_text(json.dumps(report, indent=2))
+
+
+@pytest.mark.skipif(
+    os.environ.get('GDOCS_SCOPE_MCP_LIVE_ADDITIONAL_SELECTION') != '1',
+    reason='Requires permission to create, select and trash one test Doc.',
+)
+def test_live_additional_selection(isolated_mcp, live_test_doc):
+    """Select a second document and retain both reads after a restart."""
+    target = os.environ.get('GDOCS_SCOPE_MCP_LIVE_SELECTED_TOKEN')
+    if not target:
+        pytest.skip('Set LIVE_SELECTED_TOKEN to an existing narrow token')
+    token = Path(target).resolve()
+    assert token.exists() and token != token_path().resolve()
+    root = token.parent / 'additional'
+    root.mkdir(mode=0o700)
+    evidence = root / 'selection-report.json'
+    environment = {
+        **os.environ, 'GDOCS_SCOPE_MCP_ACCESS_MODE': 'selected_files',
+        'GDOCS_SCOPE_MCP_TOKEN': str(token),
+    }
+    marker = 'PICKER40' + uuid.uuid4().hex
+    title = 'gdocs-scope-mcp disposable ' + marker
+    report = {'cleanup_passed': False}
+    created = None
+
+    async def verify_reads(client):
+        for doc_id in (live_test_doc, created['id']):
+            result = await client.call_tool('docs_read', {'doc_id': doc_id})
+            assert not result.is_error
+            if doc_id == created['id']:
+                assert marker in json.dumps(result.structured_content)
+
+    async def run():
+        nonlocal created
+        try:
+            async with isolated_mcp(root / 'creation.stderr') as connected:
+                client, info = connected
+                report['creation_server'] = info
+                result = await client.call_tool('docs_create', {
+                    'title': title, 'initial_text': marker,
+                }, raise_on_error=False)
+                data = result.structured_content
+                created = (data.get('created_document')
+                           if result.is_error else data)
+                report['created_document'] = created
+                assert not result.is_error
+            report['creation_process_reaped'] = True
+            print('SELECT_DOCUMENT=' + title, flush=True)
+            async with isolated_mcp(root / 'selection.stderr',
+                                    environment=environment) as (client, info):
+                report['server'] = info
+                # App-created files may already be visible with drive.file;
+                # this test proves reselection and retained access, not denial.
+                initial = await client.call_tool('docs_read', {
+                    'doc_id': created['id'],
+                }, raise_on_error=False)
+                if initial.is_error:
+                    assert initial.structured_content['code'] in {
+                        'RESOURCE_NOT_FOUND', 'PERMISSION_DENIED',
+                    }
+                report['second_read_before_selection'] = (
+                    'denied' if initial.is_error else 'available'
+                )
+                started = await client.call_tool('docs_select_files', {
+                    'open_browser': False,
+                })
+                assert not started.is_error
+                state = await complete_selection(
+                    client, started.structured_content, root, report, evidence,
+                )
+                assert {item['id'] for item in state['documents']} == {
+                    created['id'],
+                }
+                assert state['documents'][0]['name'] == title
+                await verify_reads(client)
+                report['both_reads'] = 'passed'
+            report['selection_process_reaped'] = True
+            async with isolated_mcp(root / 'restart.stderr',
+                                    environment=environment) as (client, info):
+                report['restarted_server'] = info
+                await verify_reads(client)
+                report['restart_both_reads'] = 'passed'
+            report['restart_process_reaped'] = True
+        finally:
+            if created is not None:
+                drive = clients.get_service('drive', 'v3', cached=False)
+                try:
+                    metadata = drive.files().get(
+                        fileId=created['id'], fields='id,name,mimeType',
+                    ).execute()
+                    assert metadata == {
+                        'id': created['id'], 'name': title,
+                        'mimeType': 'application/vnd.google-apps.document',
+                    }
+                    drive.files().update(
+                        fileId=created['id'], body={'trashed': True},
+                    ).execute()
+                    cleaned = drive.files().get(
+                        fileId=created['id'], fields='trashed',
+                    ).execute()
+                    assert cleaned['trashed'] is True
+                    report['cleanup_passed'] = True
+                finally:
+                    drive.close()
+
+    try:
+        asyncio.run(run())
+    finally:
+        (root / 'callback-url.txt').unlink(missing_ok=True)
         evidence.write_text(json.dumps(report, indent=2))
