@@ -6,7 +6,7 @@ provenance; it is not a release of this independent project.
 
 ## Unreleased
 
-## [v0.7.0] - 2026-10-30
+## [v0.7.0] - 2026-10-31
 
 ### Added
 
