@@ -5,8 +5,12 @@ import json
 import os
 from pathlib import Path
 
+import pytest
+
 from gdocs_scope_mcp.google_api.credentials import STANDALONE_TOKEN_PATHS
 from gdocs_scope_mcp.settings import default_token_path
+
+pytestmark = pytest.mark.live
 
 
 def test_live_canonical_environment(

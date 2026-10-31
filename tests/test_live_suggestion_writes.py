@@ -12,6 +12,8 @@ import pytest
 from .test_live_suggestions import cleanup_suggestion_tab, text
 from .test_live_table_identity import table_probe  # noqa: F401
 
+pytestmark = pytest.mark.live
+
 
 @pytest.mark.parametrize('revision_mode', ['required', 'target'])
 def test_live_public_suggestions(live_test_doc, table_probe, revision_mode):

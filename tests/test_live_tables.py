@@ -3,11 +3,14 @@
 import asyncio
 import json
 import uuid
+from html import unescape
 from pathlib import Path
 
 import pytest
 
 from gdocs_scope_mcp.google_api import clients
+
+pytestmark = pytest.mark.live
 
 
 @pytest.mark.parametrize('tool', [
@@ -114,8 +117,8 @@ def test_native_table_insertion(
             })
             sections = read.structured_content['sections']
             markdown = '\n'.join(section['markdown'] for section in sections)
-            assert marker + ' before' in markdown
-            assert marker + ' after' in markdown
+            assert marker + ' before' in unescape(markdown)
+            assert marker + ' after' in unescape(markdown)
             assert '<table data-mcp-table-ref=' in markdown
             report['checks_passed'] = True
 

@@ -16,6 +16,8 @@ from .test_live_table_identity import (
 from .test_live_table_patch import discover
 from .test_live_table_structure import arguments
 
+pytestmark = pytest.mark.live
+
 
 async def merge_snapshot(probe, doc_id, ref, cells):
     """Take expectations for complete participating logical heads."""

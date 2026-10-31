@@ -5,11 +5,15 @@ import json
 import uuid
 from pathlib import Path
 
+import pytest
+
 from gdocs_scope_mcp.code_reading import MARKER_PREFIX
 from gdocs_scope_mcp.documents import (
     fetching,
 )
 from gdocs_scope_mcp.google_api import clients
+
+pytestmark = pytest.mark.live
 
 
 def _code_range_ids(document):

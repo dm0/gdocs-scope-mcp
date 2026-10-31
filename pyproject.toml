@@ -46,6 +46,7 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = ["--import-mode=importlib"]
+markers = ["live: opt-in Google API tests through isolated STDIO MCP servers"]
 
 [tool.ruff]
 target-version = "py310"

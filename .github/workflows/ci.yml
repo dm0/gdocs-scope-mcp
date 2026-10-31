@@ -49,7 +49,7 @@ jobs:
       - name: Lint CI test infrastructure explicitly
         run: ruff check --config pyproject.toml tests/conftest.py tests/test_ci_network.py
       - name: Run all offline tests (loopback and Unix sockets only)
-        run: uv run --locked pytest -q --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,::1
+        run: uv run --locked pytest -q -m "not live" --strict-markers --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,::1
       - name: Build wheel and source distribution
         run: uv build
       - name: Verify artifact contents and isolated installations

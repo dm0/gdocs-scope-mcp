@@ -6,8 +6,12 @@
 import asyncio
 from html import escape
 
+import pytest
+
 from .native_snapshot_assertions import assert_tabs_unchanged
 from .test_live_table_identity import paragraph_text, table_probe  # noqa: F401
+
+pytestmark = pytest.mark.live
 
 
 def paragraph_signatures(content):

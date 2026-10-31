@@ -5,6 +5,7 @@ import io
 import json
 import urllib.request
 import uuid
+from html import unescape
 from http import HTTPStatus
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
@@ -16,6 +17,8 @@ from googleapiclient.http import MediaIoBaseUpload
 from gdocs_scope_mcp.google_api import clients
 
 EXPECTED_HTML_POINTS = 24
+
+pytestmark = pytest.mark.live
 
 
 def test_temporary_drive_url_survives_source_deletion(
@@ -98,7 +101,10 @@ def test_temporary_drive_url_survives_source_deletion(
                 'doc_id': live_test_doc,
             })
             assert not readback.is_error
-            assert marker in json.dumps(readback.structured_content)
+            assert marker in unescape('\n'.join(
+                section['markdown']
+                for section in readback.structured_content['sections']
+            ))
             report['mcp_readback_ok'] = True
 
     try:
@@ -211,7 +217,10 @@ def test_local_image_uploads_through_all_tools(
                 'doc_id': live_test_doc,
             })
             assert not result.is_error
-            assert prefix in json.dumps(result.structured_content)
+            assert prefix in unescape('\n'.join(
+                section['markdown']
+                for section in result.structured_content['sections']
+            ))
     try:
         asyncio.run(run())
     finally:

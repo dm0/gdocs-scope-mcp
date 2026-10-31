@@ -14,6 +14,7 @@ from fastmcp import Client
 from fastmcp.client.transports import StdioTransport
 
 from gdocs_scope_mcp.diagnostics import capture_server_info
+from gdocs_scope_mcp.documents import tabs
 from gdocs_scope_mcp.text_indices import utf16_length
 
 
@@ -185,8 +186,28 @@ class Probe:
                 'startIndex': self.start, 'endIndex': end,
             }}})
         if requests:
-            await self.batch(requests, document)
+            await self.batch(tabs.scope_requests(
+                requests, document['_mcp_tab_id'],
+            ), document)
         cleaned = await self.read()
+        # Deleting the appended paragraphs can transfer their style onto the
+        # original terminal newline. Restore that boundary before comparing
+        # the entire body; all earlier content must remain exactly unchanged.
+        original_tail = self.initial_body['content'][-1]
+        restored_tail = cleaned['body']['content'][-1]
+        original_style = original_tail['paragraph']['paragraphStyle']
+        restored_style = restored_tail['paragraph']['paragraphStyle']
+        if original_style != restored_style:
+            fields = sorted((original_style.keys() | restored_style.keys())
+                            - {'headingId'})
+            await self.batch(tabs.scope_requests([{'updateParagraphStyle': {
+                'range': {'startIndex': self.start,
+                          'endIndex': self.start + 1},
+                'paragraphStyle': {k: v for k, v in original_style.items()
+                                   if k != 'headingId'},
+                'fields': ','.join(fields),
+            }}], cleaned['_mcp_tab_id']), cleaned)
+            cleaned = await self.read()
         assert cleaned['body'] == self.initial_body
         assert all(named(cleaned, range_id) is None
                    for range_id in self.bindings.values())
@@ -280,6 +301,7 @@ def assert_lifecycle_observations(report):
         assert row[0]['column_span'] == (2 if step == 'merge' else 1)
 
 
+@pytest.mark.live
 def test_live_named_range_lifecycle(live_test_doc, table_probe):
     """Observe named ranges through cell and structural transformations."""
     async def run():
@@ -371,6 +393,7 @@ def test_live_named_range_lifecycle(live_test_doc, table_probe):
     asyncio.run(run())
 
 
+@pytest.mark.live
 def test_live_revision_interleavings(live_test_doc, table_probe):
     """Reject stale writes and rebase independent edits after validation."""
     async def run():
@@ -511,6 +534,7 @@ def test_cell_identity_does_not_fall_back_to_duplicate_text():
     assert containing_cells(document, None) == []
 
 
+@pytest.mark.live
 def test_live_read_only_table_discovery(live_test_doc, table_probe):
     """Share references across processes and read native merged geometry."""
     async def run():
@@ -582,6 +606,7 @@ def test_live_read_only_table_discovery(live_test_doc, table_probe):
     asyncio.run(run())
 
 
+@pytest.mark.live
 def test_live_positional_table_references(
     live_test_doc, table_probe, isolated_mcp,
 ):
@@ -674,6 +699,7 @@ def test_live_positional_table_references(
     asyncio.run(run())
 
 
+@pytest.mark.live
 def test_live_positional_structure_invalidation(live_test_doc, table_probe):
     """Guard merge/unmerge state changes and removed original cells."""
     async def run():
@@ -751,6 +777,7 @@ async def raced_edit(probe, tool, arguments, mutation,
 @pytest.mark.parametrize('scenario', ['shift', 'overlap', 'append', 'table',
                                       'strict'])
 @pytest.mark.parametrize('mode', ['required', 'target'])
+@pytest.mark.live
 def test_live_public_edit_revision_race(live_test_doc, table_probe, scenario,
                                        mode):
     """Exercise actual guarded public tools, not only raw API probes."""

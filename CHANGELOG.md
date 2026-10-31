@@ -6,6 +6,19 @@ provenance; it is not a release of this independent project.
 
 ## Unreleased
 
+## [v0.7.0] - 2026-10-31
+
+### Added
+
+- Browser and headless Desktop OAuth authorization with PKCE S256, validated
+  callbacks, expiring single-use sessions and a bundled project OAuth client.
+  Custom client configuration remains supported. New token files use the XDG
+  configuration directory and owner-only permissions on Unix.
+- Mixed ordered and unordered native nested lists during rich insertion,
+  preserving nesting and parent numbering across changes of marker kind.
+- GitHub Actions checks on every branch push for Python 3.10 through 3.14,
+  including offline tests, linting, package builds and isolated installations.
+
 ### Changed
 
 - Application-owned environment variables now exclusively use the
@@ -16,6 +29,46 @@ provenance; it is not a release of this independent project.
   variables, and existing live-test controls are unchanged. See the
   [migration guide](docs/configuration.md#environment-name-migration-and-validation)
   for validation and restart requirements.
+- Native list reads use Markdown with four spaces per nesting level when the
+  structure is unambiguous. Independent group boundaries, incomplete ancestor
+  chains and lists inside HTML table cells use nested HTML to retain structure.
+- New authorizations omit unused identity scopes. Legacy tokens remain usable;
+  previously granted permissions are not revoked by this change.
+- Headless authorization requires the complete redirect URL and its original
+  session. A bare authorization code is no longer sufficient; `--code` accepts
+  the same complete URL as `--callback-url`. See the updated
+  [authorization guide](docs/getting-started.md#authorize-without-a-local-browser).
+- Google API failures distinguish time-based throttling, daily/storage quotas,
+  temporary service/transport failures and OAuth client configuration errors.
+  Unknown refresh failures no longer automatically require authorization.
+  New error codes are `QUOTA_EXCEEDED`, `TEMPORARILY_UNAVAILABLE` and
+  `AUTH_CONFIGURATION_ERROR`; no automatic request replay is added.
+
+### Fixed
+
+- Escape literal document text in reader markup so Markdown punctuation and
+  HTML-like text survive rich read-to-write copying without changing meaning.
+  Native source coordinates remain independent of rendered text.
+- Preserve native list nesting and separate groups when copying reader output
+  through rich insertion, without absorbing following prose into a list item.
+- Escape `docs_list` search values so apostrophes and backslashes cannot break
+  the Drive query or alter fixed MIME-type and trash filters. Search still
+  follows Google's full-text matching rules.
+- Retain the created document's ID, URL and title when initial-text insertion
+  fails. Structured errors distinguish rejected, unattempted and unknown
+  insertion outcomes and direct recovery to the existing document.
+
+### Limitations
+
+- The bundled OAuth application remains limited to configured test users;
+  unrestricted public readiness and selected-file access are separate work.
+  PKCE does not remove Google's client-secret requirement for the bundled
+  Desktop client. Existing token files keep their originating client.
+- Copying lists creates new native list IDs and normalizes custom numbering
+  and glyphs; custom starts and visual spacing are not lossless. Creating lists
+  inside new table cells remains unsupported.
+
+[v0.7.0]: https://github.com/dm0/gdocs-scope-mcp/compare/v0.6.1...v0.7.0
 
 ## [v0.6.1] - 2026-10-29
 

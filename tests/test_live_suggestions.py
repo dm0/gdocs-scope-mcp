@@ -7,10 +7,14 @@
 import asyncio
 import uuid
 
+import pytest
+
 from gdocs_scope_mcp.suggestions.index import index_document
 
 from .native_snapshot_assertions import assert_tabs_unchanged
 from .test_live_table_identity import paragraph_text, table_probe  # noqa: F401
+
+pytestmark = pytest.mark.live
 
 
 def tab(document, tab_id):
