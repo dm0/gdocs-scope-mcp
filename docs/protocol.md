@@ -40,6 +40,39 @@ Continue until the token is null, even if a page has zero returned items.
 Clients using the previous JSON-string
 or `result`-wrapped outputs must switch to the direct structured objects.
 
+## Document access and selection
+
+`server_info.access_mode` reports `full_drive` or `selected_files`. This is
+configuration, not a tool argument. In selected-file mode `docs_list` returns
+files available to the application, including previously selected and
+application-created files. It is not an account-wide inventory or an allowlist
+limited to the latest selection. A pasted URL does not grant access.
+
+Call `docs_select_files(open_browser=True)` only for an explicit selection
+workflow. It returns `session_id`, `status`, `expires_at`, `browser_opened` and
+`authorization_url` immediately. Present the URL when manual opening is needed.
+Call `docs_selection_status(session_id)` in the same server process to read the
+result. Polling never opens a browser, exchanges a code or retries a write.
+Terminal states are `completed`, `cancelled`, `expired` and `failed`.
+Completion returns verified document `id`, `name` and `url`; failures expose
+sanitized `failure_code`, including `ACCOUNT_MISMATCH`, `CREDENTIALS_CHANGED`
+and `INVALID_SCOPES`. Cancellation, expiry and failure preserve local credentials.
+Google-side grants may already have changed during consent, even when local
+installation fails; no automatic revocation is attempted.
+
+Sessions last at most 300 seconds. Terminal results remain available until
+300 seconds after their original expiry. A restart discards session IDs;
+unknown or evicted IDs return `RESOURCE_NOT_FOUND`. One authorization attempt
+owns a token destination at a time, including across local server processes;
+a competing start returns `EDIT_CONFLICT`. Restart a session explicitly after
+it expires rather than polling indefinitely.
+
+Selected-file credentials must have exactly `drive.file`; broad or unknown
+grants require explicit reauthorization/migration. Selection cannot change
+`access_mode`, revoke previous grants, override sharing rights or bypass domain
+policy. Do not automatically open selection on every 403/404. If access is
+added after a write failure, inspect the document before retrying that write.
+
 ## Google API failures and recovery
 
 | Code | Meaning | Recovery |

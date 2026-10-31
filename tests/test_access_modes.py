@@ -30,7 +30,9 @@ def test_mode_precedence(monkeypatch, tmp_path):
     config.write_text(json.dumps({'access_mode': 'selected_files'}))
     monkeypatch.setenv('GDOCS_SCOPE_MCP_CONFIG', str(config))
     assert Settings().access_mode == 'selected_files'
-    assert default_token_path().name == 'selected-files-token.json'
+    assert default_token_path(get_settings().access_mode).name == (
+        'selected-files-token.json'
+    )
     monkeypatch.setenv('GDOCS_SCOPE_MCP_ACCESS_MODE', 'full_drive')
     assert Settings().access_mode == 'full_drive'
 
@@ -52,8 +54,9 @@ def test_no_legacy_fallback(monkeypatch, tmp_path):
     monkeypatch.setattr(credentials, 'STANDALONE_TOKEN_PATHS', [legacy])
     export = Mock(side_effect=AssertionError('must not export'))
     monkeypatch.setattr(credentials, 'export_gog_token', export)
-    with pytest.raises(RuntimeError, match='selected-file credentials'):
+    with pytest.raises(ToolFailureError) as raised:
         credentials.load_token()
+    assert 'docs_select_files' in raised.value.failure.suggested_action
     export.assert_not_called()
 
 
@@ -78,3 +81,13 @@ def test_refresh_checks_actual_grant(monkeypatch, saved, granted, success):
     else:
         with pytest.raises(ToolFailureError):
             credentials.load_credentials()
+
+
+def test_full_mode_rejects_selected_token(monkeypatch):
+    """Changing settings alone cannot turn a narrow token into broad access."""
+    monkeypatch.setattr(credentials, 'load_token', lambda: {
+        'access_mode': 'selected_files', 'scopes': [DRIVE_FILE],
+    })
+    with pytest.raises(ToolFailureError) as raised:
+        credentials.load_credentials()
+    assert raised.value.failure.code == 'AUTHENTICATION_REQUIRED'

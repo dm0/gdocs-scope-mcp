@@ -19,7 +19,9 @@ def scopes_for_mode(mode):
 
 def require_selected_scopes(scopes):
     """Reject unknown or broader grants, regardless of local mode labels."""
-    if not isinstance(scopes, (list, tuple)) or set(scopes) != {DRIVE_FILE}:
+    if (not isinstance(scopes, (list, tuple))
+            or not all(isinstance(scope, str) for scope in scopes)
+            or set(scopes) != {DRIVE_FILE}):
         raise ToolFailureError(EditFailedResponse(
             code='AUTHENTICATION_REQUIRED',
             description='Selected-file mode requires a verified drive.file '

@@ -43,10 +43,10 @@ def config_directory() -> Path:
     return root / 'gdocs-scope-mcp'
 
 
-def default_token_path() -> Path:
+def default_token_path(access_mode: str = 'full_drive') -> Path:
     """Keep new credentials in the application's configuration directory."""
     name = ('selected-files-token.json'
-            if get_settings().access_mode == 'selected_files'
+            if access_mode == 'selected_files'
             else 'token.json')
     return config_directory() / name
 

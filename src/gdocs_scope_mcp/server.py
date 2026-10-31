@@ -41,12 +41,14 @@ import sys
 from fastmcp import FastMCP
 
 from gdocs_scope_mcp.diagnostics import capture_server_info
+from gdocs_scope_mcp.google_api.selection import manager as selection_manager
 from gdocs_scope_mcp.settings import get_settings
 from gdocs_scope_mcp.tool_logging import (
     ToolCallLoggingMiddleware,
     configure_logging,
 )
 from gdocs_scope_mcp.tools import (
+    access,
     comments,
     diagnostics,
     documents,
@@ -129,6 +131,19 @@ CONCURRENT EDITS:
 
 DIAGNOSTICS:
     server_info            Read process identity and startup source fingerprint
+
+DOCUMENT ACCESS:
+    server_info exposes configured access_mode: full_drive (compatibility
+    default) or selected_files. Tools cannot change this setting. In
+    selected_files mode, docs_list covers files available to the application,
+    including files it created. A pasted URL grants no additional access.
+    Use docs_select_files to start an explicit browser selection; present its
+    authorization_url if browser opening is unavailable. Poll
+    docs_selection_status with that session_id in the same server process.
+    Completed status returns verified document metadata. Selection adds grants;
+    it does not revoke older grants or override sharing/domain restrictions.
+    Do not launch selection automatically for every permission error or retry
+    failed writes after granting access without inspecting their outcome.
 
 EDIT RECEIPTS:
     Text edits and comment mutations identify document_id, scope, and
@@ -330,6 +345,7 @@ entities.register(mcp)
 documents.register_editing(mcp)
 comments.register(mcp)
 files.register(mcp)
+access.register(mcp)
 
 def main():
     """Run the command-line entry point for this module."""
@@ -337,7 +353,10 @@ def main():
     get_settings()
     # Our logger has its own handler; this default is for third-party loggers.
     logging.basicConfig(level=logging.WARNING, stream=sys.stderr)
-    mcp.run(transport='stdio')
+    try:
+        mcp.run(transport='stdio')
+    finally:
+        selection_manager.close()
 
 
 if __name__ == '__main__':

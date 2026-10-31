@@ -92,6 +92,32 @@ Keep the same `env` entry pointing to your token. Restart or reconnect the MCP
 server after changing the configuration, then ask your agent to list documents
 or read one that your Google account can access.
 
+## Access only selected documents
+
+The default mode uses broad Drive access. To authorize only files selected in
+Google Picker, use this setting for both authorization and the MCP server:
+
+```json
+{"access_mode": "selected_files"}
+```
+
+Alternatively, set `GDOCS_SCOPE_MCP_ACCESS_MODE=selected_files` in both
+environments. Run `gdocs-scope-mcp-auth` and choose Google Docs in the browser.
+The default token is saved as `selected-files-token.json` in the application
+configuration directory. Configure the MCP host with that token path and the
+same access mode. Keep your existing broad token separate.
+
+Your assistant can request another selection later. You explicitly choose the
+additional documents in Google Picker. Pasting a document link into a chat does
+not by itself grant access. Documents created by the application are also
+available under this mode.
+
+Changing the setting does not revoke earlier permissions. If your Google
+account already granted this application broader access, see the
+[mode migration instructions](configuration.md#document-access-modes) before
+replacing or revoking that grant. With a custom OAuth client, enable the Google
+Picker API in its Cloud project.
+
 ## Authorize without a local browser
 
 For a remote host or terminal without a browser:
@@ -201,7 +227,8 @@ See [migration and validation](configuration.md#environment-name-migration-and-v
 
 ## Scopes
 
-The authorization command requests these permissions:
+In the default `full_drive` mode, the authorization command requests these
+permissions:
 
 | Scope | Permission |
 |-------|------------|
@@ -210,8 +237,10 @@ The authorization command requests these permissions:
 | `https://www.googleapis.com/auth/drive.readonly` | View and download Drive files |
 | `https://www.googleapis.com/auth/drive.file` | Access files created by or granted to the application |
 
+In `selected_files` mode it requests only `drive.file`.
 New authorizations do not request identity scopes (`openid`, `email`, `profile`)
-or Apps Script scopes. Existing tokens with these permissions remain usable.
+or Apps Script scopes. Existing tokens with these permissions remain usable in
+`full_drive` mode; selected-file mode rejects additional scopes.
 Updating the application does not revoke previously granted access.
 
 To replace an older grant with the current permissions:

@@ -11,6 +11,8 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict
 
+from gdocs_scope_mcp.settings import get_settings
+
 
 class ServerInfo(BaseModel):
     """Identity of the running server, independent of Google authentication."""
@@ -25,6 +27,7 @@ class ServerInfo(BaseModel):
     python_executable: str
     python_version: str
     fastmcp_version: str
+    access_mode: str = 'full_drive'
 
 
 def capture_server_info(package_path: Path | None = None) -> ServerInfo:
@@ -45,4 +48,5 @@ def capture_server_info(package_path: Path | None = None) -> ServerInfo:
         python_executable=sys.executable,
         python_version=platform.python_version(),
         fastmcp_version=version('fastmcp'),
+        access_mode=get_settings().access_mode,
     )

@@ -107,7 +107,7 @@ def test_atomic_generation_guard(tmp_path):
     path = tmp_path / 'token.json'
     expected = authorization.generation(path)
     path.write_text('new contents')
-    with pytest.raises(oauth.AuthorizationError, match='changed'):
+    with pytest.raises(oauth.AuthorizationError, match='CREDENTIALS_CHANGED'):
         authorization.install_token(path, {'refresh_token': 'old'}, expected)
     assert path.read_text() == 'new contents'
     assert list(tmp_path.glob('.token-*')) == []

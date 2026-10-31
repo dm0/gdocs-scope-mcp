@@ -8,7 +8,9 @@ from pathlib import Path
 
 from filelock import FileLock
 from google.oauth2.credentials import Credentials
+from google_auth_httplib2 import AuthorizedHttp
 from googleapiclient.discovery import build
+from httplib2 import Http
 
 from gdocs_scope_mcp.google_api import oauth
 from gdocs_scope_mcp.google_api.access import require_selected_scopes
@@ -19,11 +21,20 @@ from gdocs_scope_mcp.settings import (
 )
 
 
+class SelectionError(oauth.AuthorizationError):
+    """Carry a stable sanitized reason for selection completion failures."""
+
+    def __init__(self, code):
+        """Retain only a public failure code, never a remote payload."""
+        super().__init__(code)
+        self.code = code
+
+
 def token_path():
     """Resolve the same explicit token destination as the server loader."""
     configured = optional_env('GDOCS_SCOPE_MCP_TOKEN')
     return (Path(configured).expanduser() if configured
-            else default_token_path())
+            else default_token_path(get_settings().access_mode))
 
 
 def client_pair():
@@ -70,7 +81,22 @@ def verify_selection(tokens, session, secret, file_ids, previous):
     """Verify account, file metadata and scopes before installing a grant."""
     data = token_data(tokens, session, secret)
     creds = Credentials(token=tokens['access_token'], scopes=data['scopes'])
-    drive = build('drive', 'v3', credentials=creds, cache_discovery=False)
+    drive = build('drive', 'v3',
+                  http=AuthorizedHttp(creds, http=Http(timeout=10)),
+                  cache_discovery=False)
+    try:
+        account_id, documents = _selection_metadata(
+            drive, session, file_ids, previous,
+        )
+    finally:
+        drive.close()
+    data.update(access_mode='selected_files', account_id=account_id)
+    return data, documents
+
+
+def _selection_metadata(drive, session, file_ids, previous):
+    """Resolve authorized metadata while enforcing the session deadline."""
+    session.check_active()
     account = drive.about().get(fields='user(permissionId)').execute()
     account_id = account.get('user', {}).get('permissionId')
     if not isinstance(account_id, str) or not account_id:
@@ -79,9 +105,10 @@ def verify_selection(tokens, session, secret, file_ids, previous):
         require_selected_scopes(previous.get('scopes'))
         if (previous.get('client_id') != session.client_id
                 or previous.get('account_id') != account_id):
-            raise oauth.AuthorizationError('Account or client mismatch.')
+            raise SelectionError('ACCOUNT_MISMATCH')
     documents = []
     for file_id in file_ids:
+        session.check_active()
         item = drive.files().get(
             fileId=file_id, fields='id,name,mimeType,webViewLink,trashed',
             supportsAllDrives=True,
@@ -95,15 +122,15 @@ def verify_selection(tokens, session, secret, file_ids, previous):
             'id': file_id, 'name': item['name'],
             'url': f'https://docs.google.com/document/d/{file_id}/edit',
         })
-    data.update(access_mode='selected_files', account_id=account_id)
-    return data, documents
+    session.check_active()
+    return account_id, documents
 
 
 def install_token(path, data, expected):
     """Replace a private token only if its generation is unchanged."""
     path.parent.mkdir(parents=True, exist_ok=True)
     if generation(path) != expected:
-        raise oauth.AuthorizationError('Credentials changed during selection.')
+        raise SelectionError('CREDENTIALS_CHANGED')
     descriptor, name = tempfile.mkstemp(prefix='.token-', dir=path.parent)
     temporary = Path(name)
     try:

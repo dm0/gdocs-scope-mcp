@@ -5,6 +5,7 @@ import json
 import sys
 import time
 import webbrowser
+from contextvars import ContextVar
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -15,6 +16,8 @@ from gdocs_scope_mcp.errors import ToolFailureError
 from gdocs_scope_mcp.google_api import authorization, oauth
 from gdocs_scope_mcp.google_api.access import FULL_SCOPES, scopes_for_mode
 from gdocs_scope_mcp.settings import (
+    Settings,
+    default_token_path,
     get_settings,
     optional_env,
 )
@@ -22,6 +25,12 @@ from gdocs_scope_mcp.settings import (
 SCOPES = FULL_SCOPES
 CLIENT_ID_ENV_VAR = 'GDOCS_SCOPE_MCP_CLIENT_ID'
 CLIENT_SECRET_ENV_VAR = 'GDOCS_SCOPE_MCP_CLIENT_SECRET'
+_access_mode = ContextVar('authorization_access_mode', default=None)
+
+
+def configured_mode():
+    """Read CLI mode without validating overridden client inputs."""
+    return _access_mode.get() or get_settings().access_mode
 
 
 def load_client_config(creds_path: Path) -> dict:
@@ -39,7 +48,7 @@ def load_client_config(creds_path: Path) -> dict:
 def save_token(token_response, session, client_secret, out_path,
                file_ids=None):
     """Save refresh credentials without PKCE or identity material."""
-    selected = get_settings().access_mode == 'selected_files'
+    selected = configured_mode() == 'selected_files'
     if session.picker != selected:
         raise oauth.AuthorizationError('Authorization access mode changed.')
     with authorization.destination_lock(out_path):
@@ -57,7 +66,7 @@ def save_token(token_response, session, client_secret, out_path,
 
 def create_session(client_id, redirect, timeout):
     """Bind CLI authorization to the configured access mode."""
-    mode = get_settings().access_mode
+    mode = configured_mode()
     return oauth.AuthorizationSession.create(
         client_id, redirect, scopes_for_mode(mode), timeout,
         picker=mode == 'selected_files',
@@ -163,8 +172,7 @@ def main():
     parser.add_argument('--client-secret',
                         help='Matching secret for a custom Desktop client')
     parser.add_argument('--out', '-o', type=Path,
-                        default=authorization.token_path(),
-                        help='Token output path (default: %(default)s)')
+                        help='Token output path (default follows access_mode)')
     modes = parser.add_mutually_exclusive_group()
     modes.add_argument('--headless', action='store_true')
     modes.add_argument('--prepare', action='store_true',
@@ -186,6 +194,7 @@ def main():
     ):
         parser.error('--session requires a headless or callback mode')
 
+    context = None
     try:
         if args.credentials:
             config = load_client_config(args.credentials.expanduser())
@@ -198,6 +207,12 @@ def main():
                 client_id = (configured.strip() if configured
                              else get_settings().client_id)
             secret = args.client_secret or optional_env(CLIENT_SECRET_ENV_VAR)
+        mode = Settings(client_id=client_id).access_mode
+        context = _access_mode.set(mode)
+        if args.out is None:
+            configured_token = optional_env('GDOCS_SCOPE_MCP_TOKEN')
+            args.out = (Path(configured_token) if configured_token
+                        else default_token_path(mode))
         if args.callback_url:
             session, code = oauth.consume_session(args.session.expanduser(),
                                                   args.callback_url)
@@ -225,7 +240,7 @@ def main():
                     'or --credentials for a registered Desktop app.'
                 )
             print('Scopes: ' + ', '.join(
-                scopes_for_mode(get_settings().access_mode),
+                scopes_for_mode(mode),
             ))
             path = (args.session.expanduser() if args.session else
                     args.out.expanduser().with_suffix('.oauth-session.json'))
@@ -254,6 +269,9 @@ def main():
     except (KeyboardInterrupt, EOFError):
         print('Authorization cancelled.', file=sys.stderr)
         raise SystemExit(1) from None
+    finally:
+        if context is not None:
+            _access_mode.reset(context)
     print('✓ Authorisation successful')
     print(f'✓ Token saved: {args.out.expanduser()}')
     print(f'Set GDOCS_SCOPE_MCP_TOKEN={args.out.expanduser()}')

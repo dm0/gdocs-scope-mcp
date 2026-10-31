@@ -12,6 +12,8 @@ from pathlib import Path
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 
+from gdocs_scope_mcp.contracts import EditFailedResponse
+from gdocs_scope_mcp.errors import ToolFailureError
 from gdocs_scope_mcp.google_api.access import require_selected_scopes
 from gdocs_scope_mcp.google_api.oauth import PublicClientCredentials
 from gdocs_scope_mcp.settings import (
@@ -60,15 +62,21 @@ def load_token() -> dict:
     token_file = optional_env(TOKEN_ENV_VAR)
     if token_file:
         return json.loads(Path(token_file).read_text())
-    for token_path in [default_token_path(), *STANDALONE_TOKEN_PATHS]:
+    default = default_token_path(get_settings().access_mode)
+    for token_path in [default, *STANDALONE_TOKEN_PATHS]:
         if (get_settings().access_mode == 'selected_files'
-                and token_path != default_token_path()):
+                and token_path != default):
             continue
         if token_path.exists():
             return json.loads(token_path.read_text())
     if get_settings().access_mode == 'selected_files':
-        raise RuntimeError('No selected-file credentials found. Run '
-                           'gdocs-scope-mcp-auth in selected_files mode.')
+        raise ToolFailureError(EditFailedResponse(
+            code='AUTHENTICATION_REQUIRED',
+            description='No selected-file credentials found.',
+            suggested_action='Call docs_select_files for explicit browser '
+            'selection, then poll docs_selection_status. Alternatively run '
+            'gdocs-scope-mcp-auth with selected_files mode configured.',
+        ))
     try:
         token = export_gog_token()
         GOG_TOKEN_CACHE.write_text(json.dumps(token))
@@ -92,6 +100,13 @@ def load_credentials():
     selected = get_settings().access_mode == 'selected_files'
     if selected:
         require_selected_scopes(token_data.get('scopes'))
+    elif token_data.get('access_mode') == 'selected_files':
+        raise ToolFailureError(EditFailedResponse(
+            code='AUTHENTICATION_REQUIRED',
+            description='A selected-file token cannot enable full_drive mode.',
+            suggested_action='Configure selected_files mode for this token, '
+            'or authorize full_drive using a separate broad token path.',
+        ))
     client_id = token_data.get('client_id') or token_data.get('_client_id')
     client_secret = token_data.get('client_secret') or token_data.get(
         '_client_secret'
