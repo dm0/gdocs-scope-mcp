@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Privacy — gdocs-scope-mcp</title><link rel="stylesheet" href="style.css"></head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <header><a class="brand" href="index.html">gdocs-scope-mcp</a><nav aria-label="Main"><a href="privacy.html" aria-current="page">Privacy</a><a href="terms.html">Terms</a><a href="mailto:gdocs-scope-mcp@googlegroups.com">Support</a></nav></header>
+  <main id="main" class="legal">
+    <p class="notice">Unpublished draft · Owner review and an effective date are required before publication.</p>
+    <p class="eyebrow">Your information</p><h1>Privacy policy</h1>
+    <p class="lead">This draft describes the gdocs-scope-mcp software. You choose the machine running it, the MCP application and any AI provider.</p>
+    <h2>Data access and use</h2>
+    <p>The software accesses Google Docs content, file identifiers and metadata, document structure, comments, suggestions and related author metadata as needed for the tools you invoke. It reads and changes this information to perform document operations requested through your MCP application. Discovery covers application-accessible files or the Google Docs available to your account, depending on the configured mode. Authorization also checks a Google account identifier to keep subsequent consent bound to the same account.</p>
+    <p>Selected-file mode uses <code>drive.file</code> for selected and application-created files. Full-drive mode requests broader permissions for account-wide discovery and document operations. Configuring a mode does not revoke previous grants.</p>
+    <h2>Your MCP application and AI provider</h2>
+    <p>Document results, snippets, metadata and edit receipts are returned to your MCP application. It may send them to an AI provider and retain conversations, tool inputs, outputs or logs. These services have their own policies. Installing this software does not establish their retention, training or confidentiality practices. Review them before connecting sensitive documents.</p>
+    <p>The package itself does not implement model training, advertising or sale of document data. It does not route document contents through a project-operated application backend. A user-chosen remote MCP host still receives those contents.</p>
+    <h2>Credentials and local storage</h2>
+    <p>OAuth refresh credentials are stored in a token file on the machine running the server. New files use owner-only permissions; they are not encrypted by the application. Protect that machine, its backups and remote administrator access. Google authorization exchanges use HTTPS; local MCP communication uses STDIO.</p>
+    <p>Document caching is disabled by default. If enabled, it can store full native document snapshots in memory or an unencrypted local SQLite file. Expiry prevents reuse after the configured lifetime; it does not guarantee secure erasure. To discard stored snapshots, stop the server and remove its cache files.</p>
+    <p>Application outcome logs omit tool arguments and results, but error diagnostics and the MCP application can retain additional information. Browser completion URLs contain short-lived authorization codes. When submitted through remote chat or MCP, they may be retained by that host. Do not post those URLs publicly.</p>
+    <h2>Images and network recipients</h2>
+    <p>Opt-in local image uploads send selected images to Google Drive and temporarily make them readable by anyone with the link so Google Docs can insert them. The software attempts to delete temporary source files after insertion and reports cleanup failures. Deleting a temporary source does not remove an image already inserted into a document. Image URL insertion also causes Google to retrieve the supplied image URL.</p>
+    <p>Google processes authorized API requests under its own policies. The project website will be hosted by GitHub Pages; website request processing and logs are governed by <a href="https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement">GitHub's privacy statement</a>. Website hosting does not handle the OAuth code exchange or MCP document operations. See also <a href="https://policies.google.com/privacy">Google's privacy policy</a>.</p>
+    <h2>Revocation and deletion</h2>
+    <p>Revoke the application's access in your <a href="https://myaccount.google.com/connections">Google Account connections settings</a>. Remove its token files and optional cache from the server machine. Deleting a local token or changing access mode alone does not revoke Google's grants.</p>
+    <p>These actions do not delete your Google Docs or copies retained by your MCP application or AI provider. Manage those separately with each service. Maintainers cannot directly erase files on machines they do not operate.</p>
+    <h2>Contact</h2>
+    <p>For support and privacy questions: <a href="mailto:gdocs-scope-mcp@googlegroups.com">gdocs-scope-mcp@googlegroups.com</a>. Do not include tokens, browser completion URLs or document content. Review the group's archive visibility before sharing identifying information.</p>
+  </main>
+  <footer><p>Independent open-source software. Not a Google product.</p><p><a href="index.html">Home</a> · <a href="terms.html">Terms</a></p></footer>
+</body>
+</html>

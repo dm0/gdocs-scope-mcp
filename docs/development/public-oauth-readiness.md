@@ -154,8 +154,11 @@ not change the request or revoke existing grants.
 
 ## Remaining execution and evidence
 
-1. Review the [draft public content](public-site-content.md), prepare the static
-   Pages site and inspect its rendering. No deployment workflow is enabled yet.
+1. Review the local [homepage](../../website/index.html),
+   [privacy policy](../../website/privacy.html)
+   and [terms](../../website/terms.html). The static site needs no JavaScript,
+   build step, external fonts or analytics. Relative links work under a Pages
+   project path and a custom domain. No deployment workflow is enabled yet.
 2. Confirm non-commercial eligibility, chosen name and ownership of `dm0`;
    obtain real Google/GitHub verification challenges through the owner account.
 3. Inspect the target Cloud project: owners, enabled Docs/Drive/Picker APIs,
@@ -171,3 +174,23 @@ not change the request or revoke existing grants.
 #46 remains open throughout preparation. Prior test-user checks in #39/#40 do
 not prove public availability. No domain registration, external PR, email,
 Cloud update, verification submission or Git push was performed for this audit.
+
+## Local site checks
+
+The `website/` directory is the static publication artifact. Configure a future
+GitHub Pages Actions workflow to upload this directory;
+[branch-source Pages](https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site)
+publishing supports only the root or `/docs`, not an arbitrary `/website`
+folder. Do not publish the repository root with credentials or research files.
+Deployment workflow creation and execution remain separate from this preview.
+
+All three HTML pages were opened in the browser. The homepage and terms were
+also inspected at a 390-pixel viewport; navigation wraps and body text remains
+readable. Desktop rendering was inspected for the homepage and privacy policy.
+The preview uses only local static assets. The draft banners must remain until
+owner review is complete. Final publication also needs an effective date,
+operator identity and the reviewed Google data-use disclosure.
+
+Package metadata declares MIT, but no standalone `LICENSE` file was found in
+the working tree. Confirm the intended license text and attribution before
+publishing final terms; the draft does not invent a copyright holder.

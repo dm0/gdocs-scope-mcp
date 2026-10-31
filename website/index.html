@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Section-scoped Google Docs editing for MCP-compatible AI assistants.">
+  <title>gdocs-scope-mcp — work with the right section</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <header><a class="brand" href="index.html">gdocs-scope-mcp</a><nav aria-label="Main"><a href="privacy.html">Privacy</a><a href="terms.html">Terms</a><a href="mailto:gdocs-scope-mcp@googlegroups.com">Support</a></nav></header>
+  <main id="main">
+    <p class="notice">Draft preview · Not published · Public OAuth approval is pending.</p>
+    <section class="hero">
+      <p class="eyebrow">Google Docs / Model Context Protocol</p>
+      <h1>The document is large.<br>Work with the right section.</h1>
+      <p class="lead">Give your assistant a document outline, then read and edit the sections that matter. Use text anchors, native comments and suggestions while keeping edits scoped to the intended content.</p>
+      <p class="actions"><a class="button" href="https://github.com/dm0/gdocs-scope-mcp/blob/main/docs/getting-started.md">Read the setup guide <span aria-hidden="true">↗</span></a><a href="https://github.com/dm0/gdocs-scope-mcp">View source on GitHub</a></p>
+    </section>
+    <section class="example" aria-labelledby="workflow">
+      <div><p class="eyebrow">A focused workflow</p><h2 id="workflow">Outline → section → change</h2><p>Discover headings, read a selected subtree and apply a change using the text already in the document.</p></div>
+      <pre aria-label="Illustrative assistant workflow"><code>1. Find the “Results” heading.
+2. Read Results and its subsections.
+3. Replace a matching sentence there.
+4. Read the section to verify the change.</code></pre>
+      <p class="caption">Illustrative workflow. The server still fetches the Google Docs snapshot internally to resolve structure and edit positions.</p>
+    </section>
+    <section class="access" aria-labelledby="access"><p class="eyebrow">Your choice of access</p><h2 id="access">Connect selected files or use broad Drive access.</h2>
+      <div class="columns"><article><h3>Selected files</h3><p>Use Google Picker to connect documents with <code>drive.file</code>. Add more later; grants persist across server restarts. Pasting a link alone does not grant access.</p></article><article><h3>Full Drive</h3><p>The compatibility default supports account-wide document discovery and work on accessible Google Docs. It requests broader permissions and has additional Google verification requirements.</p></article></div>
+    </section>
+    <section aria-labelledby="operations"><p class="eyebrow">More than plain text</p><h2 id="operations">Review and edit native document content.</h2><p>Navigate tabs and heading subtrees. Read and write rich text, lists and tables. Attach native comments or propose text and formatting changes through native suggestions. Insert image references or explicitly enable temporary Drive uploads for local images.</p><p><a href="https://github.com/dm0/gdocs-scope-mcp/blob/main/docs/tools/documents.md">Explore the tool reference</a></p></section>
+    <section class="boundary" aria-labelledby="data"><p class="eyebrow">Know where your data goes</p><h2 id="data">Run it on the host you choose.</h2><p>The MCP server runs on your computer or remote host. Google API results are returned to your MCP application, which may send them to an AI provider and retain them under its own policies. Credentials live on the server machine. Read the privacy policy before connecting sensitive documents.</p><p><a href="privacy.html">Data access, storage and revocation →</a></p></section>
+    <section aria-labelledby="start"><h2 id="start">Start with the setup guide.</h2><p>The shared OAuth client is not yet verified for unrestricted public use. Your account may need to be added as a test user by the project owner. Custom OAuth clients remain supported.</p><p>Questions? <a href="mailto:gdocs-scope-mcp@googlegroups.com">gdocs-scope-mcp@googlegroups.com</a>. Do not send credentials or private document content to the support group.</p></section>
+  </main>
+  <footer><p>Independent open-source software. Not a Google product.</p><p><a href="privacy.html">Privacy</a> · <a href="terms.html">Terms</a> · <a href="https://github.com/dm0/gdocs-scope-mcp">GitHub</a></p></footer>
+</body>
+</html>
