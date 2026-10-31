@@ -216,18 +216,32 @@ unless explicitly enabled. Release verification runs both the complete offline
 suite and every authorized automated live scenario; use unfiltered `pytest`
 with the corresponding opt-ins for the final combined release run.
 
-Choose a disposable document that you are authorized to modify. Test insertions
-remain in the document; temporary source images are deleted. Follow any workspace
-authorization rules before opting in. Ordinary unit tests remain offline.
+Choose a disposable document that you are authorized to erase. Document-based
+live tests acquire a session lock for that document, then clear it before the
+first test and again at session teardown. Cleanup rejects pending proposals,
+deletes comments and named ranges, removes additional root and child tabs, and
+leaves one empty tab with normal text formatting. The document ID, title and
+first root tab identity are retained. A second local test session targeting the
+same document fails before cleanup. Ordinary unit tests never start this fixture.
+
+Session cleanup runs after test failures and handled interruption as well as
+successful runs. A killed process or host failure cannot execute teardown; the
+next live session clears any residue before testing. The JUnit suite property
+`live_document_session_report` points to an external JSON report containing
+before/after results and isolated server identities; separate stderr files are
+in the same temporary directory. Follow workspace authorization rules before
+opting in. Temporary source images and separately created documents retain
+their own fixture cleanup.
 
 For linked-worktree verification, run from that worktree using its environment.
 Launch an isolated STDIO process; do not reconfigure or restart a user's normal
 MCP connection. Permanent multi-step tests use the shared `isolated_mcp` and
 `table_probe` fixtures. Verify `server_info` package path and source fingerprint,
 capture stderr, read back native properties, and always close/reap test servers.
-Observe each fixture's cleanup contract: several insertion suites retain their
-insertions, while table probe fixtures restore the initial body. Live tests
-require authorization for the explicitly selected document.
+Within a session, individual fixtures still verify their local contracts:
+table probes restore their initial body and temporary-tab tests verify other
+tabs are unchanged. Session teardown then removes all remaining insertions.
+Live tests require authorization to erase the explicitly selected document.
 
 ## Implementation notes
 

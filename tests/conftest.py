@@ -1,10 +1,12 @@
 """Provide captured API data and an isolated Docs service for offline tests."""
 
+import asyncio
 import json
 import os
 import re
 import struct
 import sys
+import tempfile
 import zlib
 from contextlib import asynccontextmanager
 from copy import deepcopy
@@ -18,32 +20,90 @@ from fastmcp.client.transports import StdioTransport
 from gdocs_scope_mcp.diagnostics import capture_server_info
 from gdocs_scope_mcp.google_api import clients, credentials
 
+from .live_document_state import document_session, reset_document
 
-@pytest.fixture
+
+@pytest.fixture(scope='session')
 def isolated_mcp():
     """Provide a shared-session STDIO client tied to this checkout's source."""
     @asynccontextmanager
-    async def connect(log, *, probe=False):
+    async def connect(log, *, probe=False, environment=None):
         repo = Path(__file__).resolve().parents[1]
         executable = 'fastmcp' if probe else 'gdocs-scope-mcp'
         transport = StdioTransport(
             command=str(Path(sys.executable).parent / executable),
             args=(['run', str(repo / 'tests/probes/table_server.py'),
                    '--transport', 'stdio'] if probe else []),
-            cwd=str(repo), env=dict(os.environ), log_file=log,
+            cwd=str(repo), env=(dict(os.environ) if environment is None
+                               else environment), log_file=log,
             keep_alive=False,
         )
-        async with Client(transport) as client:
-            identity = await client.call_tool('server_info', {})
-            info = identity.structured_content
-            assert info['source_fingerprint'] == (
-                capture_server_info().source_fingerprint
-            )
-            assert info['package_path'] == str(repo / 'src/gdocs_scope_mcp')
-            yield client, info
-        assert not Path(f'/proc/{info["pid"]}').exists()
+        info = None
+        try:
+            async with Client(transport) as client:
+                identity = await client.call_tool('server_info', {})
+                info = identity.structured_content
+                assert info['source_fingerprint'] == (
+                    capture_server_info().source_fingerprint
+                )
+                assert info['package_path'] == str(
+                    repo / 'src/gdocs_scope_mcp',
+                )
+                yield client, info
+        finally:
+            if info is not None:
+                assert not Path(f'/proc/{info["pid"]}').exists()
 
     return connect
+
+
+@pytest.fixture(scope='session')
+def live_document_reset(isolated_mcp, record_testsuite_property):
+    """Retain the selected environment and external cleanup evidence."""
+    environment = dict(os.environ)
+    root = Path(tempfile.mkdtemp(prefix='gdocs-scope-mcp-live-session-',
+                                 dir='/tmp'))
+    report_path = root / 'report.json'
+    record_testsuite_property('live_document_session_report', str(report_path))
+    report = {}
+
+    async def run(phase):
+        report[phase] = {'status': 'running'}
+        try:
+            async with isolated_mcp(root / f'{phase}.stderr', probe=True,
+                                    environment=environment) as (client, info):
+                report[phase]['server'] = info
+                report[phase]['state'] = await reset_document(
+                    client, environment['GDOCS_SCOPE_MCP_LIVE_TEST_DOC'],
+                )
+            report[phase].update(status='passed', processes_reaped=True)
+        except BaseException:
+            report[phase]['status'] = 'failed'
+            raise
+        finally:
+            report_path.write_text(json.dumps(report, indent=2))
+
+    return lambda phase: asyncio.run(run(phase))
+
+
+@pytest.fixture(scope='session')
+def live_document_session(live_document_reset):
+    """Hold the document lock through final cleanup of failed sessions."""
+    doc_id = os.environ['GDOCS_SCOPE_MCP_LIVE_TEST_DOC']
+    with document_session(doc_id, live_document_reset):
+        yield doc_id
+
+
+@pytest.fixture(autouse=True)
+def live_document_guard(request):
+    """Start cleanup only for opted-in, document-based live tests."""
+    if (request.node.get_closest_marker('live') is not None
+            and 'live_test_doc' in request.fixturenames):
+        doc_id = request.getfixturevalue('live_test_doc')
+        protected = request.getfixturevalue('live_document_session')
+        assert doc_id == protected, (
+            'The live target changed during the session.'
+        )
 
 
 @pytest.fixture
