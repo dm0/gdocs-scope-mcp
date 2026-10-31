@@ -12,6 +12,7 @@ from pathlib import Path
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 
+from gdocs_scope_mcp.google_api.access import require_selected_scopes
 from gdocs_scope_mcp.google_api.oauth import PublicClientCredentials
 from gdocs_scope_mcp.settings import (
     default_token_path,
@@ -60,8 +61,14 @@ def load_token() -> dict:
     if token_file:
         return json.loads(Path(token_file).read_text())
     for token_path in [default_token_path(), *STANDALONE_TOKEN_PATHS]:
+        if (get_settings().access_mode == 'selected_files'
+                and token_path != default_token_path()):
+            continue
         if token_path.exists():
             return json.loads(token_path.read_text())
+    if get_settings().access_mode == 'selected_files':
+        raise RuntimeError('No selected-file credentials found. Run '
+                           'gdocs-scope-mcp-auth in selected_files mode.')
     try:
         token = export_gog_token()
         GOG_TOKEN_CACHE.write_text(json.dumps(token))
@@ -82,6 +89,9 @@ def load_token() -> dict:
 def load_credentials():
     """Return refreshed google.oauth2.credentials.Credentials."""
     token_data = load_token()
+    selected = get_settings().access_mode == 'selected_files'
+    if selected:
+        require_selected_scopes(token_data.get('scopes'))
     client_id = token_data.get('client_id') or token_data.get('_client_id')
     client_secret = token_data.get('client_secret') or token_data.get(
         '_client_secret'
@@ -122,4 +132,6 @@ def load_credentials():
         scopes=scopes,
     )
     creds.refresh(Request())
+    if selected:
+        require_selected_scopes(creds.granted_scopes)
     return creds
