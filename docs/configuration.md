@@ -194,7 +194,8 @@ not switch their OAuth client or document-access permissions.
 in JSON or through `GDOCS_SCOPE_MCP_ACCESS_MODE`, then restart the MCP server.
 An agent cannot override it through tool arguments.
 
-`docs_authorize` and `docs_authorization_status` are available in both modes.
+`docs_authorize`, `docs_authorization_complete` and
+`docs_authorization_status` are available in both modes.
 `docs_select_files` is registered only in `selected_files`; it is absent from
 the `full_drive` tool catalog. A mode change requires a server restart to
 update the catalog. The old `docs_selection_status` name is not registered.

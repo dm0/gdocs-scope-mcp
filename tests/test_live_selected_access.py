@@ -23,6 +23,8 @@ def test_live_picker_selection_and_restart(isolated_mcp, live_test_doc):
     root = token.parent
     root.mkdir(parents=True, exist_ok=True)
     evidence = root / 'selection-report.json'
+    callback_file = root / 'callback-url.txt'
+    assert not callback_file.exists(), 'Remove the stale callback file first'
     environment = {
         **os.environ, 'GDOCS_SCOPE_MCP_ACCESS_MODE': 'selected_files',
         'GDOCS_SCOPE_MCP_TOKEN': str(token),
@@ -40,12 +42,28 @@ def test_live_picker_selection_and_restart(isolated_mcp, live_test_doc):
             assert not started.is_error
             state = started.structured_content
             report['selection'] = state
+            report['manual_callback_file'] = str(callback_file)
             evidence.write_text(json.dumps(report, indent=2))
             print('PICKER_URL=' + state['authorization_url'], flush=True)
+            print('CALLBACK_FILE=' + str(callback_file), flush=True)
             deadline = time.monotonic() + 310
             while state['status'] == 'pending':
                 assert time.monotonic() < deadline, 'Picker wait expired'
                 await asyncio.sleep(1)
+                if callback_file.exists():
+                    try:
+                        submitted = await client.call_tool(
+                            'docs_authorization_complete', {
+                                'session_id': state['session_id'],
+                                'callback_url': (
+                                    callback_file.read_text().strip()
+                                ),
+                            },
+                        )
+                        assert not submitted.is_error
+                        report['manual_callback_submitted'] = True
+                    finally:
+                        callback_file.unlink(missing_ok=True)
                 result = await client.call_tool('docs_authorization_status', {
                     'session_id': state['session_id'],
                 })
@@ -75,4 +93,5 @@ def test_live_picker_selection_and_restart(isolated_mcp, live_test_doc):
     try:
         asyncio.run(run())
     finally:
+        callback_file.unlink(missing_ok=True)
         evidence.write_text(json.dumps(report, indent=2))

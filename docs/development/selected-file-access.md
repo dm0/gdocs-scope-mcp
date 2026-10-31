@@ -14,9 +14,10 @@ owns bounded background workers, loopback listeners and public session state.
 `tools/access.py` only adapts these operations to MCP.
 
 Registration uses the startup access mode. `docs_select_files` is advertised
-only in `selected_files`; `docs_authorize` and `docs_authorization_status` are
-registered in both modes. The status tool serves ordinary consent and Picker
-sessions. A server restart is needed after a mode change to update its catalog.
+only in `selected_files`; `docs_authorize`, `docs_authorization_complete` and
+`docs_authorization_status` are registered in both modes. Status covers consent
+and Picker sessions. A server restart is needed after a mode change to update
+its catalog.
 Permanent STDIO catalog tests cover both modes and verify process cleanup.
 
 Both the CLI and server read `access_mode`. Full-drive lookup remains compatible
@@ -94,6 +95,29 @@ image tests with `GDOCS_SCOPE_MCP_ACCESS_MODE=selected_files` and
 within the explicitly authorized development document. A later grant to a
 second existing document requires separate authorization for that document.
 Public OAuth verification remains outside this issue.
+
+### Remote browser completion
+
+Remote Codex clients can open the Google URL on another computer without an SSH
+tunnel. `docs_authorization_complete` submits the complete returned redirect
+URL to the original server session. An authenticated HTTP callback and a manual
+submission share one locked receiver; only one can consume the response.
+Validation precedes consumption, and no callback URL is fetched. The worker
+exchanges the code with its retained verifier exactly once. Existing deadline,
+account, scope and token-generation checks remain in effect.
+
+The callback contains a short-lived code and is never included in server
+responses, package logs or evidence reports. The MCP host can retain messages
+and tool arguments, so those surfaces must also be treated as sensitive.
+Permanent MCP tests cover manual completion in both modes, invalid state,
+destination and payload size, cancellation, expiry and concurrent submission.
+
+For interactive live verification, the test reports a `CALLBACK_FILE` path in
+the separate token directory. Use a private directory. Place the full callback
+URL there atomically when supplied by the user; the test sends it through the
+MCP completion tool and removes the file immediately, also on failure. Never
+copy callback contents into test reports or command-line arguments. The normal
+loopback callback remains supported by that same test.
 
 ### Upgrading to full-drive authorization
 

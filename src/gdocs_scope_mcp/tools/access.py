@@ -77,3 +77,28 @@ def register(mcp):
         """
         return selection.manager.start(open_browser=open_browser,
                                        selection_only=False)
+
+    @mcp.tool(
+        output_schema=tool_response_schema(selection.SelectionStatus),
+        annotations={'readOnlyHint': False, 'destructiveHint': False,
+                     'idempotentHint': False, 'openWorldHint': True},
+    )
+    def docs_authorization_complete(
+        session_id: str, callback_url: str,
+    ) -> selection.SelectionStatus:
+        """
+        Submit a full OAuth redirect URL from a browser on another computer.
+
+        First start docs_authorize or docs_select_files with open_browser=False
+        and give the user authorization_url. After consent, the browser may
+        fail to connect to 127.0.0.1; ask for the full address-bar URL.
+        Pass it here with the original session_id in the same server process,
+        before expiry. A bare code cannot replace the complete redirect URL.
+        The server validates destination, state and PKCE session, then handles
+        the callback once. It does not navigate to or fetch callback_url.
+        Poll docs_authorization_status for final completion; do not resubmit
+        a callback after an uncertain result. This works in both access modes.
+        The URL contains a short-lived authorization code: do not quote it in
+        replies or reports. Tokens and PKCE verifier stay inside the server.
+        """
+        return selection.manager.complete(session_id, callback_url)

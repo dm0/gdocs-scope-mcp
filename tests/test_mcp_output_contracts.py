@@ -728,6 +728,7 @@ def test_catalog_contract_covers_every_registered_tool():
         'docs_table_structure',
         'docs_suggest', 'docs_suggestions_manage',
         'docs_authorization_status', 'docs_authorize',
+        'docs_authorization_complete',
     }
     if server.SERVER_INFO.access_mode == 'selected_files':
         expected.add('docs_select_files')

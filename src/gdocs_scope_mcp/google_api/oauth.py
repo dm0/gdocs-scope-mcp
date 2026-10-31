@@ -35,6 +35,10 @@ class AuthorizationError(ValueError):
     """Report an authorization failure without returning sensitive payloads."""
 
 
+class AuthorizationDeniedError(AuthorizationError):
+    """Distinguish authenticated cancellation from invalid callbacks."""
+
+
 @dataclass(repr=False)
 class AuthorizationSession:
     """Tie the verifier and state to one client, redirect and deadline."""
@@ -122,6 +126,9 @@ class AuthorizationSession:
     def callback_code(self, callback_url):
         """Validate the exact callback destination and unambiguous response."""
         self.check_active()
+        if (not isinstance(callback_url, str)
+                or len(callback_url) > MAX_CALLBACK_LENGTH):
+            raise AuthorizationError('Invalid OAuth callback URL.')
         target = urlsplit(self.redirect_uri)
         callback = urlsplit(callback_url)
         if ((callback.scheme, callback.netloc, callback.path)
@@ -139,6 +146,8 @@ class AuthorizationSession:
         if 'error' in params:
             if 'code' in params:
                 raise AuthorizationError('Ambiguous OAuth callback.')
+            if params['error'] == ['access_denied']:
+                raise AuthorizationDeniedError('Authorization was denied.')
             raise AuthorizationError('Google authorization was denied.')
         code = params.get('code', [''])[0]
         if not code:

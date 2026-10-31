@@ -7,7 +7,7 @@ import time
 import webbrowser
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Literal
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import urlsplit
 
 from filelock import Timeout
 from pydantic import BaseModel, Field
@@ -66,40 +66,60 @@ class LoopbackServer(HTTPServer):
         return connection, address
 
 
-def selection_handler(session, result):
+class CallbackReceiver:
+    """Accept one authenticated callback across manual and HTTP delivery."""
+
+    def __init__(self, session):
+        """Keep the session and callback result private to this receiver."""
+        self.session = session
+        self.lock = threading.Lock()
+        self.result = None
+
+    def submit(self, callback_url):
+        """Validate before atomically consuming one callback."""
+        with self.lock:
+            if self.result is not None:
+                fail('EDIT_CONFLICT', 'This callback was already submitted.')
+            try:
+                code = self.session.callback_code(callback_url)
+            except oauth.AuthorizationDeniedError:
+                self.result = {'status': 'cancelled'}
+                return False
+            try:
+                ids = (self.session.picked_files(callback_url)
+                       if self.session.picker else [])
+            except oauth.AuthorizationError:
+                self.result = {'status': 'failed'}
+                return False
+            self.result = {'code': code, 'ids': ids}
+            return True
+
+    def snapshot(self):
+        """Return private callback data only to its worker."""
+        with self.lock:
+            return None if self.result is None else dict(self.result)
+
+
+def selection_handler(receiver):
     """Accept authenticated Picker callbacks without logging their content."""
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
             """Ignore unrelated and unauthenticated requests."""
-            if (len(self.path) > oauth.MAX_CALLBACK_LENGTH
-                    or urlsplit(self.path).path != oauth.CALLBACK_PATH):
+            try:
+                valid_path = urlsplit(self.path).path == oauth.CALLBACK_PATH
+            except ValueError:
+                valid_path = False
+            if len(self.path) > oauth.MAX_CALLBACK_LENGTH or not valid_path:
                 self.send_error(404)
                 return
-            callback = (session.redirect_uri.removesuffix(oauth.CALLBACK_PATH)
-                        + self.path)
-            params = parse_qs(urlsplit(callback).query, keep_blank_values=True)
+            origin = receiver.session.redirect_uri.removesuffix(
+                oauth.CALLBACK_PATH,
+            )
             try:
-                # Validate destination, duplicate parameters and state first.
-                session.callback_code(callback)
-            except oauth.AuthorizationError:
-                # Denial is terminal only after independently checking state.
-                state = params.get('state', [])
-                valid_state = (len(state) == 1 and secrets.compare_digest(
-                    state[0].encode(), session.state.encode(),
-                ))
-                if (valid_state and params.get('error') == ['access_denied']
-                        and 'code' not in params
-                        and all(len(v) == 1 for v in params.values())):
-                    result['status'] = 'cancelled'
-                self.respond(400)
-                return
-            try:
-                result['ids'] = (session.picked_files(callback)
-                                 if session.picker else [])
-                result['code'] = params['code'][0]
-            except oauth.AuthorizationError:
-                result['status'] = 'failed'
-            self.respond(200 if 'code' in result else 400)
+                accepted = receiver.submit(origin + self.path)
+            except (ValueError, ToolFailureError):
+                accepted = False
+            self.respond(200 if accepted else 400)
 
         def respond(self, status):
             """Return a static page without reflecting user input."""
@@ -124,6 +144,7 @@ class SelectionManager:
         self.lock = threading.RLock()
         self.stop = threading.Event()
         self.entries = {}
+        self.callbacks = {}
         self.workers = []
 
     def status(self, session_id):
@@ -147,6 +168,20 @@ class SelectionManager:
         }
         self.workers = [worker for worker in self.workers if worker.is_alive()]
 
+    def complete(self, session_id, callback_url):
+        """Submit a remote callback without opening or fetching its URL."""
+        with self.lock:
+            public = self.status(session_id)
+            receiver = self.callbacks.get(session_id)
+            if public.status != 'pending' or receiver is None:
+                fail('EDIT_CONFLICT', 'Session is not awaiting a callback.')
+            try:
+                receiver.submit(callback_url)
+            except ValueError:
+                fail('INVALID_ARGUMENT', 'Invalid OAuth callback. Supply the '
+                     'complete redirect URL from this authorization session.')
+            return self.status(session_id)
+
     def start(self, *, open_browser=True, timeout=oauth.DEFAULT_TIMEOUT,
               selection_only=True):
         """Start selection without waiting for browser interaction."""
@@ -166,6 +201,7 @@ class SelectionManager:
             except Timeout:
                 fail('EDIT_CONFLICT', 'Another authorization owns this path.')
             server = None
+            session_id = None
             try:
                 previous = authorization.authorization_seed(path, mode)
                 if previous:
@@ -195,10 +231,14 @@ class SelectionManager:
                     authorization_url=session.authorization_url(),
                 )
                 self.entries[session_id] = public
+                receiver = CallbackReceiver(session)
+                self.callbacks[session_id] = receiver
+                server.RequestHandlerClass = selection_handler(receiver)
                 worker = threading.Thread(
                     target=self.run,
                     args=(session_id, session, secret, server, destination,
-                          path, authorization.generation(path), previous),
+                          path, authorization.generation(path), previous,
+                          receiver),
                     daemon=True, name='gdocs-picker',
                 )
                 self.workers.append(worker)
@@ -206,6 +246,9 @@ class SelectionManager:
             except BaseException:
                 if server is not None:
                     server.server_close()
+                if session_id is not None:
+                    self.entries.pop(session_id, None)
+                    self.callbacks.pop(session_id, None)
                 destination.release()
                 raise
         if open_browser:
@@ -226,22 +269,22 @@ class SelectionManager:
                                       for item in documents],
                         'failure_code': failure_code},
             )
+            self.callbacks.pop(session_id, None)
             log.info('selection status=%s failure_code=%s',
                      status, failure_code)
 
     def run(self, session_id, session, secret, server, destination,  # noqa: PLR0917
-            path, expected, previous):
+            path, expected, previous, receiver):
         """Exchange once and always close resources."""
-        result = {}
-        server.RequestHandlerClass = selection_handler(session, result)
         server.timeout = 0.2
         try:
             with server:
-                while not result and not self.stop.is_set():
+                while receiver.snapshot() is None and not self.stop.is_set():
                     if time.time() >= session.expires_at:
                         self.finish(session_id, 'expired')
                         return
                     server.handle_request()
+            result = receiver.snapshot() or {}
             if self.stop.is_set():
                 self.finish(session_id, 'cancelled')
                 return

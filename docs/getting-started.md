@@ -126,6 +126,18 @@ Picker API in its Cloud project.
 
 ## Authorize without a local browser
 
+If your MCP server runs on another computer, your assistant can start browser
+authorization without opening a browser on that server. Open the supplied
+Google URL on your computer and complete consent or file selection. The final
+redirect may show a connection error for `127.0.0.1`; copy the full address-bar
+URL and give it to your assistant to finish the original session. No SSH tunnel
+is required. Complete this within the session's five-minute lifetime.
+
+The redirect contains a short-lived authorization code. The server validates
+the entire URL against its original session; a bare code is insufficient. Your
+chat or MCP host may retain submitted messages or tool arguments, so handle the
+URL as sensitive and do not include it in shared reports.
+
 For a remote host or terminal without a browser:
 
 ```bash

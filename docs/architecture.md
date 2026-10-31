@@ -14,7 +14,7 @@ application operation merely to reuse one of its helpers.
 | `google_api/credentials.py` | Token precedence, canonical environment overrides, legacy token-file paths, gog fallback and OAuth refresh. |
 | `google_api/access.py` | Shared access-mode scope policy, grant validation and authorization recovery guidance, independent of MCP. |
 | `google_api/authorization.py` | Desktop client selection, narrow-to-full grant upgrades, account/file verification and private atomic token installation. |
-| `google_api/selection.py` | Bounded asynchronous consent and Desktop Picker sessions, callback listeners and credential destination locks. |
+| `google_api/selection.py` | Bounded asynchronous consent and Desktop Picker sessions, a shared one-use receiver for HTTP/manual callbacks, listeners and credential destination locks. |
 | `google_api/oauth.py` | Shared Desktop client configuration, PKCE sessions, callback validation, private session files, token exchange and the google-auth public-client refresh adapter. |
 | `auth_setup.py` | Desktop authorization CLI, bounded loopback listener and headless session lifecycle. |
 | `google_api/clients.py` | Construct discovery clients; cache Docs reads by default, with explicit uncached construction where required. |

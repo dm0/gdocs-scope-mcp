@@ -2,10 +2,13 @@
 
 import asyncio
 import json
+import logging
 import os
 import socket
 import webbrowser
+from concurrent.futures import ThreadPoolExecutor
 from http import HTTPStatus
+from threading import Barrier
 from unittest.mock import Mock
 from urllib.error import HTTPError
 from urllib.parse import parse_qs, urlencode, urlsplit
@@ -28,7 +31,7 @@ from gdocs_scope_mcp.google_api.access import (
     FULL_SCOPES,
 )
 from gdocs_scope_mcp.settings import default_token_path, get_settings
-from gdocs_scope_mcp.tool_logging import ToolCallLoggingMiddleware
+from gdocs_scope_mcp.tool_logging import ToolCallLoggingMiddleware, logger
 from gdocs_scope_mcp.tools import access as access_tools
 
 
@@ -363,9 +366,134 @@ def test_stdio_catalog_matches_mode(isolated_mcp, tmp_path, mode):
             tools = {tool.name: tool for tool in await client.list_tools()}
             assert 'docs_authorize' in tools
             assert 'docs_authorization_status' in tools
+            assert 'docs_authorization_complete' in tools
             assert 'docs_selection_status' not in tools
             assert ('docs_select_files' in tools) == (mode == 'selected_files')
             assert tools['docs_authorization_status'].annotations.readOnlyHint
             assert not tools['docs_authorize'].annotations.readOnlyHint
     asyncio.run(check())
     assert not (tmp_path / 'missing-token.json').exists()
+
+
+@pytest.mark.parametrize('mode', ['full_drive', 'selected_files'])
+def test_remote_mcp_authorization(sessions, monkeypatch, caplog, mode):
+    """A copied callback completes OAuth without contacting a loopback URL."""
+    manager, exchange, path = sessions
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_ACCESS_MODE', mode)
+    get_settings.cache_clear()
+    expected = DRIVE_FULL if mode == 'full_drive' else DRIVE_FILE
+    exchange.return_value = {
+        'access_token': 'access', 'refresh_token': 'refresh',
+        'scope': expected,
+    }
+    drive = Mock()
+    drive.about().get().execute.return_value = {
+        'user': {'permissionId': 'account'},
+    }
+    monkeypatch.setattr(authorization, 'build', Mock(return_value=drive))
+    monkeypatch.setattr(selection, 'manager', manager)
+    caplog.set_level(logging.INFO, logger='gdocs_scope_mcp')
+    logger.addHandler(caplog.handler)
+    async def run():
+        async with Client(access_server()) as client:
+            tools = {tool.name: tool for tool in await client.list_tools()}
+            hints = tools['docs_authorization_complete'].annotations
+            assert not hints.readOnlyHint
+            started = await client.call_tool('docs_authorize', {
+                'open_browser': False,
+            })
+            public = selection.SelectionStatus(**started.structured_content)
+            url = callback(public, code='REMOTE_PRIVATE_CODE')
+            bad = await client.call_tool('docs_authorization_complete', {
+                'session_id': public.session_id,
+                'callback_url': url.replace('state=', 'state=wrong'),
+            }, raise_on_error=False)
+            assert bad.is_error
+            assert bad.structured_content['code'] == 'INVALID_ARGUMENT'
+            submitted = await client.call_tool('docs_authorization_complete', {
+                'session_id': public.session_id, 'callback_url': url,
+            })
+            validate(submitted.structured_content,
+                     tools['docs_authorization_complete'].outputSchema)
+            assert 'REMOTE_PRIVATE_CODE' not in submitted.content[0].text
+            assert finish(manager, public).status == 'completed'
+            duplicate = await client.call_tool('docs_authorization_complete', {
+                'session_id': public.session_id, 'callback_url': url,
+            }, raise_on_error=False)
+            assert duplicate.is_error
+            assert duplicate.structured_content['code'] == 'EDIT_CONFLICT'
+    try:
+        asyncio.run(run())
+    finally:
+        logger.removeHandler(caplog.handler)
+    assert 'docs_authorization_complete' in caplog.text
+    assert 'REMOTE_PRIVATE_CODE' not in caplog.text
+    exchange.assert_called_once()
+    assert json.loads(path.read_text())['scopes'] == [expected]
+
+
+@pytest.mark.parametrize('invalid', [
+    'bare', 'wrong_state', 'wrong_destination', 'fragment',
+    'duplicate_state', 'oversized', 'malformed_host',
+])
+def test_manual_callback_validation(sessions, invalid):
+    """Manual completion retains exact destination, state and size checks."""
+    manager, exchange, path = sessions
+    public = manager.start(open_browser=False)
+    url = callback(public)
+    bad = {
+        'bare': 'bare-code',
+        'wrong_state': url.replace('state=', 'state=wrong'),
+        'wrong_destination': url.replace('/oauth2/callback', '/other'),
+        'fragment': url + '#fragment',
+        'duplicate_state': url + '&state=duplicate',
+        'oversized': url + '&padding=' + 'x' * oauth.MAX_CALLBACK_LENGTH,
+        'malformed_host': 'http://[invalid',
+    }[invalid]
+    with pytest.raises(ToolFailureError) as raised:
+        manager.complete(public.session_id, bad)
+    assert raised.value.failure.code == 'INVALID_ARGUMENT'
+    assert manager.status(public.session_id).status == 'pending'
+    exchange.assert_not_called()
+    assert not path.exists()
+    manager.complete(public.session_id, url)
+    assert finish(manager, public).status == 'completed'
+
+
+def test_manual_denial_and_expiry(sessions):
+    """Expired and cancelled remote sessions cannot exchange credentials."""
+    manager, exchange, path = sessions
+    public = manager.start(open_browser=False)
+    url = callback(public).split('&code=')[0] + '&error=access_denied'
+    manager.complete(public.session_id, url)
+    assert finish(manager, public).status == 'cancelled'
+    expired = manager.start(open_browser=False, timeout=1)
+    assert finish(manager, expired).status == 'expired'
+    with pytest.raises(ToolFailureError) as raised:
+        manager.complete(expired.session_id, callback(expired))
+    assert raised.value.failure.code == 'EDIT_CONFLICT'
+    exchange.assert_not_called()
+    assert not path.exists()
+    assert not manager.callbacks
+
+
+def test_callback_channels_accept_only_one_submission(sessions):
+    """HTTP and manual delivery share one atomic callback receiver."""
+    manager, exchange, _ = sessions
+    public = manager.start(open_browser=False)
+    receiver = manager.callbacks[public.session_id]
+    barrier = Barrier(2)
+    def submit():
+        barrier.wait(timeout=2)
+        try:
+            receiver.submit(callback(public))
+        except ToolFailureError as error:
+            return error.failure.code
+        return 'accepted'
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = [future.result(timeout=3)
+                   for future in [pool.submit(submit), pool.submit(submit)]]
+    assert sorted(results) == ['EDIT_CONFLICT', 'accepted']
+    assert finish(manager, public).status == 'completed'
+    exchange.assert_called_once()
+    assert not manager.callbacks

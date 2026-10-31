@@ -48,9 +48,24 @@ files available to the application, including previously selected and
 application-created files. It is not an account-wide inventory or an allowlist
 limited to the latest selection. A pasted URL does not grant access.
 
-`docs_authorize` and `docs_authorization_status` are available in both modes.
+`docs_authorize`, `docs_authorization_complete` and
+`docs_authorization_status` are available in both modes.
 `docs_select_files` is available only in the `selected_files` tool catalog.
 Changing modes requires restarting the server to update tool registration.
+
+For a browser on another computer, start authorization/selection with
+`open_browser=False` and present `authorization_url`. After consent, the browser
+may fail to connect to its local `127.0.0.1`. Ask the user for the complete
+address-bar redirect URL and pass it with the original `session_id` to
+`docs_authorization_complete`. The server validates destination, state and
+expiry, then accepts the callback once using its retained PKCE verifier. This
+tool never navigates to or fetches the callback URL. Poll status afterwards;
+do not resubmit after an uncertain result. Manual and HTTP delivery share one
+receiver, so they cannot exchange a callback twice. Wrong-state/destination
+callbacks return `INVALID_ARGUMENT` without consuming the session. Repeated or
+terminal submissions return `EDIT_CONFLICT`; unknown IDs return
+`RESOURCE_NOT_FOUND`. Handle the URL as sensitive and never repeat its code in
+replies, logs or reports. The MCP host may retain submitted tool arguments.
 
 Call `docs_select_files(open_browser=True)` only for an explicit selection
 workflow. It returns `session_id`, `status`, `expires_at`, `browser_opened` and

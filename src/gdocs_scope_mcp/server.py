@@ -148,6 +148,11 @@ DOCUMENT ACCESS:
     to the user and poll docs_authorization_status. The tool requests only the
     configured mode; agents cannot override it. Full authorization completes
     with an empty documents list. The old token is retained on denial/failure.
+    For a browser on another computer, start with open_browser=False. After
+    consent, ask for the complete address-bar redirect URL even if localhost
+    fails to connect. Pass it to docs_authorization_complete with the original
+    session_id, then poll docs_authorization_status. Do not navigate to that
+    callback URL or quote its short-lived code in replies or reports.
     Do not launch selection automatically for every permission error or retry
     failed writes after granting access without inspecting their outcome.
 
