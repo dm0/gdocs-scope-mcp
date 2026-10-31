@@ -26,6 +26,7 @@ SCOPES = FULL_SCOPES
 CLIENT_ID_ENV_VAR = 'GDOCS_SCOPE_MCP_CLIENT_ID'
 CLIENT_SECRET_ENV_VAR = 'GDOCS_SCOPE_MCP_CLIENT_SECRET'
 _access_mode = ContextVar('authorization_access_mode', default=None)
+_attempt = ContextVar('authorization_destination', default=None)
 
 
 def configured_mode():
@@ -51,8 +52,18 @@ def save_token(token_response, session, client_secret, out_path,
     selected = configured_mode() == 'selected_files'
     if session.picker != selected:
         raise oauth.AuthorizationError('Authorization access mode changed.')
-    with authorization.destination_lock(out_path):
-        expected = authorization.generation(out_path)
+    out_path = out_path.expanduser().resolve()
+    attempt = _attempt.get()
+    lock = (attempt[1] if attempt is not None
+            else authorization.destination_lock(out_path))
+    if (session.token_destination is not None
+            and session.token_destination != str(out_path)):
+        raise oauth.AuthorizationError('Authorization destination changed.')
+    with lock:
+        expected = (session.token_generation
+                    if session.token_generation is not None else
+                    attempt[2] if attempt is not None else
+                    authorization.generation(out_path))
         data = authorization.token_data(token_response, session, client_secret)
         if selected:
             previous = (json.loads(out_path.read_text())
@@ -67,10 +78,15 @@ def save_token(token_response, session, client_secret, out_path,
 def create_session(client_id, redirect, timeout):
     """Bind CLI authorization to the configured access mode."""
     mode = configured_mode()
-    return oauth.AuthorizationSession.create(
+    session = oauth.AuthorizationSession.create(
         client_id, redirect, scopes_for_mode(mode), timeout,
         picker=mode == 'selected_files',
     )
+    attempt = _attempt.get()
+    if attempt is not None:
+        session.token_destination = str(attempt[0])
+        session.token_generation = attempt[2]
+    return session
 
 
 class CallbackServer(HTTPServer):
@@ -195,6 +211,8 @@ def main():
         parser.error('--session requires a headless or callback mode')
 
     context = None
+    destination_context = None
+    destination = None
     try:
         if args.credentials:
             config = load_client_config(args.credentials.expanduser())
@@ -213,6 +231,12 @@ def main():
             configured_token = optional_env('GDOCS_SCOPE_MCP_TOKEN')
             args.out = (Path(configured_token) if configured_token
                         else default_token_path(mode))
+        path = args.out.expanduser().resolve()
+        destination = authorization.destination_lock(path)
+        destination.acquire()
+        destination_context = _attempt.set((
+            path, destination, authorization.generation(path),
+        ))
         if args.callback_url:
             session, code = oauth.consume_session(args.session.expanduser(),
                                                   args.callback_url)
@@ -270,6 +294,10 @@ def main():
         print('Authorization cancelled.', file=sys.stderr)
         raise SystemExit(1) from None
     finally:
+        if destination_context is not None:
+            _attempt.reset(destination_context)
+        if destination is not None:
+            destination.release()
         if context is not None:
             _access_mode.reset(context)
     print('✓ Authorisation successful')

@@ -57,6 +57,7 @@ def generation(path):
 
 def destination_lock(path):
     """Serialize authorization attempts targeting the same credential file."""
+    path = path.expanduser().resolve()
     path.parent.mkdir(parents=True, exist_ok=True)
     return FileLock(str(path) + '.lock', timeout=0, thread_local=False)
 
@@ -128,6 +129,7 @@ def _selection_metadata(drive, session, file_ids, previous):
 
 def install_token(path, data, expected):
     """Replace a private token only if its generation is unchanged."""
+    path = path.expanduser().resolve()
     path.parent.mkdir(parents=True, exist_ok=True)
     if generation(path) != expected:
         raise SelectionError('CREDENTIALS_CHANGED')

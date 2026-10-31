@@ -46,6 +46,8 @@ class AuthorizationSession:
     verifier: str = field(repr=False)
     state: str = field(repr=False)
     picker: bool = False
+    token_destination: str | None = None
+    token_generation: str | None = None
 
     def __post_init__(self):
         """Reject malformed saved sessions before they can make requests."""
@@ -63,6 +65,10 @@ class AuthorizationSession:
                 or not isinstance(self.expires_at, (int, float))
                 or not math.isfinite(self.expires_at)
                 or not isinstance(self.picker, bool)
+                or (self.token_destination is not None
+                    and not isinstance(self.token_destination, str))
+                or (self.token_generation is not None
+                    and not isinstance(self.token_generation, str))
                 or not isinstance(self.scopes, list)
                 or not all(isinstance(scope, str) for scope in self.scopes)):
             raise AuthorizationError('Invalid authorization session.')

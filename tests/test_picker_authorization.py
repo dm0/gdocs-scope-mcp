@@ -7,6 +7,7 @@ from unittest.mock import Mock
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
+from filelock import Timeout
 
 from gdocs_scope_mcp import auth_setup
 from gdocs_scope_mcp.errors import ToolFailureError
@@ -111,6 +112,67 @@ def test_atomic_generation_guard(tmp_path):
         authorization.install_token(path, {'refresh_token': 'old'}, expected)
     assert path.read_text() == 'new contents'
     assert list(tmp_path.glob('.token-*')) == []
+
+
+def test_token_aliases_share_lock_and_atomic_target(tmp_path):
+    """A symlink cannot bypass the destination lock or replace its identity."""
+    target = tmp_path / 'token.json'
+    target.write_text('{}')
+    alias = tmp_path / 'alias.json'
+    alias.symlink_to(target)
+    with authorization.destination_lock(target):
+        with pytest.raises(Timeout), authorization.destination_lock(alias):
+            pytest.fail('Alias bypassed credential destination lock')
+        authorization.install_token(alias, {'saved': True},
+                                    authorization.generation(target))
+    assert alias.is_symlink()
+    assert json.loads(target.read_text()) == {'saved': True}
+
+
+def test_saved_picker_attempt_cannot_overwrite_newer_token(
+    picker, tmp_path, monkeypatch,
+):
+    """Headless prepare binds the destination generation across CLI runs."""
+    _, tokens, _ = picker
+    path = tmp_path / 'token.json'
+    pending = tmp_path / 'pending.json'
+    args = ['auth', '--client-id', 'client', '--client-secret', 'secret',
+            '--out', str(path), '--session', str(pending)]
+    monkeypatch.setattr(auth_setup.sys, 'argv', [*args, '--prepare'])
+    auth_setup.main()
+    session = oauth.AuthorizationSession(**json.loads(pending.read_text()))
+    assert session.token_destination == str(path)
+    assert session.token_generation == ''
+    path.write_text(json.dumps({
+        'client_id': 'client', 'account_id': 'account',
+        'scopes': [DRIVE_FILE], 'refresh_token': 'newer',
+    }))
+    before = path.read_bytes()
+    monkeypatch.setattr(oauth, 'Request', lambda: Mock(return_value=
+        SimpleNamespace(status=200, data=json.dumps(tokens).encode())))
+    monkeypatch.setattr(auth_setup.sys, 'argv', [
+        *args, '--callback-url', callback(session),
+    ])
+    with pytest.raises(SystemExit):
+        auth_setup.main()
+    assert path.read_bytes() == before
+
+
+@pytest.mark.usefixtures('picker')
+def test_cli_holds_destination_lock(tmp_path, monkeypatch):
+    """A concurrent MCP start cannot claim an active CLI's token path."""
+    path = tmp_path / 'token.json'
+    def consent(*_args):
+        with pytest.raises(Timeout), authorization.destination_lock(path):
+            pytest.fail('CLI did not reserve its credential destination')
+    monkeypatch.setattr(auth_setup, 'run_local_flow', consent)
+    monkeypatch.setattr(auth_setup.sys, 'argv', [
+        'auth', '--client-id', 'client', '--client-secret', 'secret',
+        '--out', str(path),
+    ])
+    auth_setup.main()
+    with authorization.destination_lock(path):
+        pass
 
 
 @pytest.mark.parametrize('mode', ['headless', 'saved'])
