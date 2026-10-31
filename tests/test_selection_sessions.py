@@ -15,10 +15,19 @@ from fastmcp import Client
 from jsonschema import validate
 
 from gdocs_scope_mcp.errors import ToolFailureError
-from gdocs_scope_mcp.google_api import authorization, oauth, selection
-from gdocs_scope_mcp.google_api.access import DRIVE_FILE
+from gdocs_scope_mcp.google_api import (
+    authorization,
+    credentials,
+    oauth,
+    selection,
+)
+from gdocs_scope_mcp.google_api.access import (
+    DRIVE_FILE,
+    DRIVE_FULL,
+    FULL_SCOPES,
+)
 from gdocs_scope_mcp.server import mcp
-from gdocs_scope_mcp.settings import get_settings
+from gdocs_scope_mcp.settings import default_token_path, get_settings
 
 
 @pytest.fixture
@@ -189,3 +198,139 @@ def test_mcp_selection_contract(sessions, monkeypatch):
             validate(missing.structured_content,
                      tools['docs_selection_status'].outputSchema)
     asyncio.run(run())
+
+
+@pytest.mark.parametrize('outcome', ['success', 'denied', 'insufficient',
+                                   'other_account'])
+def test_mcp_full_drive_upgrade(sessions, monkeypatch, outcome):
+    """Upgrade a narrow token only after valid same-account consent."""
+    manager, exchange, path = sessions
+    original = {
+        'client_id': 'original-client', 'account_id': 'account',
+        'access_mode': 'selected_files', 'auth_method': 'pkce-public',
+        'refresh_token': 'narrow-refresh', 'scopes': [DRIVE_FILE],
+    }
+    path.write_text(json.dumps(original))
+    before = path.read_bytes()
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_ACCESS_MODE', 'full_drive')
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_CLIENT_ID', 'ambient-other-client')
+    get_settings.cache_clear()
+    with pytest.raises(ToolFailureError) as raised:
+        credentials.load_credentials()
+    assert 'docs_authorize' in raised.value.failure.suggested_action
+    drive = Mock()
+    drive.about().get().execute.return_value = {
+        'user': {'permissionId': ('other' if outcome == 'other_account'
+                                  else 'account')},
+    }
+    monkeypatch.setattr(authorization, 'build', Mock(return_value=drive))
+    exchange.return_value = {
+        'access_token': 'new-access', 'refresh_token': 'broad-refresh',
+        'scope': DRIVE_FILE if outcome == 'insufficient' else DRIVE_FULL,
+    }
+    monkeypatch.setattr(selection, 'manager', manager)
+    async def start():
+        async with Client(mcp) as client:
+            tools = {tool.name: tool for tool in await client.list_tools()}
+            assert not tools['docs_authorize'].annotations.readOnlyHint
+            result = await client.call_tool('docs_authorize', {
+                'open_browser': False,
+            })
+            validate(result.structured_content,
+                     tools['docs_authorize'].outputSchema)
+            return selection.SelectionStatus(**result.structured_content)
+    public = asyncio.run(start())
+    query = parse_qs(urlsplit(public.authorization_url).query)
+    assert query['client_id'] == ['original-client']
+    assert query['scope'][0].split() == FULL_SCOPES
+    assert 'trigger_onepick' not in query
+    assert query['prompt'] == ['consent']
+    if outcome == 'denied':
+        url = (query['redirect_uri'][0] + '?' + urlencode({
+            'state': query['state'][0], 'error': 'access_denied',
+        }))
+        with pytest.raises(HTTPError):
+            urlopen(url, timeout=2)
+    else:
+        with urlopen(callback(public, picked_file_ids=''), timeout=2):
+            pass
+    result = finish(manager, public)
+    if outcome == 'success':
+        assert result.status == 'completed'
+        assert result.documents == []
+        saved = json.loads(path.read_text())
+        assert saved['scopes'] == [DRIVE_FULL]
+        assert saved['access_mode'] == 'full_drive'
+        assert saved['account_id'] == 'account'
+        assert saved['client_id'] == 'original-client'
+        def refresh(self, _request):
+            self._granted_scopes = [DRIVE_FULL]
+        monkeypatch.setattr(credentials.PublicClientCredentials,
+                            'refresh', refresh)
+        assert credentials.load_credentials().refresh_token == 'broad-refresh'
+    else:
+        assert path.read_bytes() == before
+        assert result.status == (
+            'cancelled' if outcome == 'denied' else 'failed'
+        )
+        if outcome == 'insufficient':
+            assert result.failure_code == 'INVALID_SCOPES'
+        if outcome == 'other_account':
+            assert result.failure_code == 'ACCOUNT_MISMATCH'
+
+
+def test_default_upgrade_account(sessions, monkeypatch):
+    """Separate default paths retain the selected account and client."""
+    manager, _, explicit = sessions
+    original = {'client_id': 'selected-client', 'account_id': 'account',
+                'scopes': [DRIVE_FILE], 'refresh_token': 'selected-refresh'}
+    monkeypatch.delenv('GDOCS_SCOPE_MCP_TOKEN')
+    monkeypatch.setenv('XDG_CONFIG_HOME', str(explicit.parent))
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_ACCESS_MODE', 'full_drive')
+    get_settings.cache_clear()
+    narrow = default_token_path('selected_files')
+    narrow.parent.mkdir(parents=True)
+    narrow.write_text(json.dumps(original))
+    before = narrow.read_bytes()
+    public = manager.start(open_browser=False, selection_only=False)
+    query = parse_qs(urlsplit(public.authorization_url).query)
+    assert query['client_id'] == ['selected-client']
+    manager.close()
+    assert narrow.read_bytes() == before
+    assert not default_token_path('full_drive').exists()
+
+
+@pytest.mark.parametrize('mode', ['full_drive', 'selected_files'])
+def test_mcp_initial_authorization(sessions, monkeypatch, mode):
+    """Authorization starts without credentials in either configured mode."""
+    manager, exchange, path = sessions
+    assert not path.exists()
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_ACCESS_MODE', mode)
+    get_settings.cache_clear()
+    expected = DRIVE_FULL if mode == 'full_drive' else DRIVE_FILE
+    exchange.return_value = {
+        'access_token': 'initial-access', 'refresh_token': 'initial-refresh',
+        'scope': expected,
+    }
+    drive = Mock()
+    drive.about().get().execute.return_value = {
+        'user': {'permissionId': 'account'},
+    }
+    monkeypatch.setattr(authorization, 'build', Mock(return_value=drive))
+    monkeypatch.setattr(selection, 'manager', manager)
+    async def start():
+        async with Client(mcp) as client:
+            result = await client.call_tool('docs_authorize', {
+                'open_browser': False,
+            })
+            return selection.SelectionStatus(**result.structured_content)
+    public = asyncio.run(start())
+    assert public.status == 'pending'
+    query = parse_qs(urlsplit(public.authorization_url).query)
+    assert ('trigger_onepick' in query) == (mode == 'selected_files')
+    assert expected in query['scope'][0].split()
+    with urlopen(callback(public), timeout=2):
+        pass
+    result = finish(manager, public)
+    assert result.status == 'completed'
+    assert json.loads(path.read_text())['scopes'] == [expected]

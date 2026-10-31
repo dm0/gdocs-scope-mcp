@@ -33,11 +33,38 @@ def register(mcp):
                      'idempotentHint': True, 'openWorldHint': False},
     )
     def docs_selection_status(session_id: str) -> selection.SelectionStatus:
-        """Read selection status without exchanging codes or opening a browser.
+        """
+        Read authorization/selection status without exchanging codes.
 
-        Completed sessions return verified document IDs, names and URLs.
+        Completed Picker sessions return verified document IDs, names and URLs.
+        Full-drive authorization returns an empty documents list on success.
         Other states are pending, cancelled, expired and failed. Session IDs
         belong to this server process and expire after bounded retention;
         after a restart begin a new selection. No credential data is returned.
         """
         return selection.manager.status(session_id)
+
+    @mcp.tool(
+        output_schema=tool_response_schema(selection.SelectionStatus),
+        annotations={'readOnlyHint': False, 'destructiveHint': False,
+                     'idempotentHint': False, 'openWorldHint': True},
+    )
+    def docs_authorize(
+        open_browser: bool = True,
+    ) -> selection.SelectionStatus:
+        """
+        Request Google authorization for the configured access_mode.
+
+        Use when a user switches selected_files to full_drive and additional
+        permissions are required, or for initial authorization. Full-drive mode
+        requests broad Drive permissions; selected_files opens Google Picker
+        with only drive.file. The agent cannot change the configured mode.
+        Explain the requested access to the user before starting consent.
+        Return session_id, expiry and authorization_url immediately; poll
+        docs_selection_status in this same server process. Existing tokens are
+        replaced only after verified consent for the same bound account/client.
+        Cancellation, insufficient permissions and failure preserve the token.
+        Never retry a previously failed write without checking its outcome.
+        """
+        return selection.manager.start(open_browser=open_browser,
+                                       selection_only=False)

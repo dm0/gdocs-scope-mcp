@@ -112,6 +112,12 @@ additional documents in Google Picker. Pasting a document link into a chat does
 not by itself grant access. Documents created by the application are also
 available under this mode.
 
+If you later switch to `full_drive`, your assistant can request the additional
+permissions through a browser authorization session. Your existing token is
+updated only after successful consent for the same account. You can also run
+`gdocs-scope-mcp-auth` again with the new mode. A change to the setting alone
+does not grant broader access.
+
 Changing the setting does not revoke earlier permissions. If your Google
 account already granted this application broader access, see the
 [mode migration instructions](configuration.md#document-access-modes) before

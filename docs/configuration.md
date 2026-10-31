@@ -206,13 +206,29 @@ Selected mode covers files granted to or created by the application, including
 grants from earlier selection sessions. A document URL alone grants no access.
 Google continues to enforce sharing permissions and organization policies.
 
-Use separate token paths for the two modes. Merely changing configuration does
-not narrow or revoke an existing Google grant. If Google returns broad scopes,
+Separate token paths retain each mode's saved credentials. When switching from
+`selected_files` to `full_drive`, an existing narrow token requires additional
+authorization.
+The server returns `AUTHENTICATION_REQUIRED` with guidance to use
+`docs_authorize`; the user then grants broader access in the browser. Poll
+`docs_selection_status` to confirm completion. The same configured token file
+can be upgraded: replacement occurs only after sufficient scopes and the
+previously bound account/client are verified. Denial or failure preserves it.
+Alternatively run `gdocs-scope-mcp-auth` with `access_mode=full_drive` and the
+same token destination. The CLI also verifies the upgrade.
+
+With default token paths, the broad token is written to `token.json` while
+`selected-files-token.json` stays intact. When no broad default token exists,
+authorization retains the selected token's client/account binding rather than
+silently changing accounts. An existing usable broad token can be reused.
+
+Merely changing configuration does not narrow or revoke an existing Google
+grant. If Google returns broad scopes,
 remove the application's grant in [Google Account connections](https://myaccount.google.com/connections)
 and authorize again with the intended mode. Revocation can interrupt other
 tokens for the same application. Do not revoke an existing grant unless that
-impact is intended. Switching back requires using the appropriate broad token
-or authorizing again; do not assume a selected-file token grants full access.
+impact is intended. A selected-file token grants no full access until the
+additional consent has been completed and verified.
 
 For a custom Desktop client, enable the Google Picker API in its Cloud project.
 Existing selected-file credentials retain their original client and account.

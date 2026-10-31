@@ -319,7 +319,7 @@ def test_catalog_optional_tab_selectors():
             for tool in await client.list_tools():
                 if tool.name in {
                     'server_info',
-                    'docs_select_files', 'docs_selection_status',
+                    'docs_select_files', 'docs_selection_status', 'docs_authorize',
                     'docs_tabs_list',
                     'docs_list',
                     'docs_create',

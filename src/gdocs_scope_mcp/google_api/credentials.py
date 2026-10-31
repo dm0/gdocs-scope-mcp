@@ -14,7 +14,11 @@ from google.oauth2.credentials import Credentials
 
 from gdocs_scope_mcp.contracts import EditFailedResponse
 from gdocs_scope_mcp.errors import ToolFailureError
-from gdocs_scope_mcp.google_api.access import require_selected_scopes
+from gdocs_scope_mcp.google_api.access import (
+    is_selected_grant,
+    require_full_scopes,
+    require_selected_scopes,
+)
 from gdocs_scope_mcp.google_api.oauth import PublicClientCredentials
 from gdocs_scope_mcp.settings import (
     default_token_path,
@@ -77,6 +81,8 @@ def load_token() -> dict:
             'selection, then poll docs_selection_status. Alternatively run '
             'gdocs-scope-mcp-auth with selected_files mode configured.',
         ))
+    if default_token_path('selected_files').exists():
+        require_full_scopes([])
     try:
         token = export_gog_token()
         GOG_TOKEN_CACHE.write_text(json.dumps(token))
@@ -100,13 +106,9 @@ def load_credentials():
     selected = get_settings().access_mode == 'selected_files'
     if selected:
         require_selected_scopes(token_data.get('scopes'))
-    elif token_data.get('access_mode') == 'selected_files':
-        raise ToolFailureError(EditFailedResponse(
-            code='AUTHENTICATION_REQUIRED',
-            description='A selected-file token cannot enable full_drive mode.',
-            suggested_action='Configure selected_files mode for this token, '
-            'or authorize full_drive using a separate broad token path.',
-        ))
+    elif (token_data.get('access_mode') == 'selected_files'
+          or is_selected_grant(token_data.get('scopes'))):
+        require_full_scopes(token_data.get('scopes'))
     client_id = token_data.get('client_id') or token_data.get('_client_id')
     client_secret = token_data.get('client_secret') or token_data.get(
         '_client_secret'
@@ -149,4 +151,6 @@ def load_credentials():
     creds.refresh(Request())
     if selected:
         require_selected_scopes(creds.granted_scopes)
+    elif is_selected_grant(creds.granted_scopes):
+        require_full_scopes(creds.granted_scopes)
     return creds

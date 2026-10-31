@@ -13,7 +13,10 @@ from googleapiclient.discovery import build
 from httplib2 import Http
 
 from gdocs_scope_mcp.google_api import oauth
-from gdocs_scope_mcp.google_api.access import require_selected_scopes
+from gdocs_scope_mcp.google_api.access import (
+    require_full_scopes,
+    require_selected_scopes,
+)
 from gdocs_scope_mcp.settings import (
     default_token_path,
     get_settings,
@@ -49,6 +52,18 @@ def client_pair():
     return client, secret
 
 
+def authorization_seed(path, mode):
+    """Retain the selected account/client when moving to a new full token."""
+    if path.exists():
+        return json.loads(path.read_text())
+    selected = default_token_path('selected_files')
+    if (mode == 'full_drive' and not optional_env('GDOCS_SCOPE_MCP_TOKEN')
+            and path == default_token_path('full_drive').resolve()
+            and selected.exists()):
+        return json.loads(selected.read_text())
+    return None
+
+
 def generation(path):
     """Identify destination contents without retaining credential material."""
     return (hashlib.sha256(path.read_bytes()).hexdigest()
@@ -81,6 +96,18 @@ def token_data(tokens, session, secret):
 def verify_selection(tokens, session, secret, file_ids, previous):
     """Verify account, file metadata and scopes before installing a grant."""
     data = token_data(tokens, session, secret)
+    return _verify_grant(tokens, session, data, file_ids, previous)
+
+
+def verify_full_authorization(tokens, session, secret, previous):
+    """Verify broader consent and preserve an existing account binding."""
+    data = token_data(tokens, session, secret)
+    require_full_scopes(data['scopes'])
+    return _verify_grant(tokens, session, data, [], previous)
+
+
+def _verify_grant(tokens, session, data, file_ids, previous):
+    """Bind verified permissions to the account used by the previous grant."""
     creds = Credentials(token=tokens['access_token'], scopes=data['scopes'])
     drive = build('drive', 'v3',
                   http=AuthorizedHttp(creds, http=Http(timeout=10)),
@@ -91,7 +118,8 @@ def verify_selection(tokens, session, secret, file_ids, previous):
         )
     finally:
         drive.close()
-    data.update(access_mode='selected_files', account_id=account_id)
+    data.update(access_mode=('selected_files' if session.picker
+                             else 'full_drive'), account_id=account_id)
     return data, documents
 
 
@@ -103,9 +131,11 @@ def _selection_metadata(drive, session, file_ids, previous):
     if not isinstance(account_id, str) or not account_id:
         raise oauth.AuthorizationError('Could not verify selected account.')
     if previous:
-        require_selected_scopes(previous.get('scopes'))
+        if session.picker:
+            require_selected_scopes(previous.get('scopes'))
         if (previous.get('client_id') != session.client_id
-                or previous.get('account_id') != account_id):
+                or (previous.get('account_id') is not None
+                    and previous['account_id'] != account_id)):
             raise SelectionError('ACCOUNT_MISMATCH')
     documents = []
     for file_id in file_ids:

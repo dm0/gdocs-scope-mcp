@@ -142,6 +142,11 @@ DOCUMENT ACCESS:
     docs_selection_status with that session_id in the same server process.
     Completed status returns verified document metadata. Selection adds grants;
     it does not revoke older grants or override sharing/domain restrictions.
+    After changing selected_files to full_drive, an existing narrow grant
+    requires consent: call docs_authorize, explain the broader access
+    to the user and poll docs_selection_status. The tool requests only the
+    configured mode; agents cannot override it. Full authorization completes
+    with an empty documents list. The old token is retained on denial/failure.
     Do not launch selection automatically for every permission error or retry
     failed writes after granting access without inspecting their outcome.
 

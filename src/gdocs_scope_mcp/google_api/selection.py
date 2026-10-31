@@ -1,6 +1,5 @@
 """Run bounded Desktop Picker sessions independently of MCP requests."""
 
-import json
 import logging
 import secrets
 import threading
@@ -17,8 +16,8 @@ from gdocs_scope_mcp.contracts import EditFailedResponse
 from gdocs_scope_mcp.errors import ToolFailureError
 from gdocs_scope_mcp.google_api import authorization, oauth
 from gdocs_scope_mcp.google_api.access import (
-    DRIVE_FILE,
     require_selected_scopes,
+    scopes_for_mode,
 )
 from gdocs_scope_mcp.settings import get_settings
 
@@ -95,7 +94,8 @@ def selection_handler(session, result):
                 self.respond(400)
                 return
             try:
-                result['ids'] = session.picked_files(callback)
+                result['ids'] = (session.picked_files(callback)
+                                 if session.picker else [])
                 result['code'] = params['code'][0]
             except oauth.AuthorizationError:
                 result['status'] = 'failed'
@@ -147,9 +147,11 @@ class SelectionManager:
         }
         self.workers = [worker for worker in self.workers if worker.is_alive()]
 
-    def start(self, *, open_browser=True, timeout=oauth.DEFAULT_TIMEOUT):
+    def start(self, *, open_browser=True, timeout=oauth.DEFAULT_TIMEOUT,
+              selection_only=True):
         """Start selection without waiting for browser interaction."""
-        if get_settings().access_mode != 'selected_files':
+        mode = get_settings().access_mode
+        if selection_only and mode != 'selected_files':
             fail('INVALID_ARGUMENT', 'Selection requires selected_files mode.')
         if not 1 <= timeout <= oauth.DEFAULT_TIMEOUT:
             fail('INVALID_ARGUMENT', 'Timeout must be 1 to 300 seconds.')
@@ -165,11 +167,12 @@ class SelectionManager:
                 fail('EDIT_CONFLICT', 'Another authorization owns this path.')
             server = None
             try:
-                previous = (json.loads(path.read_text())
-                            if path.exists() else None)
+                previous = authorization.authorization_seed(path, mode)
                 if previous:
-                    require_selected_scopes(previous.get('scopes'))
-                    if not previous.get('account_id'):
+                    if mode == 'selected_files':
+                        require_selected_scopes(previous.get('scopes'))
+                    if (mode == 'selected_files'
+                            and not previous.get('account_id')):
                         fail('AUTHENTICATION_REQUIRED',
                              'Existing credentials lack an account binding.')
                     client = previous['client_id']
@@ -182,7 +185,8 @@ class SelectionManager:
                 redirect = (f'http://127.0.0.1:{server.server_port}'
                             + oauth.CALLBACK_PATH)
                 session = oauth.AuthorizationSession.create(
-                    client, redirect, [DRIVE_FILE], timeout, picker=True,
+                    client, redirect, scopes_for_mode(mode), timeout,
+                    picker=mode == 'selected_files',
                 )
                 session_id = secrets.token_urlsafe(24)
                 public = SelectionStatus(
@@ -248,9 +252,14 @@ class SelectionManager:
                                           if status == 'failed' else None))
                 return
             tokens = oauth.exchange_code(session, result['code'], secret)
-            data, documents = authorization.verify_selection(
-                tokens, session, secret, result['ids'], previous,
-            )
+            if session.picker:
+                data, documents = authorization.verify_selection(
+                    tokens, session, secret, result['ids'], previous,
+                )
+            else:
+                data, documents = authorization.verify_full_authorization(
+                    tokens, session, secret, previous,
+                )
             session.check_active()
             if self.stop.is_set():
                 self.finish(session_id, 'cancelled')

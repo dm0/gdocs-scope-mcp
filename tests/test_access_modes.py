@@ -83,11 +83,44 @@ def test_refresh_checks_actual_grant(monkeypatch, saved, granted, success):
             credentials.load_credentials()
 
 
-def test_full_mode_rejects_selected_token(monkeypatch):
+@pytest.mark.parametrize('labelled', [False, True])
+def test_full_mode_rejects_selected_token(monkeypatch, labelled):
     """Changing settings alone cannot turn a narrow token into broad access."""
-    monkeypatch.setattr(credentials, 'load_token', lambda: {
-        'access_mode': 'selected_files', 'scopes': [DRIVE_FILE],
-    })
+    token = {'scopes': [DRIVE_FILE]}
+    if labelled:
+        token['access_mode'] = 'selected_files'
+    monkeypatch.setattr(credentials, 'load_token', lambda: token)
     with pytest.raises(ToolFailureError) as raised:
         credentials.load_credentials()
     assert raised.value.failure.code == 'AUTHENTICATION_REQUIRED'
+    assert 'docs_authorize' in raised.value.failure.suggested_action
+
+
+def test_default_mode_switch_requests_authorization(monkeypatch):
+    """A default-path switch finds the narrow token before gog fallback."""
+    monkeypatch.delenv('GDOCS_SCOPE_MCP_TOKEN', raising=False)
+    monkeypatch.setattr(credentials, 'STANDALONE_TOKEN_PATHS', [])
+    path = default_token_path('selected_files')
+    path.parent.mkdir(parents=True)
+    path.write_text(json.dumps({'scopes': [DRIVE_FILE]}))
+    export = Mock(side_effect=AssertionError('must not export'))
+    monkeypatch.setattr(credentials, 'export_gog_token', export)
+    with pytest.raises(ToolFailureError) as raised:
+        credentials.load_credentials()
+    assert 'docs_authorize' in raised.value.failure.suggested_action
+    export.assert_not_called()
+
+
+def test_full_mode_checks_refreshed_narrow_grant(monkeypatch):
+    """Actual refreshed scopes override broad-looking saved metadata."""
+    monkeypatch.setattr(credentials, 'load_token', lambda: {
+        'client_id': 'client', 'client_secret': 'secret',
+        'refresh_token': 'refresh',
+        'scopes': ['https://www.googleapis.com/auth/drive'],
+    })
+    def refresh(self, _request):
+        self._granted_scopes = [DRIVE_FILE]
+    monkeypatch.setattr(credentials.Credentials, 'refresh', refresh)
+    with pytest.raises(ToolFailureError) as raised:
+        credentials.load_credentials()
+    assert 'docs_authorize' in raised.value.failure.suggested_action

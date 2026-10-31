@@ -4,9 +4,10 @@ from gdocs_scope_mcp.contracts import EditFailedResponse
 from gdocs_scope_mcp.errors import ToolFailureError
 
 DRIVE_FILE = 'https://www.googleapis.com/auth/drive.file'
+DRIVE_FULL = 'https://www.googleapis.com/auth/drive'
 FULL_SCOPES = [
     'https://www.googleapis.com/auth/documents',
-    'https://www.googleapis.com/auth/drive',
+    DRIVE_FULL,
     'https://www.googleapis.com/auth/drive.readonly',
     DRIVE_FILE,
 ]
@@ -31,4 +32,29 @@ def require_selected_scopes(scopes):
             'broader grants, revoke the application grant in your Google '
             'account and authorize again. '
             'Configuration does not revoke grants.',
+        ))
+
+
+def is_selected_grant(scopes):
+    """Recognize narrow legacy grants without trusting a mode label."""
+    if not isinstance(scopes, (list, tuple)):
+        return False
+    return {scope for scope in scopes if isinstance(scope, str)} - {
+        'openid', 'email', 'profile',
+    } == {DRIVE_FILE}
+
+
+def require_full_scopes(scopes):
+    """Request additional consent instead of using a narrow token as full."""
+    if not isinstance(scopes, (list, tuple)) or DRIVE_FULL not in scopes:
+        raise ToolFailureError(EditFailedResponse(
+            code='AUTHENTICATION_REQUIRED',
+            description='Full-drive mode requires additional Google Drive '
+            'permissions; the existing grant is insufficient.',
+            suggested_action='Call docs_authorize and ask the user to grant '
+            'the additional permissions, then poll docs_selection_status. '
+            'Alternatively run gdocs-scope-mcp-auth with '
+            'access_mode=full_drive '
+            'and the same configured token destination. Do not retry a failed '
+            'write without first checking its outcome.',
         ))

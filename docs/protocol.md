@@ -73,6 +73,23 @@ grants require explicit reauthorization/migration. Selection cannot change
 policy. Do not automatically open selection on every 403/404. If access is
 added after a write failure, inspect the document before retrying that write.
 
+After a user changes `access_mode` from `selected_files` to `full_drive`, a
+narrow grant returns `AUTHENTICATION_REQUIRED`, including for legacy tokens
+without a mode label. Explain the broader permissions and call
+`docs_authorize(open_browser=True)` for explicit user consent. This tool also
+supports initial authorization; in selected-file mode it opens Picker.
+Agents cannot choose the mode through its arguments. Poll the existing
+`docs_selection_status` tool with the returned session ID. Successful full-drive
+authorization returns `completed` with an empty `documents` list. It does not
+select documents or perform a failed document operation again.
+
+The current token is replaced atomically only after full permissions and the
+previously bound account/client are verified. Denial, insufficient scopes,
+account mismatch and interrupted authorization leave it intact. Default mode
+paths stay separate: if a broad default token is absent, the selected token
+supplies the original account/client binding for authorization, while the new
+full token is saved to the full-mode destination.
+
 ## Google API failures and recovery
 
 | Code | Meaning | Recovery |

@@ -12,7 +12,7 @@ from filelock import Timeout
 from gdocs_scope_mcp import auth_setup
 from gdocs_scope_mcp.errors import ToolFailureError
 from gdocs_scope_mcp.google_api import authorization, oauth
-from gdocs_scope_mcp.google_api.access import DRIVE_FILE
+from gdocs_scope_mcp.google_api.access import DRIVE_FILE, DRIVE_FULL
 from gdocs_scope_mcp.settings import get_settings
 
 PRIVATE_MODE = 0o600
@@ -197,4 +197,53 @@ def test_cli_picker_completion(picker, tmp_path, monkeypatch, mode):
     monkeypatch.setattr(auth_setup.sys, 'argv', args)
     auth_setup.main()
     assert json.loads(out.read_text())['account_id'] == 'account'
+    assert not pending.exists()
+
+
+@pytest.mark.parametrize('result', [
+    'success', 'insufficient', 'other_account',
+])
+def test_cli_upgrades_picker_grant(picker, tmp_path, monkeypatch, result):
+    """CLI requests full consent with the originating account and client."""
+    _, _, drive = picker
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_ACCESS_MODE', 'full_drive')
+    get_settings.cache_clear()
+    out = tmp_path / 'upgrade.json'
+    pending = tmp_path / 'upgrade-session.json'
+    original = {'client_id': 'existing-client', 'account_id': 'account',
+                'refresh_token': 'old', 'scopes': [DRIVE_FILE],
+                'access_mode': 'selected_files', 'auth_method': 'pkce-public'}
+    out.write_text(json.dumps(original))
+    before = out.read_bytes()
+    tokens = {'access_token': 'new-access', 'refresh_token': 'new-refresh',
+              'scope': DRIVE_FILE if result == 'insufficient' else DRIVE_FULL}
+    def complete(_):
+        saved = oauth.AuthorizationSession(**json.loads(pending.read_text()))
+        assert not saved.picker
+        assert DRIVE_FULL in saved.scopes
+        assert saved.client_id == 'existing-client'
+        query = parse_qs(urlsplit(saved.authorization_url()).query)
+        assert 'trigger_onepick' not in query
+        return saved.redirect_uri + '?code=code&state=' + saved.state
+    if result == 'other_account':
+        drive.about().get().execute.return_value = {
+            'user': {'permissionId': 'other'},
+        }
+    monkeypatch.setattr('builtins.input', complete)
+    monkeypatch.setattr(oauth, 'Request', lambda: Mock(return_value=
+        SimpleNamespace(status=200, data=json.dumps(tokens).encode())))
+    monkeypatch.setattr(auth_setup.sys, 'argv', [
+        'auth', '--headless', '--session', str(pending), '--out', str(out),
+    ])
+    if result == 'success':
+        auth_setup.main()
+        saved = json.loads(out.read_text())
+        assert saved['access_mode'] == 'full_drive'
+        assert saved['scopes'] == [DRIVE_FULL]
+        assert saved['account_id'] == 'account'
+        assert saved['client_id'] == 'existing-client'
+    else:
+        with pytest.raises(SystemExit):
+            auth_setup.main()
+        assert out.read_bytes() == before
     assert not pending.exists()

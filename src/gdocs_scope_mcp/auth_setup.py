@@ -14,7 +14,11 @@ from google.auth.exceptions import GoogleAuthError
 
 from gdocs_scope_mcp.errors import ToolFailureError
 from gdocs_scope_mcp.google_api import authorization, oauth
-from gdocs_scope_mcp.google_api.access import FULL_SCOPES, scopes_for_mode
+from gdocs_scope_mcp.google_api.access import (
+    FULL_SCOPES,
+    require_full_scopes,
+    scopes_for_mode,
+)
 from gdocs_scope_mcp.settings import (
     Settings,
     default_token_path,
@@ -65,13 +69,20 @@ def save_token(token_response, session, client_secret, out_path,
                     attempt[2] if attempt is not None else
                     authorization.generation(out_path))
         data = authorization.token_data(token_response, session, client_secret)
+        previous = authorization.authorization_seed(
+            out_path, configured_mode(),
+        )
         if selected:
-            previous = (json.loads(out_path.read_text())
-                        if out_path.exists() else None)
             data, _ = authorization.verify_selection(
                 token_response, session, client_secret,
                 file_ids or [], previous,
             )
+        else:
+            require_full_scopes(data['scopes'])
+            if previous and previous.get('account_id'):
+                data, _ = authorization.verify_full_authorization(
+                    token_response, session, client_secret, previous,
+                )
         authorization.install_token(out_path, data, expected)
 
 
@@ -237,6 +248,11 @@ def main():
         destination_context = _attempt.set((
             path, destination, authorization.generation(path),
         ))
+        previous = authorization.authorization_seed(path, mode)
+        if previous and not any((args.credentials, args.client_id, client_id)):
+            client_id = previous.get('client_id')
+            secret = (None if previous.get('auth_method') == 'pkce-public'
+                      else previous.get('client_secret'))
         if args.callback_url:
             session, code = oauth.consume_session(args.session.expanduser(),
                                                   args.callback_url)

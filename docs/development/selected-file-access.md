@@ -89,6 +89,27 @@ within the explicitly authorized development document. A later grant to a
 second existing document requires separate authorization for that document.
 Public OAuth verification remains outside this issue.
 
+### Upgrading to full-drive authorization
+
+`docs_authorize` uses the same bounded session manager and read-only status
+tool. It chooses scopes only from the server's configured mode. Full mode uses
+ordinary PKCE consent without Picker parameters or selected-file callback data.
+An existing narrow token, including one without a local mode label, results in
+actionable `AUTHENTICATION_REQUIRED` guidance before document access.
+
+For a shared explicit token path, verified full authorization atomically
+replaces the narrow token. With separate default paths, the selected token is
+used only to retain client/account identity; the new broad token is written to
+the full-mode destination. A different account, incomplete grant, cancellation
+or failure does not install a replacement. The CLI supports the same upgrade.
+
+Permanent regressions in the access-mode, session and Picker authorization
+tests exercise those transitions through real loopback callbacks and the MCP
+adapters with substituted Google responses. They include insufficient returned
+scopes, account mismatch, cancellation, and loading the installed broad token.
+These checks do not establish production Google consent behavior; that remains
+part of the pending live acceptance matrix.
+
 Live acceptance is pending until browser selection and the narrow-scope
 operation matrix succeed. Do not infer compatibility from broad-token tests,
 offline mocks, artifact discovery or an authorization URL alone.
