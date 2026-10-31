@@ -9,12 +9,14 @@ import pytest
 from pydantic import ValidationError
 
 from gdocs_scope_mcp import auth_setup, tool_logging
+from gdocs_scope_mcp.errors import ToolFailureError
 from gdocs_scope_mcp.google_api import credentials, files, oauth
 from gdocs_scope_mcp.settings import Settings, default_token_path, get_settings
 from gdocs_scope_mcp.tool_logging import configure_logging
 
 OVERRIDES = {
     'client_id': ('configured-client', 'configured-client'),
+    'access_mode': ('selected_files', 'selected_files'),
     'write_revision_mode': ('target', 'target'),
     'document_cache_enabled': ('true', True),
     'document_cache_storage': ('memory', 'memory'),
@@ -136,7 +138,7 @@ def test_canonical_token_path_empty_and_invalid_values(monkeypatch, tmp_path):
         credentials.load_token()
     missing = tmp_path / 'missing.json'
     monkeypatch.setenv('GDOCS_SCOPE_MCP_TOKEN', str(missing))
-    with pytest.raises(FileNotFoundError):
+    with pytest.raises(ToolFailureError):
         credentials.load_token()
     missing.write_text('{malformed')
     with pytest.raises(json.JSONDecodeError):

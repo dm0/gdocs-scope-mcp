@@ -14,6 +14,7 @@ from gdocs_scope_mcp.google_api.failures import (
     classify_failure,
     exception_chain,
 )
+from gdocs_scope_mcp.settings import get_settings
 
 
 class ErrorToolResult(ToolResult):
@@ -63,6 +64,12 @@ def failure_from_exception(
         failure = None
     if failure is not None:
         action = failure.suggested_action
+        if (failure.code in {'PERMISSION_DENIED', 'RESOURCE_NOT_FOUND'}
+                and get_settings().access_mode == 'selected_files'):
+            action += (' In selected_files mode, an unselected document may '
+                       'require docs_select_files and user consent. A URL '
+                       'does not grant access; selection cannot override '
+                       'sharing restrictions or domain policy.')
         status = (
             getattr(error.resp, 'status', None)
             if isinstance(error, HttpError) else None

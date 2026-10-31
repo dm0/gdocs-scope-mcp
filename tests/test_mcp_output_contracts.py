@@ -718,7 +718,7 @@ def test_catalog_contract_covers_every_registered_tool():
             return {tool.name for tool in await client.list_tools()}
 
     # Entity/table outputs are schema-validated in their dedicated tests.
-    assert asyncio.run(names()) == {name for name, _, _ in TOOL_CASES} | {
+    expected = {name for name, _, _ in TOOL_CASES} | {
         'docs_reopen_comment', 'docs_edit_comment',
         'docs_delete_comment_reply',
         'docs_get_entity', 'docs_create_dropdown_definition',
@@ -727,7 +727,12 @@ def test_catalog_contract_covers_every_registered_tool():
         'docs_table_snapshot', 'docs_table_patch', 'docs_table_format',
         'docs_table_structure',
         'docs_suggest', 'docs_suggestions_manage',
+        'docs_authorization_status', 'docs_authorize',
+        'docs_authorization_complete',
     }
+    if server.SERVER_INFO.access_mode == 'selected_files':
+        expected.add('docs_select_files')
+    assert asyncio.run(names()) == expected
 
 
 @pytest.mark.parametrize('name', ['docs_create', 'docs_delete_comment'])

@@ -30,9 +30,9 @@ def test_complete_mcp_contract():
 
     data = asyncio.run(capture())
     encoded = json.dumps(data, sort_keys=True, ensure_ascii=False).encode()
-    # #47/#51 lists; #50 search; #49 partial creation; #53 failure codes.
+    # #40 adds access-mode diagnostics, selection tools and access guidance.
     assert hashlib.sha256(encoded).hexdigest() == (
-        'df680ed2621f9316955e062f8a90a784bb3aa8be604f2a547472d9531e279b32'
+        'befface5a2388008118d91bfbea983ae39657f5d475636c0c1fe55c0752f6ef1'
     )
 
 

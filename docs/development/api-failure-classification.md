@@ -29,10 +29,10 @@ listing/image recovery hints for HTTP 400.
 | Other HTTP 403, including `insufficientFilePermissions`, `insufficientPermissions`, `appNotAuthorizedToFile`, `domainPolicy` | `PERMISSION_DENIED` | Access/scope/policy guidance; unknown reasons retain a status-based fallback. |
 | HTTP 429 | `RATE_LIMITED` | Throttling guidance regardless of payload shape. |
 | HTTP 408, 500, 502, 503, 504 | `TEMPORARILY_UNAVAILABLE` | Service/timeout evidence; no claim that a write was rejected. |
-| HTTP 401 | `AUTHENTICATION_REQUIRED` | Authorize again. |
+| HTTP 401 | `AUTHENTICATION_REQUIRED` | Request user consent with `docs_authorize`, then poll `docs_authorization_status`. |
 | HTTP 400 / 404 | `INVALID_ARGUMENT` / `RESOURCE_NOT_FOUND` | Preserve existing status-based recovery. |
 | Other HTTP statuses | `GOOGLE_API_ERROR` | No unsupported retryability inference. |
-| Refresh `invalid_grant` or explicit `ReauthFailError` | `AUTHENTICATION_REQUIRED` | The grant is unusable; authorize again. |
+| Refresh `invalid_grant` or explicit `ReauthFailError` | `AUTHENTICATION_REQUIRED` | The grant is unusable; use the same MCP authorization workflow. |
 | Refresh `invalid_client`, `unauthorized_client`, `invalid_scope` | `AUTH_CONFIGURATION_ERROR` | Correct client/scope configuration before authorizing. |
 | Refresh `retryable=True`, `server_error`, `temporarily_unavailable`, `internal_failure`, or a known transport cause | `TEMPORARILY_UNAVAILABLE` | Do not infer revocation. |
 | Other refresh errors | `GOOGLE_API_ERROR` | Inspect diagnostics; no unconditional authorization prompt. |

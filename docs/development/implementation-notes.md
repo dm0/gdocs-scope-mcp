@@ -12,6 +12,7 @@ arguments, examples and supported behavior, start with the [document tools](../t
 | --- | --- | --- |
 | [Literal reader content](literal-rendering.md) | Escaping, read/copy fidelity and native source coordinates | [Verification](literal-rendering.md#verification-on-2026-10-29) |
 | [Desktop OAuth](oauth-authentication.md) | PKCE sessions, credential compatibility and distribution limitations | [Live verification](oauth-authentication.md#verification) |
+| [Selected-file access](selected-file-access.md) | Mode validation, Picker sessions, account binding and token installation | [Live evidence and validation boundaries](selected-file-access.md#live-evidence-2026-10-31) |
 | [API failures](api-failure-classification.md) | Structured reasons, credential recovery, privacy and read-backoff decision | [Verification](api-failure-classification.md#verification) |
 | [Concurrent edits](../concurrent-edits.md) | Revision policies, dependencies, retries, atomicity and unknown write outcomes | [Tests and reproduction](../concurrent-edits.md#verification) |
 | [Table references](../table-references.md) | Checked positions, structural inventories, selective expectations and structural operations | [Tests and reproduction](../table-references.md#verification) |

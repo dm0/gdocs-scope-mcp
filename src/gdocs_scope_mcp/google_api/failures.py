@@ -14,6 +14,7 @@ from googleapiclient.errors import HttpError
 from httplib2 import ServerNotFoundError
 
 from gdocs_scope_mcp.contracts import EditFailedResponse
+from gdocs_scope_mcp.google_api.access import AUTHORIZATION_ACTION
 
 MAX_ERROR_BODY = 64 * 1024
 RATE_REASONS = frozenset({'rateLimitExceeded', 'userRateLimitExceeded'})
@@ -78,7 +79,7 @@ def _refresh_failure(error: RefreshError) -> EditFailedResponse:
         return EditFailedResponse(
             code='AUTHENTICATION_REQUIRED',
             description='Google authorization is no longer valid.',
-            suggested_action='Run gdocs-scope-mcp-auth to authorize again.',
+            suggested_action=AUTHORIZATION_ACTION,
         )
     if reasons and reasons <= CONFIGURATION_OAUTH_ERRORS:
         return EditFailedResponse(
@@ -135,7 +136,7 @@ def classify_failure(error: Exception) -> EditFailedResponse | None:
             'INVALID_ARGUMENT', 'Check tool arguments and document state.',
         ),
         HTTPStatus.UNAUTHORIZED: (
-            'AUTHENTICATION_REQUIRED', 'Run gdocs-scope-mcp-auth.',
+            'AUTHENTICATION_REQUIRED', AUTHORIZATION_ACTION,
         ),
         HTTPStatus.FORBIDDEN: (
             'PERMISSION_DENIED',

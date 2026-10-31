@@ -16,6 +16,7 @@ from google.auth.exceptions import RefreshError
 
 from gdocs_scope_mcp import auth_setup
 from gdocs_scope_mcp.google_api import credentials, oauth
+from gdocs_scope_mcp.google_api.access import DRIVE_FULL, FULL_SCOPES
 from gdocs_scope_mcp.settings import default_token_path, get_settings
 
 
@@ -309,7 +310,7 @@ def test_client_pair_for_local_and_saved_session(
     args = ['auth', '--out', str(tmp_path / 'token.json')]
     if callback:
         session = oauth.AuthorizationSession.create(
-            client, 'http://127.0.0.1:12345/oauth2/callback', ['scope'], 300,
+            client, 'http://127.0.0.1:12345/oauth2/callback', FULL_SCOPES, 300,
         )
         monkeypatch.setattr(oauth, 'consume_session',
                             lambda *_args: (session, 'code'))
@@ -425,11 +426,11 @@ def test_public_token_contains_no_secret_or_verifier(session, tmp_path):
     path = tmp_path / 'token.json'
     auth_setup.save_token(
         {'refresh_token': 'refresh', 'access_token': 'access',
-         'scope': 'granted'}, session, None, path,
+         'scope': DRIVE_FULL}, session, None, path,
     )
     data = json.loads(path.read_text())
     assert data['auth_method'] == 'pkce-public'
-    assert data['scopes'] == ['granted']
+    assert data['scopes'] == [DRIVE_FULL]
     private = {'client_secret', 'verifier', 'state', 'access_token'}
     assert not private & data.keys()
 

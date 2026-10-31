@@ -40,11 +40,80 @@ Continue until the token is null, even if a page has zero returned items.
 Clients using the previous JSON-string
 or `result`-wrapped outputs must switch to the direct structured objects.
 
+## Document access and selection
+
+`server_info.access_mode` reports `full_drive` or `selected_files`. This is
+configuration, not a tool argument. In selected-file mode `docs_list` returns
+files available to the application, including previously selected and
+application-created files. It is not an account-wide inventory or an allowlist
+limited to the latest selection. A pasted URL does not grant access.
+
+`docs_authorize`, `docs_authorization_complete` and
+`docs_authorization_status` are available in both modes.
+`docs_select_files` is available only in the `selected_files` tool catalog.
+Changing modes requires restarting the server to update tool registration.
+
+For a browser on another computer, start authorization/selection with
+`open_browser=False` and present `authorization_url`. After consent, the browser
+may fail to connect to its local `127.0.0.1`. Ask the user for the complete
+address-bar redirect URL and pass it with the original `session_id` to
+`docs_authorization_complete`. The server validates destination, state and
+expiry, then accepts the callback once using its retained PKCE verifier. This
+tool never navigates to or fetches the callback URL. Poll status afterwards;
+do not resubmit after an uncertain result. Manual and HTTP delivery share one
+receiver, so they cannot exchange a callback twice. Wrong-state/destination
+callbacks return `INVALID_ARGUMENT` without consuming the session. Repeated or
+terminal submissions return `EDIT_CONFLICT`; unknown IDs return
+`RESOURCE_NOT_FOUND`. Handle the URL as sensitive and never repeat its code in
+replies, logs or reports. The MCP host may retain submitted tool arguments.
+
+Call `docs_select_files(open_browser=True)` only for an explicit selection
+workflow. It returns `session_id`, `status`, `expires_at`, `browser_opened` and
+`authorization_url` immediately. Present the URL when manual opening is needed.
+Call `docs_authorization_status(session_id)` in the same server process to read the
+result. Polling never opens a browser, exchanges a code or retries a write.
+Terminal states are `completed`, `cancelled`, `expired` and `failed`.
+Completion returns verified document `id`, `name` and `url`; failures expose
+sanitized `failure_code`, including `ACCOUNT_MISMATCH`, `CREDENTIALS_CHANGED`
+and `INVALID_SCOPES`. Cancellation, expiry and failure preserve local credentials.
+Google-side grants may already have changed during consent, even when local
+installation fails; no automatic revocation is attempted.
+
+Sessions last at most 300 seconds. Terminal results remain available until
+300 seconds after their original expiry. A restart discards session IDs;
+unknown or evicted IDs return `RESOURCE_NOT_FOUND`. One authorization attempt
+owns a token destination at a time, including across local server processes;
+a competing start returns `EDIT_CONFLICT`. Restart a session explicitly after
+it expires rather than polling indefinitely.
+
+Selected-file credentials must have exactly `drive.file`; broad or unknown
+grants require explicit reauthorization/migration. Selection cannot change
+`access_mode`, revoke previous grants, override sharing rights or bypass domain
+policy. Do not automatically open selection on every 403/404. If access is
+added after a write failure, inspect the document before retrying that write.
+
+After a user changes `access_mode` from `selected_files` to `full_drive`, a
+narrow grant returns `AUTHENTICATION_REQUIRED`, including for legacy tokens
+without a mode label. Explain the broader permissions and call
+`docs_authorize(open_browser=True)` for explicit user consent. This tool also
+supports initial authorization; in selected-file mode it opens Picker.
+Agents cannot choose the mode through its arguments. Poll the existing
+`docs_authorization_status` tool with the session ID. Successful full-drive
+authorization returns `completed` with an empty `documents` list. It does not
+select documents or perform a failed document operation again.
+
+The current token is replaced atomically only after full permissions and the
+previously bound account/client are verified. Denial, insufficient scopes,
+account mismatch and interrupted authorization leave it intact. Default mode
+paths stay separate: if a broad default token is absent, the selected token
+supplies the original account/client binding for authorization, while the new
+full token is saved to the full-mode destination.
+
 ## Google API failures and recovery
 
 | Code | Meaning | Recovery |
 | --- | --- | --- |
-| `AUTHENTICATION_REQUIRED` | HTTP 401, a structured OAuth `invalid_grant`, or an explicit reauthentication failure | Run `gdocs-scope-mcp-auth` again. |
+| `AUTHENTICATION_REQUIRED` | Missing credentials/token file, insufficient mode scopes, HTTP 401, structured OAuth `invalid_grant`, or explicit reauthentication failure | Request user consent with `docs_authorize`, then poll `docs_authorization_status` in the same server process. CLI authorization remains an alternative. |
 | `AUTH_CONFIGURATION_ERROR` | Structured OAuth client or scope configuration rejection | Check the Desktop client configuration and scopes before authorizing again. |
 | `PERMISSION_DENIED` | HTTP 403 without a recognized quota/rate-limit reason | Check file access, granted scopes and domain policy; inspect diagnostics for unknown reasons. |
 | `RATE_LIMITED` | HTTP 429 or a documented per-user/project throttling reason on HTTP 403 | Retry safe reads later with bounded exponential backoff. |
@@ -101,8 +170,9 @@ paragraph boundaries; native literal replace-all retains Google's matching.
 
 ## Action annotations and edit receipts
 
-All Google-backed tools declare `openWorldHint=true`; `server_info` is local
-and declares `openWorldHint=false`. These advisory hints describe effects,
+All Google-backed tools declare `openWorldHint=true`; `server_info` and
+`docs_authorization_status` are local and declare `openWorldHint=false`.
+These advisory hints describe effects,
 not authorization or retry guarantees. The per-operation policy is:
 
 | Tools | Read-only | Destructive | Idempotent |
@@ -112,6 +182,8 @@ not authorization or retry guarantees. The per-operation policy is:
 | `docs_delete_paragraph`, `docs_delete_comment`, `docs_delete_comment_reply`, `docs_edit_comment` | false | true | true |
 | `docs_insert_before`, `docs_insert_after`, `docs_append` | false | false | false |
 | `docs_create`, `docs_add_comment`, `docs_reply_to_comment` | false | false | false |
+| `docs_authorize`, `docs_authorization_complete`, `docs_select_files` (selected mode only) | false | false | false |
+| `docs_authorization_status` | true | false | true |
 | `docs_resolve_comment`, `docs_reopen_comment` | false | false | false |
 | `docs_get_entity` | true | false | true |
 | `docs_create_dropdown_definition`, `docs_select_dropdown` | false | false | false |

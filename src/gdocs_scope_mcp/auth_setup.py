@@ -5,27 +5,37 @@ import json
 import sys
 import time
 import webbrowser
+from contextvars import ContextVar
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
 
 from google.auth.exceptions import GoogleAuthError
 
-from gdocs_scope_mcp.google_api import oauth
+from gdocs_scope_mcp.errors import ToolFailureError
+from gdocs_scope_mcp.google_api import authorization, oauth
+from gdocs_scope_mcp.google_api.access import (
+    FULL_SCOPES,
+    require_full_scopes,
+    scopes_for_mode,
+)
 from gdocs_scope_mcp.settings import (
+    Settings,
     default_token_path,
     get_settings,
     optional_env,
 )
 
-SCOPES = [
-    'https://www.googleapis.com/auth/documents',
-    'https://www.googleapis.com/auth/drive',
-    'https://www.googleapis.com/auth/drive.readonly',
-    'https://www.googleapis.com/auth/drive.file',
-]
+SCOPES = FULL_SCOPES
 CLIENT_ID_ENV_VAR = 'GDOCS_SCOPE_MCP_CLIENT_ID'
 CLIENT_SECRET_ENV_VAR = 'GDOCS_SCOPE_MCP_CLIENT_SECRET'
+_access_mode = ContextVar('authorization_access_mode', default=None)
+_attempt = ContextVar('authorization_destination', default=None)
+
+
+def configured_mode():
+    """Read CLI mode without validating overridden client inputs."""
+    return _access_mode.get() or get_settings().access_mode
 
 
 def load_client_config(creds_path: Path) -> dict:
@@ -40,20 +50,54 @@ def load_client_config(creds_path: Path) -> dict:
     )
 
 
-def save_token(token_response, session, client_secret, out_path):
+def save_token(token_response, session, client_secret, out_path,
+               file_ids=None):
     """Save refresh credentials without PKCE or identity material."""
-    data = {
-        'client_id': session.client_id,
-        'refresh_token': token_response['refresh_token'],
-        'scopes': token_response.get(
-            'scope', ' '.join(session.scopes),
-        ).split(),
-        'token_uri': oauth.TOKEN_URI,
-        'auth_method': 'pkce-secret' if client_secret else 'pkce-public',
-    }
-    if client_secret:
-        data['client_secret'] = client_secret
-    oauth.write_private_json(out_path, data)
+    selected = configured_mode() == 'selected_files'
+    if session.picker != selected:
+        raise oauth.AuthorizationError('Authorization access mode changed.')
+    out_path = out_path.expanduser().resolve()
+    attempt = _attempt.get()
+    lock = (attempt[1] if attempt is not None
+            else authorization.destination_lock(out_path))
+    if (session.token_destination is not None
+            and session.token_destination != str(out_path)):
+        raise oauth.AuthorizationError('Authorization destination changed.')
+    with lock:
+        expected = (session.token_generation
+                    if session.token_generation is not None else
+                    attempt[2] if attempt is not None else
+                    authorization.generation(out_path))
+        data = authorization.token_data(token_response, session, client_secret)
+        previous = authorization.authorization_seed(
+            out_path, configured_mode(),
+        )
+        if selected:
+            data, _ = authorization.verify_selection(
+                token_response, session, client_secret,
+                file_ids or [], previous,
+            )
+        else:
+            require_full_scopes(data['scopes'])
+            if previous and previous.get('account_id'):
+                data, _ = authorization.verify_full_authorization(
+                    token_response, session, client_secret, previous,
+                )
+        authorization.install_token(out_path, data, expected)
+
+
+def create_session(client_id, redirect, timeout):
+    """Bind CLI authorization to the configured access mode."""
+    mode = configured_mode()
+    session = oauth.AuthorizationSession.create(
+        client_id, redirect, scopes_for_mode(mode), timeout,
+        picker=mode == 'selected_files',
+    )
+    attempt = _attempt.get()
+    if attempt is not None:
+        session.token_destination = str(attempt[0])
+        session.token_generation = attempt[2]
+    return session
 
 
 class CallbackServer(HTTPServer):
@@ -78,6 +122,10 @@ def callback_handler(session, result):
             try:
                 origin = session.redirect_uri.removesuffix(oauth.CALLBACK_PATH)
                 result['code'] = session.callback_code(origin + self.path)
+                if session.picker:
+                    result['file_ids'] = session.picked_files(
+                        origin + self.path,
+                    )
             except oauth.AuthorizationError as exc:
                 result['error'] = exc
             self.send_response(400 if 'error' in result else 200)
@@ -97,9 +145,7 @@ def run_local_flow(client_id, client_secret, out_path, timeout):
     result = {}
     with CallbackServer(('127.0.0.1', 0), BaseHTTPRequestHandler) as server:
         redirect = f'http://127.0.0.1:{server.server_port}{oauth.CALLBACK_PATH}'
-        session = oauth.AuthorizationSession.create(
-            client_id, redirect, SCOPES, timeout,
-        )
+        session = create_session(client_id, redirect, timeout)
         server.RequestHandlerClass = callback_handler(session, result)
         server.deadline = time.monotonic() + timeout
         url = session.authorization_url()
@@ -114,16 +160,15 @@ def run_local_flow(client_id, client_secret, out_path, timeout):
         if 'error' in result:
             raise result['error']
     tokens = oauth.exchange_code(session, result['code'], client_secret)
-    save_token(tokens, session, client_secret, out_path)
+    save_token(tokens, session, client_secret, out_path,
+               result.get('file_ids'))
 
 
 def prepare_headless(client_id, path, timeout):
     """Persist an attempt and print its URL for manual loopback completion."""
     with HTTPServer(('127.0.0.1', 0), BaseHTTPRequestHandler) as server:
         redirect = f'http://127.0.0.1:{server.server_port}{oauth.CALLBACK_PATH}'
-    session = oauth.AuthorizationSession.create(
-        client_id, redirect, SCOPES, timeout,
-    )
+    session = create_session(client_id, redirect, timeout)
     oauth.save_session(session, path)
     print('Open this URL in your system browser:\n'
           + session.authorization_url())
@@ -139,7 +184,8 @@ def run_headless_flow(client_id, client_secret, out_path, timeout, path):
         callback = input('Paste the full redirect URL: ').strip()
         session, code = oauth.consume_session(path, callback)
         tokens = oauth.exchange_code(session, code, client_secret)
-        save_token(tokens, session, client_secret, out_path)
+        ids = session.picked_files(callback) if session.picker else None
+        save_token(tokens, session, client_secret, out_path, ids)
     finally:
         path.unlink(missing_ok=True)
 
@@ -152,8 +198,8 @@ def main():
     parser.add_argument('--client-id', help='Custom Desktop OAuth client ID')
     parser.add_argument('--client-secret',
                         help='Matching secret for a custom Desktop client')
-    parser.add_argument('--out', '-o', type=Path, default=default_token_path(),
-                        help='Token output path (default: %(default)s)')
+    parser.add_argument('--out', '-o', type=Path,
+                        help='Token output path (default follows access_mode)')
     modes = parser.add_mutually_exclusive_group()
     modes.add_argument('--headless', action='store_true')
     modes.add_argument('--prepare', action='store_true',
@@ -175,6 +221,9 @@ def main():
     ):
         parser.error('--session requires a headless or callback mode')
 
+    context = None
+    destination_context = None
+    destination = None
     try:
         if args.credentials:
             config = load_client_config(args.credentials.expanduser())
@@ -187,6 +236,23 @@ def main():
                 client_id = (configured.strip() if configured
                              else get_settings().client_id)
             secret = args.client_secret or optional_env(CLIENT_SECRET_ENV_VAR)
+        mode = Settings(client_id=client_id).access_mode
+        context = _access_mode.set(mode)
+        if args.out is None:
+            configured_token = optional_env('GDOCS_SCOPE_MCP_TOKEN')
+            args.out = (Path(configured_token) if configured_token
+                        else default_token_path(mode))
+        path = args.out.expanduser().resolve()
+        destination = authorization.destination_lock(path)
+        destination.acquire()
+        destination_context = _attempt.set((
+            path, destination, authorization.generation(path),
+        ))
+        previous = authorization.authorization_seed(path, mode)
+        if previous and not any((args.credentials, args.client_id, client_id)):
+            client_id = previous.get('client_id')
+            secret = (None if previous.get('auth_method') == 'pkce-public'
+                      else previous.get('client_secret'))
         if args.callback_url:
             session, code = oauth.consume_session(args.session.expanduser(),
                                                   args.callback_url)
@@ -199,7 +265,9 @@ def main():
                 secret = (secret or oauth.PROJECT_CLIENT_SECRET
                           if client_id else oauth.PROJECT_CLIENT_SECRET)
             tokens = oauth.exchange_code(session, code, secret)
-            save_token(tokens, session, secret, args.out.expanduser())
+            ids = (session.picked_files(args.callback_url)
+                   if session.picker else None)
+            save_token(tokens, session, secret, args.out.expanduser(), ids)
         else:
             if not client_id:
                 client_id = oauth.PROJECT_CLIENT_ID
@@ -211,7 +279,9 @@ def main():
                     'No project client is configured. Provide --client-id '
                     'or --credentials for a registered Desktop app.'
                 )
-            print('Scopes: ' + ', '.join(SCOPES))
+            print('Scopes: ' + ', '.join(
+                scopes_for_mode(mode),
+            ))
             path = (args.session.expanduser() if args.session else
                     args.out.expanduser().with_suffix('.oauth-session.json'))
             if args.prepare:
@@ -227,6 +297,10 @@ def main():
     except oauth.AuthorizationError as exc:
         print(str(exc), file=sys.stderr)
         raise SystemExit(1) from None
+    except ToolFailureError as exc:
+        print(exc.failure.description + ' ' + exc.failure.suggested_action,
+              file=sys.stderr)
+        raise SystemExit(1) from None
     except (OSError, KeyError, ValueError, GoogleAuthError) as exc:
         print(f'Authorization failed ({type(exc).__name__}). '
               'Check the Desktop client and session; start a new attempt.',
@@ -235,6 +309,13 @@ def main():
     except (KeyboardInterrupt, EOFError):
         print('Authorization cancelled.', file=sys.stderr)
         raise SystemExit(1) from None
+    finally:
+        if destination_context is not None:
+            _attempt.reset(destination_context)
+        if destination is not None:
+            destination.release()
+        if context is not None:
+            _access_mode.reset(context)
     print('✓ Authorisation successful')
     print(f'✓ Token saved: {args.out.expanduser()}')
     print(f'Set GDOCS_SCOPE_MCP_TOKEN={args.out.expanduser()}')

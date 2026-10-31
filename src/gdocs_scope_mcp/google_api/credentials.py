@@ -12,6 +12,14 @@ from pathlib import Path
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 
+from gdocs_scope_mcp.contracts import EditFailedResponse
+from gdocs_scope_mcp.errors import ToolFailureError
+from gdocs_scope_mcp.google_api.access import (
+    AUTHORIZATION_ACTION,
+    is_selected_grant,
+    require_full_scopes,
+    require_selected_scopes,
+)
 from gdocs_scope_mcp.google_api.oauth import PublicClientCredentials
 from gdocs_scope_mcp.settings import (
     default_token_path,
@@ -30,6 +38,18 @@ CLIENT_ID_ENV_VAR = 'GDOCS_SCOPE_MCP_CLIENT_ID'
 CLIENT_SECRET_ENV_VAR = 'GDOCS_SCOPE_MCP_CLIENT_SECRET'
 GOG_CREDENTIALS_PATH = Path('/config/gogcli/credentials.json')
 GOG_TOKEN_CACHE = Path('/tmp/docs_edit_token_cache.json')
+
+
+def read_token(path: Path) -> dict:
+    """Identify a missing credential file without classifying unrelated IO."""
+    try:
+        return json.loads(path.read_text())
+    except FileNotFoundError as error:
+        raise ToolFailureError(EditFailedResponse(
+            code='AUTHENTICATION_REQUIRED',
+            description='The Google credential token file was not found.',
+            suggested_action=AUTHORIZATION_ACTION,
+        )) from error
 
 
 def export_gog_token(email: str = 'david@harriethq.com') -> dict:
@@ -58,10 +78,22 @@ def load_token() -> dict:
     """Load explicit, default, legacy-file, exported or cached token data."""
     token_file = optional_env(TOKEN_ENV_VAR)
     if token_file:
-        return json.loads(Path(token_file).read_text())
-    for token_path in [default_token_path(), *STANDALONE_TOKEN_PATHS]:
+        return read_token(Path(token_file).expanduser())
+    default = default_token_path(get_settings().access_mode)
+    for token_path in [default, *STANDALONE_TOKEN_PATHS]:
+        if (get_settings().access_mode == 'selected_files'
+                and token_path != default):
+            continue
         if token_path.exists():
-            return json.loads(token_path.read_text())
+            return read_token(token_path)
+    if get_settings().access_mode == 'selected_files':
+        raise ToolFailureError(EditFailedResponse(
+            code='AUTHENTICATION_REQUIRED',
+            description='No selected-file credentials found.',
+            suggested_action=AUTHORIZATION_ACTION,
+        ))
+    if default_token_path('selected_files').exists():
+        require_full_scopes([])
     try:
         token = export_gog_token()
         GOG_TOKEN_CACHE.write_text(json.dumps(token))
@@ -71,17 +103,23 @@ def load_token() -> dict:
         return token
     if GOG_TOKEN_CACHE.exists():
         log.info('Using cached gog token')
-        return json.loads(GOG_TOKEN_CACHE.read_text())
-    raise RuntimeError(
-        'No Google credentials found.\n'
-        'Run: gdocs-scope-mcp-auth --credentials ~/credentials.json\n'
-        'Or set GDOCS_SCOPE_MCP_TOKEN to your token file path.'
-    )
+        return read_token(GOG_TOKEN_CACHE)
+    raise ToolFailureError(EditFailedResponse(
+        code='AUTHENTICATION_REQUIRED',
+        description='No Google credentials found.',
+        suggested_action=AUTHORIZATION_ACTION,
+    ))
 
 
 def load_credentials():
     """Return refreshed google.oauth2.credentials.Credentials."""
     token_data = load_token()
+    selected = get_settings().access_mode == 'selected_files'
+    if selected:
+        require_selected_scopes(token_data.get('scopes'))
+    elif (token_data.get('access_mode') == 'selected_files'
+          or is_selected_grant(token_data.get('scopes'))):
+        require_full_scopes(token_data.get('scopes'))
     client_id = token_data.get('client_id') or token_data.get('_client_id')
     client_secret = token_data.get('client_secret') or token_data.get(
         '_client_secret'
@@ -122,4 +160,8 @@ def load_credentials():
         scopes=scopes,
     )
     creds.refresh(Request())
+    if selected:
+        require_selected_scopes(creds.granted_scopes)
+    elif is_selected_grant(creds.granted_scopes):
+        require_full_scopes(creds.granted_scopes)
     return creds

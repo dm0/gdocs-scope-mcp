@@ -11,6 +11,7 @@ An absent default file is allowed; an explicitly selected file must exist.
 ```json
 {
   "client_id": null,
+  "access_mode": "full_drive",
   "write_revision_mode": "required",
   "document_cache_enabled": false,
   "document_cache_storage": "disk",
@@ -81,6 +82,7 @@ Environment variables override individual file settings:
 | Environment variable | JSON field | Default |
 |---|---|---|
 | `GDOCS_SCOPE_MCP_CLIENT_ID` | `client_id` | `null` (bundled client for new authorization) |
+| `GDOCS_SCOPE_MCP_ACCESS_MODE` | `access_mode` | `full_drive` |
 | `GDOCS_SCOPE_MCP_WRITE_REVISION_MODE` | `write_revision_mode` | `required` |
 | `GDOCS_SCOPE_MCP_DOCUMENT_CACHE_ENABLED` | `document_cache_enabled` | `false` |
 | `GDOCS_SCOPE_MCP_DOCUMENT_CACHE_STORAGE` | `document_cache_storage` | `disk` |
@@ -164,11 +166,12 @@ the STDIO server; FastMCP's subprocess environment is filtered.
 | `GDOCS_SCOPE_MCP_CLIENT_SECRET` | Optional OAuth client secret override |
 | `GOG_KEYRING_PASSWORD` | Auto-export from gog CLI (for personal/OpenClaw use) |
 
-Token resolution checks `GDOCS_SCOPE_MCP_TOKEN`, then
+In `full_drive` mode, token resolution checks `GDOCS_SCOPE_MCP_TOKEN`, then
 `$XDG_CONFIG_HOME/gdocs-scope-mcp/token.json`
 (default root: `~/.config`), `~/.google-docs-mcp/token.json`, the older
 `~/.google-drive-mcp/token.json`, then gog export/cache. New authorizations use
-the XDG path unless `--out` is supplied. Empty or relative `XDG_CONFIG_HOME`
+the XDG path unless `--out` or `GDOCS_SCOPE_MCP_TOKEN` is supplied.
+Empty or relative `XDG_CONFIG_HOME`
 values are ignored. Changing `GDOCS_SCOPE_MCP_CONFIG` selects the settings file,
 not the token directory. Existing token files are not moved or rewritten.
 Token-stored client credentials take precedence over environment client
@@ -184,6 +187,60 @@ For a custom client, provide the matching secret in its credentials JSON or
 through `GDOCS_SCOPE_MCP_CLIENT_SECRET` together with an explicit client ID.
 Existing token files retain their client credentials; changing settings does
 not switch their OAuth client or document-access permissions.
+
+### Document access modes
+
+`access_mode` is a server setting, shared with the authorization CLI. Set it
+in JSON or through `GDOCS_SCOPE_MCP_ACCESS_MODE`, then restart the MCP server.
+An agent cannot override it through tool arguments.
+
+`docs_authorize`, `docs_authorization_complete` and
+`docs_authorization_status` are available in both modes.
+`docs_select_files` is registered only in `selected_files`; it is absent from
+the `full_drive` tool catalog. A mode change requires a server restart to
+update the catalog. The old `docs_selection_status` name is not registered.
+
+- `full_drive` preserves the existing broad authorization and token lookup.
+- `selected_files` requests only `drive.file` through Desktop Google Picker.
+  The default token is `selected-files-token.json` in the same XDG application
+  directory. Explicit `GDOCS_SCOPE_MCP_TOKEN` paths still take precedence;
+  broad legacy and gog fallbacks are disabled in this mode. The exchange and
+  each refresh must confirm exactly the narrow scope; unknown or additional
+  granted scopes are rejected before document operations.
+
+Selected mode covers files granted to or created by the application, including
+grants from earlier selection sessions. A document URL alone grants no access.
+Google continues to enforce sharing permissions and organization policies.
+
+Separate token paths retain each mode's saved credentials. When switching from
+`selected_files` to `full_drive`, an existing narrow token requires additional
+authorization.
+The server returns `AUTHENTICATION_REQUIRED` with guidance to use
+`docs_authorize`; the user then grants broader access in the browser. Poll
+`docs_authorization_status` to confirm completion. The same configured token file
+can be upgraded: replacement occurs only after sufficient scopes and the
+previously bound account/client are verified. Denial or failure preserves it.
+Alternatively run `gdocs-scope-mcp-auth` with `access_mode=full_drive` and the
+same token destination. The CLI also verifies the upgrade.
+
+With default token paths, the broad token is written to `token.json` while
+`selected-files-token.json` stays intact. When no broad default token exists,
+authorization retains the selected token's client/account binding rather than
+silently changing accounts. An existing usable broad token can be reused.
+
+Merely changing configuration does not narrow or revoke an existing Google
+grant. If Google returns broad scopes,
+remove the application's grant in [Google Account connections](https://myaccount.google.com/connections)
+and authorize again with the intended mode. Revocation can interrupt other
+tokens for the same application. Do not revoke an existing grant unless that
+impact is intended. A selected-file token grants no full access until the
+additional consent has been completed and verified.
+
+For a custom Desktop client, enable the Google Picker API in its Cloud project.
+Existing selected-file credentials retain their original client and account.
+Later selections cannot silently replace them with another account's token.
+See [selected-file onboarding](getting-started.md#access-only-selected-documents)
+and the [selection protocol](protocol.md#document-access-and-selection).
 
 ### Environment name migration and validation
 

@@ -43,9 +43,12 @@ def config_directory() -> Path:
     return root / 'gdocs-scope-mcp'
 
 
-def default_token_path() -> Path:
+def default_token_path(access_mode: str = 'full_drive') -> Path:
     """Keep new credentials in the application's configuration directory."""
-    return config_directory() / 'token.json'
+    name = ('selected-files-token.json'
+            if access_mode == 'selected_files'
+            else 'token.json')
+    return config_directory() / name
 
 
 def config_path() -> Path:
@@ -72,6 +75,7 @@ class Settings(BaseSettings):
     client_id: Annotated[
         str, StringConstraints(strip_whitespace=True, min_length=1),
     ] | None = None
+    access_mode: Literal['full_drive', 'selected_files'] = 'full_drive'
     write_revision_mode: Literal['required', 'target'] = 'required'
     document_cache_enabled: bool = False
     document_cache_storage: Literal['disk', 'memory'] = 'disk'

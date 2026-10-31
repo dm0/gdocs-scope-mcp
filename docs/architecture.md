@@ -12,6 +12,9 @@ application operation merely to reuse one of its helpers.
 | `server.py`, `__main__.py` | Construct the server, capture startup identity, configure middleware, register tools and start STDIO. |
 | `tools/` | Thin MCP contracts, descriptions, schemas, annotations and explicit registration functions. |
 | `google_api/credentials.py` | Token precedence, canonical environment overrides, legacy token-file paths, gog fallback and OAuth refresh. |
+| `google_api/access.py` | Shared access-mode scope policy, grant validation and authorization recovery guidance, independent of MCP. |
+| `google_api/authorization.py` | Desktop client selection, narrow-to-full grant upgrades, account/file verification and private atomic token installation. |
+| `google_api/selection.py` | Bounded asynchronous consent and Desktop Picker sessions, a shared one-use receiver for HTTP/manual callbacks, listeners and credential destination locks. |
 | `google_api/oauth.py` | Shared Desktop client configuration, PKCE sessions, callback validation, private session files, token exchange and the google-auth public-client refresh adapter. |
 | `auth_setup.py` | Desktop authorization CLI, bounded loopback listener and headless session lifecycle. |
 | `google_api/clients.py` | Construct discovery clients; cache Docs reads by default, with explicit uncached construction where required. |
@@ -145,6 +148,9 @@ Register it explicitly from the feature registration function. Keep the
 intentional feature registration sequence in `server.py`; do not register via
 import side effects. Add behavior, failure and schema tests through the MCP
 client, and review deliberate changes to the frozen transport contract.
+Access tools register from the startup access mode: common authorization and
+status tools are always present, while file selection is registered only for
+`selected_files`. Verify each catalog through a fresh STDIO server.
 
 ### Add a document feature
 

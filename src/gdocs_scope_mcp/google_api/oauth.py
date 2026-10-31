@@ -21,6 +21,8 @@ from google.oauth2.credentials import Credentials
 TOKEN_URI = 'https://oauth2.googleapis.com/token'
 CALLBACK_PATH = '/oauth2/callback'
 DEFAULT_TIMEOUT = 300
+MAX_CALLBACK_LENGTH = 16384
+MAX_PICKED_FILES = 100
 # Shared Desktop client credentials are public application identifiers.
 # They do not grant access to user data; user tokens must remain private.
 PROJECT_CLIENT_SECRET = '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'
@@ -33,6 +35,10 @@ class AuthorizationError(ValueError):
     """Report an authorization failure without returning sensitive payloads."""
 
 
+class AuthorizationDeniedError(AuthorizationError):
+    """Distinguish authenticated cancellation from invalid callbacks."""
+
+
 @dataclass(repr=False)
 class AuthorizationSession:
     """Tie the verifier and state to one client, redirect and deadline."""
@@ -43,6 +49,9 @@ class AuthorizationSession:
     expires_at: float
     verifier: str = field(repr=False)
     state: str = field(repr=False)
+    picker: bool = False
+    token_destination: str | None = None
+    token_generation: str | None = None
 
     def __post_init__(self):
         """Reject malformed saved sessions before they can make requests."""
@@ -59,16 +68,23 @@ class AuthorizationSession:
                 or not self.state
                 or not isinstance(self.expires_at, (int, float))
                 or not math.isfinite(self.expires_at)
+                or not isinstance(self.picker, bool)
+                or (self.token_destination is not None
+                    and not isinstance(self.token_destination, str))
+                or (self.token_generation is not None
+                    and not isinstance(self.token_generation, str))
                 or not isinstance(self.scopes, list)
                 or not all(isinstance(scope, str) for scope in self.scopes)):
             raise AuthorizationError('Invalid authorization session.')
 
     @classmethod
-    def create(cls, client_id, redirect_uri, scopes, timeout=DEFAULT_TIMEOUT):
+    def create(cls, client_id, redirect_uri, scopes, timeout=DEFAULT_TIMEOUT,
+               *, picker=False):
         """Generate independent cryptographic randomness for each attempt."""
         return cls(client_id, redirect_uri, list(scopes),
                    time.time() + timeout,
-                   secrets.token_urlsafe(64), secrets.token_urlsafe(32))
+                   secrets.token_urlsafe(64), secrets.token_urlsafe(32),
+                   picker)
 
     def check_active(self):
         """Reject expired sessions before using their authorization data."""
@@ -81,17 +97,38 @@ class AuthorizationSession:
         challenge = base64.urlsafe_b64encode(
             hashlib.sha256(self.verifier.encode('ascii')).digest()
         ).rstrip(b'=').decode('ascii')
-        return 'https://accounts.google.com/o/oauth2/v2/auth?' + urlencode({
+        params = {
             'client_id': self.client_id, 'redirect_uri': self.redirect_uri,
             'response_type': 'code', 'scope': ' '.join(self.scopes),
             'access_type': 'offline', 'prompt': 'consent',
             'state': self.state, 'code_challenge': challenge,
             'code_challenge_method': 'S256',
-        })
+        }
+        if self.picker:
+            params.update(trigger_onepick='true', allow_multiple='true',
+                          mimetypes='application/vnd.google-apps.document',
+                          include_granted_scopes='false')
+        return ('https://accounts.google.com/o/oauth2/v2/auth?'
+                + urlencode(params))
+
+    def picked_files(self, callback_url):
+        """Validate a Picker callback and bound untrusted file selectors."""
+        self.callback_code(callback_url)
+        params = parse_qs(urlsplit(callback_url).query, keep_blank_values=True)
+        ids = params.get('picked_file_ids', [''])[0].split(',')
+        if (not self.picker or len(callback_url) > MAX_CALLBACK_LENGTH
+                or len(ids) > MAX_PICKED_FILES or len(ids) != len(set(ids))
+                or not all(re.fullmatch(r'[A-Za-z0-9_-]{1,256}', item)
+                           for item in ids)):
+            raise AuthorizationError('Invalid or empty file selection.')
+        return ids
 
     def callback_code(self, callback_url):
         """Validate the exact callback destination and unambiguous response."""
         self.check_active()
+        if (not isinstance(callback_url, str)
+                or len(callback_url) > MAX_CALLBACK_LENGTH):
+            raise AuthorizationError('Invalid OAuth callback URL.')
         target = urlsplit(self.redirect_uri)
         callback = urlsplit(callback_url)
         if ((callback.scheme, callback.netloc, callback.path)
@@ -109,6 +146,8 @@ class AuthorizationSession:
         if 'error' in params:
             if 'code' in params:
                 raise AuthorizationError('Ambiguous OAuth callback.')
+            if params['error'] == ['access_denied']:
+                raise AuthorizationDeniedError('Authorization was denied.')
             raise AuthorizationError('Google authorization was denied.')
         code = params.get('code', [''])[0]
         if not code:

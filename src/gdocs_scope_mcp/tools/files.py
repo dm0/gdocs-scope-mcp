@@ -35,6 +35,9 @@ def register(mcp):
         """
         List Google Docs from Drive, optionally filtered by a search query.
 
+        In selected_files mode this lists documents available to the application,
+        including application-created documents, not the entire account Drive.
+
         Args:
             query: Optional literal search text for title and content, not a raw
                 Drive query. Quotes and backslashes are escaped automatically.

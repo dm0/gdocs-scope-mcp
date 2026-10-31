@@ -41,12 +41,14 @@ import sys
 from fastmcp import FastMCP
 
 from gdocs_scope_mcp.diagnostics import capture_server_info
+from gdocs_scope_mcp.google_api.selection import manager as selection_manager
 from gdocs_scope_mcp.settings import get_settings
 from gdocs_scope_mcp.tool_logging import (
     ToolCallLoggingMiddleware,
     configure_logging,
 )
 from gdocs_scope_mcp.tools import (
+    access,
     comments,
     diagnostics,
     documents,
@@ -129,6 +131,30 @@ CONCURRENT EDITS:
 
 DIAGNOSTICS:
     server_info            Read process identity and startup source fingerprint
+
+DOCUMENT ACCESS:
+    server_info exposes configured access_mode: full_drive (compatibility
+    default) or selected_files. Tools cannot change this setting. In
+    selected_files mode, docs_list covers files available to the application,
+    including files it created. A pasted URL grants no additional access.
+    In selected_files mode only, docs_select_files starts browser selection.
+    It is absent from the tool catalog in full_drive mode. Present the returned
+    authorization_url if browser opening is unavailable. Poll
+    docs_authorization_status with that session_id in the same server process.
+    Completed status returns verified document metadata. Selection adds grants;
+    it does not revoke older grants or override sharing/domain restrictions.
+    After changing selected_files to full_drive, an existing narrow grant
+    requires consent: call docs_authorize, explain the broader access
+    to the user and poll docs_authorization_status. The tool requests only the
+    configured mode; agents cannot override it. Full authorization completes
+    with an empty documents list. The old token is retained on denial/failure.
+    For a browser on another computer, start with open_browser=False. After
+    consent, ask for the complete address-bar redirect URL even if localhost
+    fails to connect. Pass it to docs_authorization_complete with the original
+    session_id, then poll docs_authorization_status. Do not navigate to that
+    callback URL or quote its short-lived code in replies or reports.
+    Do not launch selection automatically for every permission error or retry
+    failed writes after granting access without inspecting their outcome.
 
 EDIT RECEIPTS:
     Text edits and comment mutations identify document_id, scope, and
@@ -330,6 +356,7 @@ entities.register(mcp)
 documents.register_editing(mcp)
 comments.register(mcp)
 files.register(mcp)
+access.register(mcp)
 
 def main():
     """Run the command-line entry point for this module."""
@@ -337,7 +364,10 @@ def main():
     get_settings()
     # Our logger has its own handler; this default is for third-party loggers.
     logging.basicConfig(level=logging.WARNING, stream=sys.stderr)
-    mcp.run(transport='stdio')
+    try:
+        mcp.run(transport='stdio')
+    finally:
+        selection_manager.close()
 
 
 if __name__ == '__main__':
