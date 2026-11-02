@@ -11,6 +11,7 @@ from gdocs_scope_mcp.rich_text.compiler import markdown_to_requests
     '<p style="text-align: center;">Centered</p>',
     '- Parent\n  - Child🦷',
     '```python\nreturn 1\n```',
+    '- Item\n\n###### Heading after list\n\nPlain',
     '[**Bold🦷**](https://example.com) and `code`',
 ])
 def test_every_inserted_paragraph_resets_inherited_formatting(
@@ -56,4 +57,19 @@ def test_explicit_styles_follow_baseline_resets(newline_before):
     assert [r['updateTextStyle']['textStyle'] for r in requests
             if r.get('updateTextStyle', {}).get('textStyle')] == [
         {'bold': True}, {'link': {'url': 'https://example.com'}},
+    ]
+
+
+def test_explicit_alignment_is_applied_after_named_style_change():
+    """Avoid API normalization of input alignment during a wildcard reset."""
+    requests = markdown_to_requests(
+        '<p style="text-align: center;">Centered</p>', start=12,
+    )
+    styles = [r['updateParagraphStyle'] for r in requests
+              if 'updateParagraphStyle' in r]
+    assert styles == [
+        {'range': {'startIndex': 13, 'endIndex': 21},
+         'paragraphStyle': {'namedStyleType': 'NORMAL_TEXT'}, 'fields': '*'},
+        {'range': {'startIndex': 13, 'endIndex': 21},
+         'paragraphStyle': {'alignment': 'CENTER'}, 'fields': 'alignment'},
     ]

@@ -190,11 +190,24 @@ def compile_paragraphs(
             {
                 'updateParagraphStyle': {
                     'range': span.copy(),
-                    'paragraphStyle': style,
+                    'paragraphStyle': {
+                        'namedStyleType': style.get(
+                            'namedStyleType', 'NORMAL_TEXT',
+                        ),
+                    },
                     'fields': '*',
                 }
             }
         )
+        explicit = {key: value for key, value in style.items()
+                    if key != 'namedStyleType'}
+        if explicit:
+            # Google may normalize alignment while changing the named style.
+            # Apply explicit input properties only after that reset completes.
+            formatting_requests.append({'updateParagraphStyle': {
+                'range': span.copy(), 'paragraphStyle': explicit,
+                'fields': ','.join(explicit),
+            }})
         formatting_requests.append({'updateTextStyle': {
             'range': span.copy(), 'textStyle': {}, 'fields': '*',
         }})

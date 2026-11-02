@@ -97,7 +97,8 @@ def test_read_output_can_be_inserted_with_supported_styles(
         ]
         assert [item['paragraphStyle'] for item in paragraph_styles] == [
             {'namedStyleType': 'HEADING_1'},
-            {'namedStyleType': 'NORMAL_TEXT', 'alignment': 'CENTER'},
+            {'namedStyleType': 'NORMAL_TEXT'},
+            {'alignment': 'CENTER'},
         ]
         assert 'original-id' not in str(requests)
     else:
@@ -125,7 +126,7 @@ def test_aligned_html_keeps_nested_styles_local(alignment, newline_before):
     ]
     paragraphs = [r['updateParagraphStyle']['paragraphStyle']
                   for r in requests if 'updateParagraphStyle' in r]
-    assert paragraphs[0]['alignment'] == {
+    assert paragraphs[1]['alignment'] == {
         'center': 'CENTER', 'right': 'END', 'justify': 'JUSTIFIED',
     }[alignment]
     assert paragraphs[-1] == {'namedStyleType': 'NORMAL_TEXT'}

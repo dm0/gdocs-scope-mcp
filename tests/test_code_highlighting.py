@@ -150,8 +150,8 @@ def test_background_switch_reaches_native_styles(background, monkeypatch):
     assert all('backgroundColor' not in s for s in styles)
     paragraphs = [r['updateParagraphStyle'] for r in requests
                   if 'updateParagraphStyle' in r]
-    assert len(paragraphs) == 1
-    assert ('shading' in paragraphs[0]['paragraphStyle']) == background
+    assert len(paragraphs) == 2  # noqa: PLR2004
+    assert ('shading' in paragraphs[1]['paragraphStyle']) == background
     assert all('foregroundColor' in s for s in styles)
     assert any(s['bold'] for s in styles)
     assert any(not s['bold'] for s in styles)
@@ -182,7 +182,7 @@ def test_paragraph_shading_includes_empty_lines_and_stays_within_code(
     start = len(inserted[:inserted.index(code)].encode('utf-16-le')) // 2
     end = len(inserted[:inserted.index('After')].encode('utf-16-le')) // 2
     assert update['range'] == {'startIndex': 10 + start, 'endIndex': 10 + end}
-    assert update['fields'] == '*'
+    assert 'shading' in update['fields'].split(',')
     assert update['paragraphStyle']['shading'] == {'backgroundColor': {
         'color': {'rgbColor': {
             'red': 39 / 255, 'green': 40 / 255, 'blue': 34 / 255,
@@ -263,7 +263,7 @@ def test_spacing_only_targets_code_after_all_insertions(
     assert len(spacing) == 1
     index, update = spacing[0]
     assert update['paragraphStyle']['lineSpacing'] == CUSTOM_LINE_SPACING * 100
-    assert update['fields'] == '*'
+    assert 'lineSpacing' in update['fields'].split(',')
     inserted = inserted_text_from_requests(requests)
     raw = inserted.encode('utf-16-le')
     a, b = (update['range'][key] - 10

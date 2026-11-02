@@ -159,7 +159,7 @@ def test_read_alignment_html_is_converted_to_paragraph_style():
         r['updateParagraphStyle'] for r in requests
         if 'updateParagraphStyle' in r
     ]
-    assert styles[0]['paragraphStyle']['alignment'] == 'CENTER'
+    assert styles[1]['paragraphStyle']['alignment'] == 'CENTER'
 
 
 def test_read_heading_anchor_is_not_inserted_as_visible_text():
