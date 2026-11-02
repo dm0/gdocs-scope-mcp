@@ -73,3 +73,16 @@ def test_explicit_alignment_is_applied_after_named_style_change():
         {'range': {'startIndex': 13, 'endIndex': 21},
          'paragraphStyle': {'alignment': 'CENTER'}, 'fields': 'alignment'},
     ]
+
+
+def test_table_cell_resets_exclude_unsupported_page_breaks():
+    """Reset cell presentation without sending body-only API properties."""
+    plan = markdown_to_requests('| Header |\n| --- |\n| Plain |')
+    resets = [r['updateParagraphStyle'] for r in plan.iter_requests()
+              if 'updateParagraphStyle' in r]
+    assert resets
+    for reset in resets:
+        fields = set(reset['fields'].split(','))
+        assert not fields & {'*', 'pageBreakBefore', 'headingId', 'tabStops'}
+        assert {'namedStyleType', 'alignment', 'indentStart', 'shading',
+                'spaceAbove', 'spaceBelow'} <= fields

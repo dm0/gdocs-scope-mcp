@@ -14,6 +14,13 @@ from gdocs_scope_mcp.rich_text.paragraphs import parse_html as html_to_gpars
 from gdocs_scope_mcp.rich_text.validation import unsupported_table
 from gdocs_scope_mcp.text_indices import utf16_length
 
+CELL_PARAGRAPH_RESET_FIELDS = (
+    'namedStyleType,alignment,lineSpacing,direction,spacingMode,'
+    'spaceAbove,spaceBelow,borderBetween,borderTop,borderBottom,borderLeft,'
+    'borderRight,indentFirstLine,indentStart,indentEnd,keepLinesTogether,'
+    'keepWithNext,avoidWidowAndOrphan,shading'
+)
+
 
 def shifted_requests(requests: list[dict], offset: int) -> list[dict]:
     """Translate relative cell requests without changing their styles."""
@@ -82,6 +89,12 @@ def convert_table(element: Tag, start: int) -> InsertionTable:
                 line_break.replace_with(NavigableString('\u000b'))
             paragraphs = html_to_gpars(cell.decode_contents(), 0)
             requests = gpars_to_requests(paragraphs, newline_before=False)
+            for request in requests:
+                update = request.get('updateParagraphStyle', {})
+                if update.get('fields') == '*':
+                    # pageBreakBefore is invalid even as a reset in a table.
+                    # headingId and tabStops are read-only API properties.
+                    update['fields'] = CELL_PARAGRAPH_RESET_FIELDS
             # The native cell already contains its mandatory final newline.
             insertions = [r['insertText'] for r in requests
                           if 'insertText' in r]

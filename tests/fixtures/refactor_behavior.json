@@ -553,7 +553,7 @@
             "paragraphStyle": {
               "namedStyleType": "NORMAL_TEXT"
             },
-            "fields": "*"
+            "fields": "namedStyleType,alignment,lineSpacing,direction,spacingMode,spaceAbove,spaceBelow,borderBetween,borderTop,borderBottom,borderLeft,borderRight,indentFirstLine,indentStart,indentEnd,keepLinesTogether,keepWithNext,avoidWidowAndOrphan,shading"
           }
         },
         {
@@ -615,7 +615,7 @@
             "paragraphStyle": {
               "namedStyleType": "NORMAL_TEXT"
             },
-            "fields": "*"
+            "fields": "namedStyleType,alignment,lineSpacing,direction,spacingMode,spaceAbove,spaceBelow,borderBetween,borderTop,borderBottom,borderLeft,borderRight,indentFirstLine,indentStart,indentEnd,keepLinesTogether,keepWithNext,avoidWidowAndOrphan,shading"
           }
         },
         {
@@ -665,7 +665,7 @@
             "paragraphStyle": {
               "namedStyleType": "NORMAL_TEXT"
             },
-            "fields": "*"
+            "fields": "namedStyleType,alignment,lineSpacing,direction,spacingMode,spaceAbove,spaceBelow,borderBetween,borderTop,borderBottom,borderLeft,borderRight,indentFirstLine,indentStart,indentEnd,keepLinesTogether,keepWithNext,avoidWidowAndOrphan,shading"
           }
         },
         {
@@ -703,7 +703,7 @@
             "paragraphStyle": {
               "namedStyleType": "NORMAL_TEXT"
             },
-            "fields": "*"
+            "fields": "namedStyleType,alignment,lineSpacing,direction,spacingMode,spaceAbove,spaceBelow,borderBetween,borderTop,borderBottom,borderLeft,borderRight,indentFirstLine,indentStart,indentEnd,keepLinesTogether,keepWithNext,avoidWidowAndOrphan,shading"
           }
         },
         {
