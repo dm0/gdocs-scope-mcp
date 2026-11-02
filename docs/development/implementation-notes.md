@@ -13,7 +13,7 @@ arguments, examples and supported behavior, start with the [document tools](../t
 | [Literal reader content](literal-rendering.md) | Escaping, read/copy fidelity and native source coordinates | [Verification](literal-rendering.md#verification-on-2026-10-29) |
 | [Desktop OAuth](oauth-authentication.md) | PKCE sessions, credential compatibility and distribution limitations | [Live verification](oauth-authentication.md#verification) |
 | [Public OAuth readiness](public-oauth-readiness.md) | is-a.dev feasibility, proposed DNS, scope audit and production requirements | [Remaining execution and evidence](public-oauth-readiness.md#remaining-execution-and-evidence) |
-| [Owner-run OAuth publication](public-oauth-owner-steps.md) | Pages workflow template, registration PRs, DNS checks and Google application instructions | [Evidence to return](public-oauth-owner-steps.md#evidence-to-return) |
+| [Owner-run OAuth publication](public-oauth-owner-steps.md) | Release-tag Pages publication, registration PRs, DNS checks and Google application instructions | [Evidence to return](public-oauth-owner-steps.md#evidence-to-return) |
 | [Selected-file access](selected-file-access.md) | Mode validation, Picker sessions, account binding and token installation | [Live evidence and validation boundaries](selected-file-access.md#live-evidence-2026-10-31) |
 | [API failures](api-failure-classification.md) | Structured reasons, credential recovery, privacy and read-backoff decision | [Verification](api-failure-classification.md#verification) |
 | [Concurrent edits](../concurrent-edits.md) | Revision policies, dependencies, retries, atomicity and unknown write outcomes | [Tests and reproduction](../concurrent-edits.md#verification) |

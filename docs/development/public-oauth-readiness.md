@@ -222,10 +222,40 @@ not required. Workflow execution remains separate from the local preview.
 All three HTML pages were opened in the browser. The homepage and terms were
 also inspected at a 390-pixel viewport; navigation wraps and body text remains
 readable. Desktop rendering was inspected for the homepage and privacy policy.
-The preview uses only local static assets. The draft banners must remain until
-owner review is complete. Final publication also needs an effective date,
-operator identity and the reviewed Google data-use disclosure.
+The completed pages use only local static assets, including an SVG favicon.
+They identify maintainer `dm0`, date the policies 2026-11-02 and describe the
+minimum scope for each mode. Draft banners have been removed; the shared
+client's Testing status remains visible. Public Google approval and the
+assessment of permitted MCP/AI-provider data use are still separate work.
 
 Package metadata declares MIT, but no standalone `LICENSE` file was found in
-the working tree. Confirm the intended license text and attribution before
-publishing final terms; the draft does not invent a copyright holder.
+the working tree. The terms link to that metadata and do not invent a copyright
+holder or a missing license file.
+
+## Minimum-scope verification (2026-11-02)
+
+The focused authorization suite passed 128 tests. The complete offline suite
+passed 2235 tests with 110 live cases deselected, external sockets disabled and
+only loopback/Unix sockets allowed. Existing one-scope and previous four-scope
+tokens, including legacy identity fields, refresh without rewriting their
+files. CLI consent, initial MCP authorization and the selected-to-full upgrade
+request exactly one mode-appropriate scope. Global Ruff and changed-test lint
+passed. The expected pytest-socket warning is the network-guard self-test.
+
+The opt-in `test_live_full_authorization_and_restart` requires a new isolated
+token destination through `GDOCS_SCOPE_MCP_LIVE_FULL_TOKEN`. It checks the
+requested scope, the saved grant, a document read and refresh/read/listing in a
+restarted isolated STDIO server. Remote callbacks use the same private file
+bridge as Picker tests. No existing credentials are replaced.
+
+```bash
+GDOCS_SCOPE_MCP_LIVE_TEST_DOC=AUTHORIZED_DOCUMENT_ID \
+GDOCS_SCOPE_MCP_LIVE_FULL_TOKEN=/private/new-directory/token.json \
+uv run --locked pytest -s -q -m live \
+  tests/test_live_selected_access.py::test_live_full_authorization_and_restart
+```
+
+Fresh Google consent and the operation matrix with the newly issued
+`drive`-only token remain pending user interaction. The earlier four-scope
+live evidence is not proof that a newly issued minimal grant has been tested.
+Do not submit verification claims that imply otherwise.

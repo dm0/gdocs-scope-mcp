@@ -7,12 +7,13 @@ or completed by the assistant. Replace every placeholder before using a file.
 
 ## 1. Prepare the public website
 
-Review `website/index.html`, `privacy.html` and `terms.html`. Before publishing:
+The completed local pages are `website/index.html`, `privacy.html` and
+`terms.html`. They identify maintainer `dm0`, use the supplied support address
+and date the policies 2026-11-02. Before the first public deployment:
 
-- Confirm the operator identity and effective date, finalize license text and
-  attribution, and review the data-use policy against the intended MCP hosts.
-- Remove the unpublished-draft banners after review. Retain the explanation
-  that unrestricted public OAuth approval is still pending.
+- Review the policy text against the intended MCP hosts. The pages retain the
+  explanation that unrestricted public OAuth approval is still pending;
+  unpublished-draft banners have been removed.
 - Keep the support address `gdocs-scope-mcp@googlegroups.com`. In Google Groups,
   check that external senders can post, messages reach you and conversations
   are visible only to the intended members. Receiving support mail does not
