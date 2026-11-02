@@ -12,6 +12,17 @@ Existing-table edits use [table tools](tools/tables.md).
 Rich headings map `#` to TITLE, `##` to SUBTITLE, `###` to HEADING_1,
 and so on. Rich insertion does not retain the source heading IDs.
 
+Rich insertion starts each paragraph and text run from the document's
+corresponding named style, then applies supported formatting explicitly present
+in the input. Neighbouring paragraphs do not supply direct font, color,
+emphasis, link, alignment, spacing, border, shading, or indentation overrides.
+Inherited bullets and numbering are removed before the paragraph style is
+reset; lists requested in the input receive their own native list formatting.
+This also applies between paragraphs within one insertion, so a heading after
+a list or code block uses its heading style. Document named styles and existing
+surrounding content are preserved. `rich=False` retains Google's native
+insertion inheritance and inserts the input literally without style resets.
+
 All three rich insertion tools (`docs_append`, `docs_insert_before`, and
 `docs_insert_after`) also accept the reader's HTML for bold (`b`), italic (`i`),
 underline (`u`), and paragraph alignment (`p` with `text-align: center`, `right`,
@@ -478,8 +489,10 @@ only the width; Google computes the height while preserving the aspect ratio.
 This also applies to local images uploaded through temporary Drive files.
 Sizing happens at insertion time; later layout changes do not resize the image.
 The calculation uses the paragraph width, not remaining space on an occupied
-visual line. First-line indentation is also respected when it narrows that
-width.
+visual line. The new paragraph's named-style indentation and explicitly
+requested list depth are respected when they narrow that width. Direct
+indentation and list membership from the source paragraph are discarded by
+rich insertion.
 
 Table cells, multi-column sections, headers, footers, footnotes and pageless
 documents are outside automatic sizing scope. If layout cannot be resolved
