@@ -1,15 +1,9 @@
-# Inactive template. Copy to .github/workflows/pages.yml only after owner review.
-# Then enable Pages with the GitHub Actions source and run manually on main.
 name: Publish project website
 
 on:
+  push:
+    tags: ['v*']
   workflow_dispatch:
-    inputs:
-      publish:
-        description: Publish the reviewed website to GitHub Pages
-        type: boolean
-        required: true
-        default: false
 
 permissions:
   contents: read
@@ -20,7 +14,6 @@ concurrency:
 
 jobs:
   deploy:
-    if: github.ref == 'refs/heads/main' && inputs.publish
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:

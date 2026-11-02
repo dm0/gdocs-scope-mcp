@@ -189,7 +189,8 @@ regressions using an older broad token.
    [privacy policy](../../website/privacy.html)
    and [terms](../../website/terms.html). The static site needs no JavaScript,
    build step, external fonts or analytics. Relative links work under a Pages
-   project path and a custom domain. No deployment workflow is enabled yet.
+   project path and a custom domain. The Pages workflow is configured for
+   ordinary release tags and manual runs; no deployment has been performed.
 2. Obtain real Google/GitHub verification challenges through the owner account.
    Non-commercial eligibility, the candidate name and `dm0` are confirmed.
 3. Retain the owner-reported Cloud audit above. Verify support mail delivery,
@@ -209,12 +210,14 @@ Cloud update, verification submission or Git push was performed for this audit.
 
 ## Local site checks
 
-The `website/` directory is the static publication artifact. Configure a future
-GitHub Pages Actions workflow to upload this directory;
+The `website/` directory is the static publication artifact. The
+[GitHub Pages workflow](../../.github/workflows/pages.yml) uploads only this
+directory on a pushed release tag matching `v*`, or a manual Actions run;
 [branch-source Pages](https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site)
 publishing supports only the root or `/docs`, not an arbitrary `/website`
 folder. Do not publish the repository root with credentials or research files.
-Deployment workflow creation and execution remain separate from this preview.
+Pages must use the GitHub Actions publishing source. Separate website tags are
+not required. Workflow execution remains separate from the local preview.
 
 All three HTML pages were opened in the browser. The homepage and terms were
 also inspected at a 390-pixel viewport; navigation wraps and body text remains

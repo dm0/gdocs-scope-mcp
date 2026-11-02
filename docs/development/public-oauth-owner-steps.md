@@ -19,12 +19,17 @@ Review `website/index.html`, `privacy.html` and `terms.html`. Before publishing:
   require opening group membership or archives to everyone. You can test from
   an account outside the group yourself. See [Groups permissions](https://support.google.com/groups/answer/2464975?hl=en).
 
-Use the inactive [Pages workflow template](../../research/publication/github-pages.yml).
-After reviewing it, copy it to `.github/workflows/pages.yml` and publish the
-approved source to `main`. In repository Settings > Pages, select GitHub Actions
-as the source. Run the workflow manually on `main`, checking its `publish`
-input only when you intend to publish. It uploads only `website/` and needs no
-Google credentials. It has no push or pull-request deployment trigger.
+The [Pages workflow](../../.github/workflows/pages.yml) publishes the tagged
+website automatically when a normal release tag matching `v*` is pushed to
+GitHub. No separate website tags are used. It can also be run manually from
+Actions. Ordinary branch pushes and pull requests do not deploy the site.
+It uploads only `website/` and needs no Google credentials.
+
+In repository Settings > Pages, select GitHub Actions as the source before the
+first deployment. If the `github-pages` environment has deployment restrictions,
+allow release tags matching `v*` and the branch used for manual deployment.
+The tagged commit must include the workflow and website files. A tag pointing
+at an older commit cannot deploy files that were added later.
 
 Initially inspect the default Pages URL returned by the deployment; for this
 project it is expected to be `https://dm0.github.io/gdocs-scope-mcp/`, unless
