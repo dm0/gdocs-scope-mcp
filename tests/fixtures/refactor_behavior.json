@@ -233,12 +233,51 @@
           }
         },
         {
-          "createParagraphBullets": {
+          "updateParagraphStyle": {
             "range": {
               "startIndex": 6,
               "endIndex": 18
             },
+            "paragraphStyle": {
+              "indentStart": {
+                "magnitude": 0,
+                "unit": "PT"
+              },
+              "indentFirstLine": {
+                "magnitude": 0,
+                "unit": "PT"
+              },
+              "indentEnd": {
+                "magnitude": 0,
+                "unit": "PT"
+              }
+            },
+            "fields": "indentStart,indentFirstLine,indentEnd"
+          }
+        },
+        {
+          "insertText": {
+            "location": {
+              "index": 6
+            },
+            "text": "\n"
+          }
+        },
+        {
+          "createParagraphBullets": {
+            "range": {
+              "startIndex": 7,
+              "endIndex": 19
+            },
             "bulletPreset": "BULLET_DISC_CIRCLE_SQUARE"
+          }
+        },
+        {
+          "deleteContentRange": {
+            "range": {
+              "startIndex": 6,
+              "endIndex": 7
+            }
           }
         }
       ],

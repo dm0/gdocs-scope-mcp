@@ -8,6 +8,8 @@ from gdocs_scope_mcp.rich_text.compiler import markdown_to_requests
 from gdocs_scope_mcp.rich_text.models import InsertionTable
 from gdocs_scope_mcp.rich_text.parsing import markdown_to_html
 
+from .test_advanced_list_contracts import ListReplay
+
 
 @pytest.mark.parametrize(
     ('markdown', 'style'),
@@ -189,10 +191,9 @@ def test_markdown_lists_create_item_paragraphs_and_native_bullets(
         markdown, start=12, newline_before=newline_before,
     )
 
-    inserted = ''.join(
-        request['insertText']['text'] for request in requests
-        if 'insertText' in request
-    )
+    replay = ListReplay('_' * 12 + '\n')
+    replay.apply(requests)
+    inserted = replay.text[12:-1]
     expected = '\nfirst\nsecond' if newline_before else 'first\nsecond\n'
     assert inserted == expected
     bullets = [

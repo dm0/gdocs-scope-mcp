@@ -243,11 +243,31 @@ def compile_paragraphs(
             'endIndex': paragraph_ranges[-1][1],
         }}})
         for item in reversed(list_ranges):
-            requests.append({'createParagraphBullets': {
+            # Native list creation supplies its own per-level indentation.
+            # Discard any indentation inherited from the named paragraph style.
+            zero = {'magnitude': 0, 'unit': 'PT'}
+            requests.append({'updateParagraphStyle': {
                 'range': {'startIndex': item['start'],
                           'endIndex': item['end']},
+                'paragraphStyle': {
+                    'indentStart': zero, 'indentFirstLine': zero,
+                    'indentEnd': zero,
+                },
+                'fields': 'indentStart,indentFirstLine,indentEnd',
+            }})
+            # A temporary plain paragraph prevents Google from merging this
+            # list with a preceding list and adopting its nesting level.
+            requests.append({'insertText': {
+                'location': {'index': item['start']}, 'text': '\n',
+            }})
+            requests.append({'createParagraphBullets': {
+                'range': {'startIndex': item['start'] + 1,
+                          'endIndex': item['end'] + 1},
                 'bulletPreset': item['preset'],
             }})
+            requests.append({'deleteContentRange': {'range': {
+                'startIndex': item['start'], 'endIndex': item['start'] + 1,
+            }}})
             removed = 0
             final_paragraphs = []
             for start, end, p in item['paragraphs']:
