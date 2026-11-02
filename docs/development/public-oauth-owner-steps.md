@@ -193,10 +193,12 @@ check is separate from approval for sensitive/restricted data access.
 
 ## 5. Submit data-access review only after the open decisions are resolved
 
-Leave the current four scope declarations intact for now: they match the
-current code. The readiness audit proposes `drive.file` for selected mode and
-`drive` alone for full mode. That reduction needs implementation and validation
-before Console declarations or reviewer claims are changed.
+New authorization requests now use `drive.file` for selected mode and `drive`
+alone for full mode. Once this revision is deployed and validated, update
+Console Data Access to those two scopes and remove the redundant `documents`
+and `drive.readonly` declarations. Update older installations before they
+authorize again. Existing saved full-mode tokens remain compatible; no
+automatic grant revocation or token rewrite is performed.
 
 Also resolve token-protection requirements, permitted MCP/AI-provider data use,
 and whether the deployment requires a security assessment. Do not claim an

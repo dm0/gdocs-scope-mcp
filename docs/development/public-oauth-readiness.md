@@ -132,16 +132,22 @@ Scope suffixes below are relative to `https://www.googleapis.com/auth/`.
 | --- | --- | --- | --- |
 | selected | `drive.file` | Non-sensitive | Read and edit selected/app-created Docs; temporary image creation and cleanup. Retain. |
 | full | `drive` | Restricted | Account-wide document discovery and operations on existing accessible files. Requires a specific justification for broad discovery. |
-| full | `drive.readonly` | Restricted | Current compatibility request; overlaps `drive`. No independent necessity established. |
-| full | `documents` | Sensitive | Current compatibility request; Docs methods also accept `drive`. No independent necessity established. |
-| full | `drive.file` | Non-sensitive | Current compatibility request; overlaps `drive`. No independent necessity established. |
 
 Classifications: [Drive scopes](https://developers.google.com/workspace/drive/api/guides/api-specific-auth)
 and [Docs scopes](https://developers.google.com/workspace/docs/api/auth).
-Do not submit redundant scopes with invented justifications. A proposed
-minimal full-mode request is `drive` alone, subject to a separately tested
-authorization/refresh transition and live feature regression. This audit does
-not change the request or revoke existing grants.
+The code now requests `drive` alone for new full-mode authorizations. Both
+[Docs reads](https://developers.google.com/workspace/docs/api/reference/rest/v1/documents/get)
+and [writes](https://developers.google.com/workspace/docs/api/reference/rest/v1/documents/batchUpdate)
+accept it. The previous full-mode request also included `documents`,
+`drive.readonly` and `drive.file`; those overlapping requests were removed.
+Existing full-mode token files still refresh using their saved scopes and are
+not rewritten or revoked. Selected-mode validation remains strict.
+
+The Cloud table above records the owner's earlier configuration, not a Cloud
+change by the assistant. After deploying this code, the owner can align Data
+Access with `drive` and `drive.file`. Older authorization clients should be
+updated first. New-consent live evidence must be distinguished from API
+regressions using an older broad token.
 
 ## Google review requirements to resolve
 

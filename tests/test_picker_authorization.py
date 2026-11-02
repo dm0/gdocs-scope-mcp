@@ -220,7 +220,7 @@ def test_cli_upgrades_picker_grant(picker, tmp_path, monkeypatch, result):
     def complete(_):
         saved = oauth.AuthorizationSession(**json.loads(pending.read_text()))
         assert not saved.picker
-        assert DRIVE_FULL in saved.scopes
+        assert saved.scopes == [DRIVE_FULL]
         assert saved.client_id == 'existing-client'
         query = parse_qs(urlsplit(saved.authorization_url()).query)
         assert 'trigger_onepick' not in query
