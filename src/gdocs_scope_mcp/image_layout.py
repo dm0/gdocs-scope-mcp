@@ -50,29 +50,25 @@ def _layout(document, index):
 
 
 def paragraph_width(document, index, paragraph):
-    """Resolve inherited styles and formatting applied by the insertion."""
+    """Resolve the named-style baseline and explicit insertion formatting."""
     layout = _layout(document, index)
     if layout is None:
         return None
-    width, source = layout
+    width, _ = layout
     overrides = paragraph.paragraph_style.model_dump(
         mode='json',
         by_alias=True,
         exclude_unset=True,
         exclude_defaults=True,
     )
-    direct = source.get('paragraphStyle', {})
     named = {
         style.get('namedStyleType'): style.get('paragraphStyle', {})
         for style in document.get('namedStyles', {}).get('styles', [])
     }
-    kind = overrides.get(
-        'namedStyleType', direct.get('namedStyleType', 'NORMAL_TEXT')
-    )
+    kind = overrides.get('namedStyleType', 'NORMAL_TEXT')
     effective = {
         **named.get('NORMAL_TEXT', {}),
         **named.get(kind, {}),
-        **direct,
         **overrides,
     }
     if paragraph.bullet_preset:
@@ -83,28 +79,6 @@ def paragraph_width(document, index, paragraph):
             'unit': 'PT',
         }
         effective['indentFirstLine'] = effective['indentStart']
-    elif source.get('bullet'):
-        bullet = source['bullet']
-        levels = (
-            document.get('lists', {})
-            .get(bullet.get('listId'), {})
-            .get(
-                'listProperties',
-                {},
-            )
-            .get('nestingLevels', [])
-        )
-        depth = bullet.get('nestingLevel', 0)
-        if depth >= len(levels):
-            return None
-        effective = {
-            **effective,
-            **{
-                key: value
-                for key, value in levels[depth].items()
-                if key.startswith('indent') and key not in direct
-            },
-        }
     indents = [
         _points(effective.get(key, {'unit': 'PT'}))
         for key in ('indentStart', 'indentFirstLine', 'indentEnd')

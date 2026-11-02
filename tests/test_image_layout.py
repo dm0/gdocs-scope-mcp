@@ -40,14 +40,14 @@ def image_paragraph(markup=None):
     return next(p for p in paragraphs if len(p))
 
 
-def test_body_width_and_first_line_indentation(paged):
+def test_body_width_ignores_source_paragraph_indentation(paged):
     paragraph = image_paragraph()
     assert paragraph_width(paged, 1, paragraph) == 468
     source = paged['body']['content'][0]['paragraph']['paragraphStyle']
     source.update(
         {'indentStart': pt(36), 'indentEnd': pt(18), 'indentFirstLine': pt(54)}
     )
-    assert paragraph_width(paged, 1, paragraph) == 396
+    assert paragraph_width(paged, 1, paragraph) == 468
 
 
 def test_section_margins_and_orientation(paged):
@@ -87,7 +87,7 @@ def test_named_style_inheritance_and_planned_override(paged):
     paged['body']['content'][0]['paragraph']['paragraphStyle'][
         'indentStart'
     ] = pt(24)
-    assert paragraph_width(paged, 1, heading) == 438
+    assert paragraph_width(paged, 1, heading) == 414
 
 
 def test_document_orientation_is_inherited_and_section_can_override(paged):
@@ -101,7 +101,7 @@ def test_document_orientation_is_inherited_and_section_can_override(paged):
     assert paragraph_width(paged, 1, image_paragraph()) == 468
 
 
-def test_existing_list_uses_native_level_indents(paged):
+def test_existing_list_does_not_supply_indents_to_new_paragraph(paged):
     paged['lists'] = {
         'list': {
             'listProperties': {
@@ -116,7 +116,7 @@ def test_existing_list_uses_native_level_indents(paged):
         'listId': 'list',
         'nestingLevel': 1,
     }
-    assert paragraph_width(paged, 1, image_paragraph()) == 378
+    assert paragraph_width(paged, 1, image_paragraph()) == 468
 
 
 def test_new_list_depth_and_continuation(paged):
