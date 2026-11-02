@@ -113,7 +113,9 @@ def compile_cell(markdown):
              'strip, making planned style ranges unsafe.')
     # Cell paragraph properties survive; only text and inline styles change.
     planned.requests = [r for r in planned.requests
-                        if 'updateParagraphStyle' not in r]
+                        if not set(r) & {
+                            'updateParagraphStyle', 'deleteParagraphBullets',
+                        }]
     if any(not set(r) <= {'insertText', 'updateTextStyle'}
            for r in planned.requests):
         fail('INVALID_ARGUMENT', 'Unsupported request in cell Markdown.')

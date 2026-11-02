@@ -114,7 +114,7 @@ def test_code_style_combines_with_outer_emphasis_and_link():
         '[**`word`**](https://example.com)', start=1,
     )
     updates = [r['updateTextStyle'] for r in requests
-               if 'updateTextStyle' in r]
+               if r.get('updateTextStyle', {}).get('textStyle')]
     assert len(updates) == 1
     assert updates[0]['textStyle'] == {
         'bold': True, 'link': {'url': 'https://example.com'},

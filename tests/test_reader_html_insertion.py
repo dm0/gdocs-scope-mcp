@@ -78,7 +78,7 @@ def test_read_output_can_be_inserted_with_supported_styles(
             buffer = (buffer[:offset] + insert['text'].encode('utf-16-le')
                       + buffer[offset:])
             inserted += insert['text']
-        elif 'updateTextStyle' in request:
+        elif request.get('updateTextStyle', {}).get('textStyle'):
             update = request['updateTextStyle']
             span = update['range']
             text = buffer[span['startIndex'] * 2:span['endIndex'] * 2]
@@ -119,7 +119,7 @@ def test_aligned_html_keeps_nested_styles_local(alignment, newline_before):
         newline_before=newline_before,
     )
     styles = [r['updateTextStyle']['textStyle'] for r in requests
-              if 'updateTextStyle' in r]
+              if r.get('updateTextStyle', {}).get('textStyle')]
     assert styles == [
         {'bold': True}, {'bold': True, 'italic': True}, {'bold': True},
     ]
@@ -139,4 +139,5 @@ def test_unsupported_html_wrappers_keep_text_only(markup):
     """Unsupported wrappers retain their child text without applying styles."""
     requests = markdown_to_requests(markup)
     assert requests[0]['insertText']['text'] == '\nword'
-    assert not any('updateTextStyle' in request for request in requests)
+    assert not any(request.get('updateTextStyle', {}).get('textStyle')
+                   for request in requests)

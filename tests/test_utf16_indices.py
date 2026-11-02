@@ -96,7 +96,8 @@ def test_style_ranges_after_emoji_use_utf16_units(newline_before):
     requests = markdown_to_requests(
         '😀 **word**', start=12, newline_before=newline_before,
     )
-    styles = [r['updateTextStyle'] for r in requests if 'updateTextStyle' in r]
+    styles = [r['updateTextStyle'] for r in requests
+              if r.get('updateTextStyle', {}).get('textStyle')]
     expected_start = 15 + int(newline_before)
 
     assert len(styles) == 1
@@ -213,7 +214,8 @@ def test_multiple_styled_runs_and_paragraphs_use_utf16(newline_before):
         newline_before=newline_before,
     )
     insertions = [r['insertText'] for r in requests if 'insertText' in r]
-    styles = [r['updateTextStyle'] for r in requests if 'updateTextStyle' in r]
+    styles = [r['updateTextStyle'] for r in requests
+              if r.get('updateTextStyle', {}).get('textStyle')]
     start = 15 + int(newline_before)
 
     assert styles[0]['range'] == {'startIndex': start, 'endIndex': start + 6}

@@ -60,7 +60,8 @@ def test_literal_text_round_trip(text, split):
     inserted, requests = compiled_text(markdown)
     assert inserted == text + '\n'
     assert not any('createParagraphBullets' in r or 'insertInlineImage' in r
-                   or 'updateTextStyle' in r for r in requests)
+                   or r.get('updateTextStyle', {}).get('textStyle')
+                   for r in requests)
     assert [r['updateParagraphStyle']['paragraphStyle'] for r in requests
             if 'updateParagraphStyle' in r] == [
         {'namedStyleType': 'NORMAL_TEXT'},
@@ -85,7 +86,7 @@ def test_formatted_literal_runs_preserve_styles(paragraph_style):
     buffer = inserted.encode('utf-16-le')
     styled = []
     for request in requests:
-        if 'updateTextStyle' in request:
+        if request.get('updateTextStyle', {}).get('textStyle'):
             update = request['updateTextStyle']
             span = update['range']
             text = buffer[span['startIndex'] * 2:span['endIndex'] * 2]
@@ -134,7 +135,7 @@ def test_literal_text_inside_native_table(table_document):
     assert table.cells[0][0].text == text
     updates = [r['updateTextStyle']['textStyle']
                for r in table.cells[0][0].requests
-               if 'updateTextStyle' in r]
+               if r.get('updateTextStyle', {}).get('textStyle')]
     assert updates == [{'bold': True}]
 
 
@@ -158,7 +159,8 @@ def test_image_metadata_cannot_inject_markup():
     _, requests = compiled_text(markdown)
     assert [r['insertInlineImage']['uri'] for r in requests
             if 'insertInlineImage' in r] == [uri]
-    assert not any('updateTextStyle' in r for r in requests)
+    assert not any(r.get('updateTextStyle', {}).get('textStyle')
+                   for r in requests)
 
 
 def test_heading_anchor_cannot_inject_markup():

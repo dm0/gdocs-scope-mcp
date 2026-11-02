@@ -76,7 +76,7 @@ def compile_paragraphs(
     list_ranges = []
     paragraph_ranges = []
     font_style_requests = []
-    code_paragraph_style_requests = []
+    formatting_requests = []
     code_markers = []
     removed_tabs = []
     offset = 0
@@ -170,34 +170,35 @@ def compile_paragraphs(
                                'unit': 'PT'},
                 'spaceBelow': {'magnitude': 0, 'unit': 'PT'},
             })
-        fields = list(style)
-        if style.get('namedStyleType', '').startswith('HEADING_'):
-            # Newlines copy direct spacing from the insertion paragraph.
-            # Mask-only fields restore the document's named-style spacing.
-            fields.extend(key for key in ('spaceAbove', 'spaceBelow')
-                          if key not in style)
-        paragraph_requests = (code_paragraph_style_requests
-                              if p.paragraph_style.line_spacing is not None
-                              else requests)
         paragraph_end = p.end_index + offset
         if (p.paragraph_style.line_spacing is not None and p.elements
                 and p.elements[-1].content.endswith('\n')):
             # The block terminator belongs to its final empty paragraph.
             # Include it to format trailing blank lines without touching prose.
             paragraph_end += 1
-        paragraph_requests.append(
+        span = {
+            'startIndex': p.start_index + offset,
+            'endIndex': paragraph_end,
+        }
+        # Newlines inherit list membership as well as direct formatting.
+        # Bullet deletion can introduce indentation, so reset paragraph
+        # properties afterwards, retaining only the explicit input styles.
+        formatting_requests.append({
+            'deleteParagraphBullets': {'range': span.copy()},
+        })
+        formatting_requests.append(
             {
                 'updateParagraphStyle': {
-                    'range': {
-                        'startIndex': p.start_index + offset,
-                        'endIndex': paragraph_end,
-                    },
+                    'range': span.copy(),
                     'paragraphStyle': style,
-                    'fields': ','.join(fields),
+                    'fields': '*',
                 }
             }
         )
-        requests.extend(text_style_requests)
+        formatting_requests.append({'updateTextStyle': {
+            'range': span.copy(), 'textStyle': {}, 'fields': '*',
+        }})
+        formatting_requests.extend(text_style_requests)
         content_end = p.end_index + offset
         if p.code_block and get_code_settings().code_block_named_ranges:
             code_markers.append((p.code_language, content_start,
@@ -219,9 +220,9 @@ def compile_paragraphs(
             ))
         if not newline_before:
             offset += 1
-    # Apply code spacing/fonts after all insertions, so subsequent prose
-    # cannot inherit formatting from a code paragraph we just formatted.
-    requests.extend(code_paragraph_style_requests)
+    # Finish all paragraph splits before applying styles: later insertions
+    # must neither copy nor normalize formatting already applied to a sibling.
+    requests.extend(formatting_requests)
     requests.extend(font_style_requests)
     if list_ranges:
         requests.append({'deleteParagraphBullets': {'range': {

@@ -195,7 +195,7 @@ def test_custom_inline_style_reaches_native_requests(markup):
     """Use the configured RGB channels and font for Markdown and HTML code."""
     requests = markdown_to_requests(markup, start=1, newline_before=False)
     updates = [r['updateTextStyle'] for r in requests
-               if 'updateTextStyle' in r]
+               if r.get('updateTextStyle', {}).get('textStyle')]
     assert len(updates) == 1
     assert updates[0] == {
         'range': {'startIndex': 8, 'endIndex': 14},
@@ -214,5 +214,5 @@ def test_custom_font_applies_to_blocks_without_inline_color():
     """Keep block styling independent from the inline-only color setting."""
     requests = markdown_to_requests('```\nword\n```', start=1)
     styles = [r['updateTextStyle']['textStyle'] for r in requests
-              if 'updateTextStyle' in r]
+              if r.get('updateTextStyle', {}).get('textStyle')]
     assert styles == [{'weightedFontFamily': {'fontFamily': 'Courier New'}}]

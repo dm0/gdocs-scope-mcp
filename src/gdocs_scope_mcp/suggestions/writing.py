@@ -146,6 +146,7 @@ def _insert(text, index, rich, *, before=False):
         'insertText',
         'updateTextStyle',
         'updateParagraphStyle',
+        'deleteParagraphBullets',
         'createNamedRange',
     }
     if not isinstance(requests, list) or any(
