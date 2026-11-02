@@ -170,6 +170,12 @@ def compile_paragraphs(
                                'unit': 'PT'},
                 'spaceBelow': {'magnitude': 0, 'unit': 'PT'},
             })
+        fields = list(style)
+        if style.get('namedStyleType', '').startswith('HEADING_'):
+            # Newlines copy direct spacing from the insertion paragraph.
+            # Mask-only fields restore the document's named-style spacing.
+            fields.extend(key for key in ('spaceAbove', 'spaceBelow')
+                          if key not in style)
         paragraph_requests = (code_paragraph_style_requests
                               if p.paragraph_style.line_spacing is not None
                               else requests)
@@ -187,7 +193,7 @@ def compile_paragraphs(
                         'endIndex': paragraph_end,
                     },
                     'paragraphStyle': style,
-                    'fields': ','.join(style.keys()),
+                    'fields': ','.join(fields),
                 }
             }
         )

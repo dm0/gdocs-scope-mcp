@@ -14,8 +14,8 @@ from gdocs_scope_mcp.rich_text.parsing import markdown_to_html
     [
         ('# Title', 'TITLE'),
         ('## Subtitle', 'SUBTITLE'),
-        ('### Heading', 'HEADING_1'),
-        ('######## Heading', 'HEADING_6'),
+        *[('#' * (level + 2) + ' Heading', f'HEADING_{level}')
+          for level in range(1, 7)],
     ],
 )
 @pytest.mark.parametrize('newline_before', [False, True])
@@ -37,7 +37,8 @@ def test_rich_heading_insertion(markdown, style, newline_before):
         'updateParagraphStyle': {
             'range': {'startIndex': start, 'endIndex': start + len(plain)},
             'paragraphStyle': {'namedStyleType': style},
-            'fields': 'namedStyleType',
+            'fields': ('namedStyleType,spaceAbove,spaceBelow'
+                       if style.startswith('HEADING_') else 'namedStyleType'),
         }
     }
 

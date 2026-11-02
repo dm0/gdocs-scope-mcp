@@ -20,7 +20,7 @@
             "paragraphStyle": {
               "namedStyleType": "HEADING_1"
             },
-            "fields": "namedStyleType"
+            "fields": "namedStyleType,spaceAbove,spaceBelow"
           }
         },
         {
