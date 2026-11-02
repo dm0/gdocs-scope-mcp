@@ -195,8 +195,9 @@ regressions using an older broad token.
    Non-commercial eligibility, the candidate name and `dm0` are confirmed.
 3. Retain the owner-reported Cloud audit above. Verify support mail delivery,
    project administration and any remaining policy/assessment requirements.
-4. Resolve the minimum scope set and data-policy/protection requirements;
-   prepare the corresponding demo and scope justification.
+4. Use the tested minimum scope set below. Resolve the remaining
+   data-policy/protection requirements and prepare the demo and scope
+   justification for the actual public deployment.
 5. Follow the [owner-run application instructions](public-oauth-owner-steps.md).
    The owner publishes, registers/verifies the domain and submits branding and
    data-access applications; the assistant does not submit external requests.
@@ -255,7 +256,47 @@ uv run --locked pytest -s -q -m live \
   tests/test_live_selected_access.py::test_live_full_authorization_and_restart
 ```
 
-Fresh Google consent and the operation matrix with the newly issued
-`drive`-only token remain pending user interaction. The earlier four-scope
-live evidence is not proof that a newly issued minimal grant has been tested.
-Do not submit verification claims that imply otherwise.
+Fresh Google consent and the operation matrix passed on 2026-11-02 through
+isolated worktree STDIO servers. The browser returned directly to the local
+loopback listener; manual callback submission was not needed. Both the actual
+consent request and saved credential contained exactly
+`https://www.googleapis.com/auth/drive`. The private token file had mode `0600`,
+an account binding and a refresh token, without a saved access token.
+
+| Live scenario | Result |
+| --- | --- |
+| Consent, document read, refresh/read/listing after process restart | Passed |
+| Anchored native comment create/reply/edit/resolve/reopen/delete | Passed |
+| Public suggestion writes and decisions with `requiredRevisionId` | Passed |
+| Public suggestion writes and decisions with `targetRevisionId` | Passed |
+| Local image upload, native layout readback and temporary-file cleanup | Passed |
+
+All five tests passed. The operation matrix used the newly issued one-scope
+token, including its before/after cleanup. It left one empty root tab, no
+suggestions, active comments or named ranges. All test-owned server processes
+were reaped. No warnings or errors occurred in the current-run server logs;
+shared table-probe logs can contain historical runs, so use startup timestamps
+and PIDs to identify the tested processes.
+
+Startup identity verified the editable worktree path, Python 3.14.4, FastMCP
+3.3.1 and source fingerprint
+`90765eb25d0ad88686580ebae6f72437c0c3197f84e5fde7e015b92596e9cc0d`.
+Package-version metadata in the editable environment was older than the source;
+source identity was established independently of that metadata.
+
+Evidence outside the repository:
+
+- Consent/restart: `/tmp/gdocs46-full-consent-live.xml` and
+  `/tmp/gdocs46-full-consent.GzDay5/authorization-report.json`.
+- One-scope operation matrix: `/tmp/gdocs46-drive-only-matrix.xml` and
+  `/tmp/gdocs46-full-consent.GzDay5/matrix-evidence/`.
+- Session cleanup: `/tmp/gdocs-scope-mcp-live-session-0tltomds/report.json`
+  and `/tmp/gdocs-scope-mcp-live-session-s6yxccat/report.json`.
+- Final wheel/sdist checks: `/tmp/gdocs46-final-artifacts.log`. Both artifacts
+  contained 95 identical source modules and passed isolated CLI/auth and
+  default 35-tool MCP discovery checks.
+
+These test-user checks establish functionality with the minimal full grant.
+They do not establish public OAuth verification or authorization by an account
+outside the project's test-user list. Domain registration, site deployment and
+Google verification applications remain owner-run steps.
