@@ -38,6 +38,9 @@ def replay(requests, original, start):
         item = next(iter(request.values()))
         left, right = item['range']['startIndex'], item['range']['endIndex']
         assert 1 <= left < right < len(cells)
+        if 'deleteContentRange' in request:
+            del cells[left:right]
+            continue
         if 'updateTextStyle' in request:
             font = item['textStyle'].get('weightedFontFamily')
             color = item['textStyle'].get('foregroundColor')
@@ -104,8 +107,9 @@ def test_code_preserves_literal_text_and_only_formats_code(
     first_font = next(i for i, r in enumerate(requests)
                       if 'weightedFontFamily' in r.get(
                           'updateTextStyle', {}).get('textStyle', {}))
-    assert all('insertText' not in r and 'insertInlineImage' not in r
-               for r in requests[first_font:])
+    assert all('insertInlineImage' not in r and (
+        'insertText' not in r or r['insertText']['text'] == '\n'
+    ) for r in requests[first_font:])
 
 
 def test_code_style_combines_with_outer_emphasis_and_link():
@@ -114,7 +118,7 @@ def test_code_style_combines_with_outer_emphasis_and_link():
         '[**`word`**](https://example.com)', start=1,
     )
     updates = [r['updateTextStyle'] for r in requests
-               if 'updateTextStyle' in r]
+               if r.get('updateTextStyle', {}).get('textStyle')]
     assert len(updates) == 1
     assert updates[0]['textStyle'] == {
         'bold': True, 'link': {'url': 'https://example.com'},

@@ -25,7 +25,11 @@ def replay(requests, *, start=6):
             at = insert['location']['index'] * 2
             buffer = (buffer[:at] + insert['text'].encode('utf-16-le')
                       + buffer[at:])
-        elif 'updateTextStyle' in request:
+        elif 'deleteContentRange' in request:
+            span = request['deleteContentRange']['range']
+            buffer = (buffer[:span['startIndex'] * 2]
+                      + buffer[span['endIndex'] * 2:])
+        elif request.get('updateTextStyle', {}).get('textStyle'):
             update = request['updateTextStyle']
             span = update['range']
             text = buffer[span['startIndex'] * 2:span['endIndex'] * 2]

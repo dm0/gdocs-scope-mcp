@@ -76,7 +76,7 @@ def compile_paragraphs(
     list_ranges = []
     paragraph_ranges = []
     font_style_requests = []
-    code_paragraph_style_requests = []
+    formatting_requests = []
     code_markers = []
     removed_tabs = []
     offset = 0
@@ -170,28 +170,48 @@ def compile_paragraphs(
                                'unit': 'PT'},
                 'spaceBelow': {'magnitude': 0, 'unit': 'PT'},
             })
-        paragraph_requests = (code_paragraph_style_requests
-                              if p.paragraph_style.line_spacing is not None
-                              else requests)
         paragraph_end = p.end_index + offset
         if (p.paragraph_style.line_spacing is not None and p.elements
                 and p.elements[-1].content.endswith('\n')):
             # The block terminator belongs to its final empty paragraph.
             # Include it to format trailing blank lines without touching prose.
             paragraph_end += 1
-        paragraph_requests.append(
+        span = {
+            'startIndex': p.start_index + offset,
+            'endIndex': paragraph_end,
+        }
+        # Newlines inherit list membership as well as direct formatting.
+        # Bullet deletion can introduce indentation, so reset paragraph
+        # properties afterwards, retaining only the explicit input styles.
+        formatting_requests.append({
+            'deleteParagraphBullets': {'range': span.copy()},
+        })
+        formatting_requests.append(
             {
                 'updateParagraphStyle': {
-                    'range': {
-                        'startIndex': p.start_index + offset,
-                        'endIndex': paragraph_end,
+                    'range': span.copy(),
+                    'paragraphStyle': {
+                        'namedStyleType': style.get(
+                            'namedStyleType', 'NORMAL_TEXT',
+                        ),
                     },
-                    'paragraphStyle': style,
-                    'fields': ','.join(style.keys()),
+                    'fields': '*',
                 }
             }
         )
-        requests.extend(text_style_requests)
+        explicit = {key: value for key, value in style.items()
+                    if key != 'namedStyleType'}
+        if explicit:
+            # Google may normalize alignment while changing the named style.
+            # Apply explicit input properties only after that reset completes.
+            formatting_requests.append({'updateParagraphStyle': {
+                'range': span.copy(), 'paragraphStyle': explicit,
+                'fields': ','.join(explicit),
+            }})
+        formatting_requests.append({'updateTextStyle': {
+            'range': span.copy(), 'textStyle': {}, 'fields': '*',
+        }})
+        formatting_requests.extend(text_style_requests)
         content_end = p.end_index + offset
         if p.code_block and get_code_settings().code_block_named_ranges:
             code_markers.append((p.code_language, content_start,
@@ -213,9 +233,9 @@ def compile_paragraphs(
             ))
         if not newline_before:
             offset += 1
-    # Apply code spacing/fonts after all insertions, so subsequent prose
-    # cannot inherit formatting from a code paragraph we just formatted.
-    requests.extend(code_paragraph_style_requests)
+    # Finish all paragraph splits before applying styles: later insertions
+    # must neither copy nor normalize formatting already applied to a sibling.
+    requests.extend(formatting_requests)
     requests.extend(font_style_requests)
     if list_ranges:
         requests.append({'deleteParagraphBullets': {'range': {
@@ -223,11 +243,31 @@ def compile_paragraphs(
             'endIndex': paragraph_ranges[-1][1],
         }}})
         for item in reversed(list_ranges):
-            requests.append({'createParagraphBullets': {
+            # Native list creation supplies its own per-level indentation.
+            # Discard any indentation inherited from the named paragraph style.
+            zero = {'magnitude': 0, 'unit': 'PT'}
+            requests.append({'updateParagraphStyle': {
                 'range': {'startIndex': item['start'],
                           'endIndex': item['end']},
+                'paragraphStyle': {
+                    'indentStart': zero, 'indentFirstLine': zero,
+                    'indentEnd': zero,
+                },
+                'fields': 'indentStart,indentFirstLine,indentEnd',
+            }})
+            # A temporary plain paragraph prevents Google from merging this
+            # list with a preceding list and adopting its nesting level.
+            requests.append({'insertText': {
+                'location': {'index': item['start']}, 'text': '\n',
+            }})
+            requests.append({'createParagraphBullets': {
+                'range': {'startIndex': item['start'] + 1,
+                          'endIndex': item['end'] + 1},
                 'bulletPreset': item['preset'],
             }})
+            requests.append({'deleteContentRange': {'range': {
+                'startIndex': item['start'], 'endIndex': item['start'] + 1,
+            }}})
             removed = 0
             final_paragraphs = []
             for start, end, p in item['paragraphs']:

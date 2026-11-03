@@ -145,13 +145,13 @@ def test_background_switch_reaches_native_styles(background, monkeypatch):
                        str(background).lower())
     requests = markdown_to_requests('```python\nreturn (1)\n```', start=1)
     styles = [r['updateTextStyle']['textStyle'] for r in requests
-              if 'updateTextStyle' in r]
+              if r.get('updateTextStyle', {}).get('textStyle')]
     assert styles
     assert all('backgroundColor' not in s for s in styles)
     paragraphs = [r['updateParagraphStyle'] for r in requests
                   if 'updateParagraphStyle' in r]
-    assert len(paragraphs) == 1
-    assert ('shading' in paragraphs[0]['paragraphStyle']) == background
+    assert len(paragraphs) == 2  # noqa: PLR2004
+    assert ('shading' in paragraphs[1]['paragraphStyle']) == background
     assert all('foregroundColor' in s for s in styles)
     assert any(s['bold'] for s in styles)
     assert any(not s['bold'] for s in styles)
@@ -313,7 +313,8 @@ def test_highlight_ranges_respect_utf16_and_literal_whitespace(
     expected = '\n' + plain if newline_before else plain + '\n'
     assert inserted == expected
     raw = inserted.encode('utf-16-le')
-    styles = [r['updateTextStyle'] for r in requests if 'updateTextStyle' in r]
+    styles = [r['updateTextStyle'] for r in requests
+              if r.get('updateTextStyle', {}).get('textStyle')]
     assert len(styles) > 1
     left = len(expected[:expected.index(code)].encode('utf-16-le')) // 2
     right = left + len(code.encode('utf-16-le')) // 2

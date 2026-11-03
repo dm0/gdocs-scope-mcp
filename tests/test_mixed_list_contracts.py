@@ -213,7 +213,9 @@ def test_mixed_lists_around_table_rebase_and_preview(newline_before):
     groups = [g for g in plan.request_groups() if isinstance(g, list)]
     for group in groups:
         requests = plan.paragraph_requests(group, 13)
-        replay = ListReplay('Prefix😀 here\n\nSuffix\n')
+        # Index 13 is the start of the empty paragraph, as required for
+        # newline-after insertion; never split an existing paragraph here.
+        replay = ListReplay('Prefix😀here\n\nSuffix\n')
         replay.apply(requests)
         rows = [r for r in replay.rows() if r['bullet']]
         assert [r['bullet']['level'] for r in rows] == [0, 1]

@@ -47,7 +47,7 @@ def test_live_image_layout(
     tmp_path,
     monkeypatch,
 ):
-    """Size local images in ordinary, nested and indented paragraphs."""
+    """Size images from destination styles and explicit input list depths."""
     image_path = tmp_path / 'image.png'
     image_path.write_bytes(image_png)
     monkeypatch.setenv(
@@ -171,7 +171,7 @@ def test_live_image_layout(
                 native = await probe.call(1, 'probe_tabs_document')
                 sizes = objects(selected(native, tab_id))
                 assert sizes[-1]['width']['magnitude'] == pytest.approx(
-                    width - 72,
+                    width,
                 )
                 probe.report['native_image_sizes'] = sizes
             finally:
