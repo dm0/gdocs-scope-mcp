@@ -333,10 +333,20 @@ level. To create a sibling heading, explicitly supply the appropriate Markdown
 heading (`###` maps to HEADING_1). Literal mode preserves markup verbatim while
 resetting inserted paragraph headings and bullets to normal text.
 
-This tool always uses strict required revisions, even in server target mode.
-A revision race returns `EDIT_CONFLICT` without retries or boundary replanning.
-`expected_revision_id` also protects a caller's earlier read. Multi-stage tables
-retain strict chaining; inspect partial/unknown outcomes before another write.
+This tool uses required revisions even in server target mode. After a confirmed
+revision rejection, it rereads the pinned tab and recomputes the current boundary
+of the same heading ID, up to three total attempts. Changes to heading text,
+level, ancestry, subtree contents and following headings are allowed. This means
+"before/after the current subtree", including content added by collaborators.
+If the heading is removed, the retry returns `TARGET_DELETED`; repeated races
+return `REVISION_RETRY_EXHAUSTED`. It never substitutes another heading by title.
+
+If the subtree becomes the last section or gains a successor, paragraph breaks
+are replanned too. Staged local images are reused without uploading again.
+`expected_revision_id` requires the exact earlier revision and disables retries,
+returning `EDIT_CONFLICT` on changes. Multi-stage tables retain required revision
+chaining; confirmed stages and unknown writes are never replayed. Inspect
+partial/unknown outcomes before another write.
 
 ```text
 docs_insert_at_heading(

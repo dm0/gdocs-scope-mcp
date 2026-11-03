@@ -20,7 +20,7 @@ from .test_live_table_identity import (
 @pytest.mark.live
 @pytest.mark.parametrize('mode', ['required', 'target'])
 def test_live_heading_subtrees(live_test_doc, table_probe, mode):
-    """Read back both boundaries, preserve native content and reject races."""
+    """Read back both boundaries and replan changed subtrees across races."""
     async def run():
         async with table_probe('heading-subtrees-' + mode,
                                revision_mode=mode) as probe:
@@ -105,21 +105,39 @@ def test_live_heading_subtrees(live_test_doc, table_probe, mode):
 
                 # An unrelated process changes the subtree boundary after read.
                 for position in ('before_subtree', 'after_subtree'):
+                    label = 'Rebased ' + position
+                    boundary = 'Concurrent boundary ' + position
                     async def mutate():
                         await probe.call(0, 'docs_insert_at_heading', {
                             'doc_id': live_test_doc, 'tab_id': tab_id,
                             'heading_id': parent, 'position': 'after_subtree',
-                            'text': '### Concurrent boundary',
+                            'text': '### ' + boundary,
                         })
                     result = await raced_edit(probe, 'docs_insert_at_heading', {
                         'doc_id': live_test_doc, 'tab_id': tab_id,
                         'heading_id': parent, 'position': position,
-                        'text': 'Must not appear',
+                        'text': label,
                     }, mutate)
-                    assert result.is_error
-                    assert result.structured_content['code'] == 'EDIT_CONFLICT'
-                    assert 'Must not appear' not in ''.join(
-                        paragraph_text(p) for p in body(await native()))
+                    assert not result.is_error, result.structured_content
+                    labels = [paragraph_text(p).strip()
+                              for p in body(await native())]
+                    assert labels.count(label) == 1
+                    if position == 'before_subtree':
+                        assert labels.index(label) + 1 == labels.index('Same')
+                    else:
+                        assert labels.index(label) + 1 == labels.index(boundary)
+
+                # A caller can still demand its exact earlier read revision.
+                revision = (await native())['revisionId']
+                result = await raced_edit(probe, 'docs_insert_at_heading', {
+                    'doc_id': live_test_doc, 'tab_id': tab_id,
+                    'heading_id': parent, 'position': 'after_subtree',
+                    'text': 'Must not appear', 'expected_revision_id': revision,
+                }, mutate)
+                assert result.is_error
+                assert result.structured_content['code'] == 'EDIT_CONFLICT'
+                assert 'Must not appear' not in ''.join(
+                    paragraph_text(p) for p in body(await native()))
                 probe.report['checks_passed'] = True
             finally:
                 if tab_id is not None:
