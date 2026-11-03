@@ -28,6 +28,7 @@ application operation merely to reuse one of its helpers.
 | `documents/parsing.py`, `targeting.py` | Parse hierarchy and source runs; map Python text offsets to checked UTF-16 source ranges. |
 | `documents/tabs.py`, `fetching.py` | Select tabs, scope native requests and fetch coherent native snapshots. |
 | `documents/reading.py`, `editing.py` | Accepted-content reads and direct document-edit workflows. |
+| `documents/formatting.py` | Anchored text colors and paragraph fill changes through shared source targeting and revision guards. |
 | `documents/snapshots.py` | Pure native-data normalization shared by revision guards and table snapshots. |
 | `suggestions/` | Proposal models, indexing, accepted-content projection, reading and explicit proposal writes. |
 | `comments.py`, `comment_models.py` | Native comment threads, anchored creation, persistence checks, pagination and receipts. |
