@@ -23,7 +23,10 @@ def test_complete_mcp_contract():
     async def capture():
         async with Client(mcp) as client:
             return {
-                'instructions': client.initialize_result.instructions,
+                'instructions': client.initialize_result.instructions.replace(
+                    '    docs_insert_at_heading Insert before/after a complete '
+                    'heading subtree by ID\n', '',
+                ),
                 'tools': [tool.model_dump(mode='json', exclude_none=True)
                           for tool in await client.list_tools()
                           # #56 is additive; freeze all pre-existing contracts.

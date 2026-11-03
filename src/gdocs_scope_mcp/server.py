@@ -243,6 +243,7 @@ EDITING TOOLS:
     docs_search_replace    Find and replace text (occurrence-targeted or all)
     docs_insert_after      Insert text after a specified paragraph anchor text
     docs_insert_before     Insert text before a specified paragraph anchor text
+    docs_insert_at_heading Insert before/after a complete heading subtree by ID
     docs_delete_paragraph  Delete a paragraph matching the specified anchor
     docs_append            Append paragraph at the end of a document
     docs_batch_replace     Multiple replacements atomically (one API call)

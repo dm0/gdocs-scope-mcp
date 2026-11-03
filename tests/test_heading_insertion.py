@@ -10,7 +10,7 @@ from gdocs_scope_mcp.documents import editing, targeting
 from gdocs_scope_mcp.errors import ToolFailureError
 from gdocs_scope_mcp.server import mcp
 
-from .test_revision_guards import api_error
+from .test_revision_guards import api_error, reindex
 
 
 @pytest.mark.parametrize('heading,offset', [
@@ -72,6 +72,23 @@ def test_table_is_inside_subtree(simple_document):
     with pytest.raises(ToolFailureError):
         targeting.heading_insertion_point(simple_document, 'cell',
                                           'before_subtree')
+
+
+@pytest.mark.parametrize('position', ['before_subtree', 'after_subtree'])
+def test_heading_only_at_tab_edges(simple_document, mock_docs, position):
+    """The first and final heading can be the tab's only paragraph."""
+    body = simple_document['body']['content']
+    simple_document['body']['content'] = [body[1]]
+    body[1]['paragraph']['elements'][0]['textRun']['content'] = 'Heading😀\n'
+    reindex(simple_document)
+    result = editing.insert_at_heading('example', 'parent', 'Text🦷', position,
+                                      rich=False)
+    assert result.at_index == (1 if position == 'before_subtree' else 10)
+    assert result.inserted_char_count == len('Text🦷\n')
+    requests = mock_docs.batchUpdate.call_args.kwargs['body']['requests']
+    span = requests[-1]['updateParagraphStyle']['range']
+    assert span['endIndex'] - span['startIndex'] == (
+        7 if position == 'before_subtree' else 6)
 
 
 @pytest.mark.parametrize('mode', ['required', 'target'])

@@ -92,6 +92,11 @@ prohibited dependencies. Extend it when introducing a new boundary.
 - `documents.parsing.parse_document_tree`, `extract_paragraphs` and
   `paragraph_text_map` expose hierarchy and original source runs. Rendering is
   display data; it must never become an edit-coordinate map.
+- `documents.targeting.heading_insertion_point` resolves body heading IDs and
+  complete subtree boundaries from native tab content, including tables without
+  treating cell headings as body boundaries. `editing.insert_at_heading` uses
+  the shared insertion pipeline and `guarded_edit(strict=True)`, pinning the
+  read revision without automatic retry even in target mode.
 - `documents.targeting.build_full_text_map`, `full_text_pos_to_doc_index` and
   `full_text_range_to_doc_indices` preserve UTF-16 width and reject matches
   crossing omitted native structure.

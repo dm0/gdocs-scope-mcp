@@ -40,7 +40,7 @@ docs_read(doc_id="...")  # Usual single-tab path; no extra discovery needed.
 
 ## Shared insertion options
 
-The three insertion tools accept the same rich-content options:
+The insertion tools accept the same rich-content options:
 
 | Parameter | Default | Effect |
 | --- | --- | --- |
@@ -58,7 +58,8 @@ server defaults. Theme/background nulls inherit their server defaults.
 ## Revision preconditions
 
 `docs_search_replace`, `docs_batch_replace`, `docs_delete_paragraph`,
-`docs_append`, `docs_insert_before` and `docs_insert_after` accept optional
+`docs_append`, `docs_insert_before`, `docs_insert_after` and
+`docs_insert_at_heading` accept optional
 `expected_revision_id`. Omitting it uses the configured write policy;
 providing it requires that exact revision and disables rebasing. Native
 single-tool replace-all (`occurrence=0`) rejects this parameter.
@@ -299,6 +300,58 @@ Returns document/scope metadata, `ok`, `anchor` (up to 80 code points),
 `inserted_char_count`, and `preview_truncated`.
 Rich insertion receipts also include `inserted_image_count`,
 `inserted_entity_count` and `temporary_image_cleanup_pending`.
+
+---
+
+### docs_insert_at_heading
+
+```text
+docs_insert_at_heading(
+    doc_id, heading_id, text, position,
+    *, rich=True, tab_id=None, upload_local_images=False,
+    table_borders=True, code_block_style=None,
+    code_block_theme_background=None, expected_revision_id=None,
+)
+```
+
+Insert complete paragraphs by heading ID without a text anchor:
+
+- `before_subtree`: immediately before the heading paragraph.
+- `after_subtree`: after all body content, tables and nested headings belonging
+  to that heading, before the next heading of the same or higher level, or at
+  the selected tab's end.
+
+Obtain `heading_id` from `docs_get_tree` for the selected tab. Repeated heading
+titles are safe because selection uses native IDs. Unknown IDs fail without
+writes. The hierarchy follows the outline's native named-style order, including
+TITLE and SUBTITLE where they have heading IDs. Headings inside table cells are
+not body subtree targets or boundaries.
+
+Rich/literal conversion and formatting options match the other insertion tools.
+Plain text creates normal paragraphs; it does not copy the target heading's
+level. To create a sibling heading, explicitly supply the appropriate Markdown
+heading (`###` maps to HEADING_1). Literal mode preserves markup verbatim while
+resetting inserted paragraph headings and bullets to normal text.
+
+This tool always uses strict required revisions, even in server target mode.
+A revision race returns `EDIT_CONFLICT` without retries or boundary replanning.
+`expected_revision_id` also protects a caller's earlier read. Multi-stage tables
+retain strict chaining; inspect partial/unknown outcomes before another write.
+
+```text
+docs_insert_at_heading(
+    doc_id="...", heading_id="heading-id-from-outline",
+    text="New closing paragraph.", position="after_subtree"
+)
+```
+
+The receipt identifies `document_id`, `tab_id`, `heading_id`,
+`scope="heading_subtree"`, and `insert_position`. It includes diagnostic
+`at_index`, `rich`, `inserted_text` (up to 200 code points), full
+`inserted_char_count`, `preview_truncated`, `inserted_image_count`,
+`inserted_entity_count`, and `temporary_image_cleanup_pending`. Counts include
+paragraph breaks and U+FFFC image/chip placeholders. Successful insertions must
+not be repeated to clean up temporary uploads.
 
 ---
 
