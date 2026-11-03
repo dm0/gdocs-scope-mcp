@@ -44,7 +44,7 @@ from gdocs_scope_mcp.text_indices import utf16_length
 log = logging.getLogger(__name__)
 
 
-@guarded_edit(strict=True)
+@guarded_edit(required=True)
 def insert_at_heading(
     doc_id: str, heading_id: str, text: str, position: str, *,
     rich: bool = True, tab_id: str | None = None,

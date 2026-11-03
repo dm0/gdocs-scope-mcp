@@ -101,9 +101,9 @@ class Edit:
     prepared: object = None
     prepared_index: int = 0
     prepared_requests: object = None
+    prepared_newline_before: bool | None = None
     expected_revision: str | None = None
     revision_mode: str = 'required'
-    strict: bool = False
 
 
 def remember_snapshot(document):
@@ -119,8 +119,6 @@ def remember_snapshot(document):
             fail('EDIT_CONFLICT', 'The caller-provided document revision '
                  'is no longer current.')
         edit.snapshot = deepcopy(document)
-        if edit.strict and edit.expected_revision is None:
-            edit.expected_revision = document.get('revisionId')
         if edit.baseline is None:
             edit.baseline = deepcopy(document)
         elif edit.attempt:
@@ -274,7 +272,7 @@ def revision_changed():
         raise RevisionRaceError
 
 
-def insertion_context(context, index):
+def insertion_context(context, index, *, newline_before=None):
     """Stage images once per call and translate the plan after safe retries."""
     edit = _active.get()
     if edit is None:
@@ -283,6 +281,10 @@ def insertion_context(context, index):
         edit.prepared = edit.stack.enter_context(context)
         edit.prepared_index = index
         edit.prepared_requests = deepcopy(edit.prepared.requests)
+        edit.prepared_newline_before = newline_before
+    elif newline_before != edit.prepared_newline_before:
+        edit.prepared_requests = edit.prepared.recompile(newline_before)
+        edit.prepared_newline_before = newline_before
     requests = deepcopy(edit.prepared_requests)
     offset = index - edit.prepared_index
 
@@ -306,19 +308,20 @@ def insertion_context(context, index):
     return nullcontext(edit.prepared)
 
 
-def guarded_edit(function=None, *, append=False, strict=False):
+def guarded_edit(function=None, *, append=False, required=False):
     """Rerun only an uncommitted plan after a confirmed revision rejection."""
     if function is None:
         return lambda function: guarded_edit(
-            function, append=append, strict=strict,
+            function, append=append, required=required,
         )
 
     @wraps(function)
     def execute(*args, **kwargs):
         """Own call-scoped dependencies and cleanup across bounded attempts."""
         with ExitStack() as stack:
-            edit = Edit(stack=stack, append=append, strict=strict,
-                        revision_mode=get_settings().write_revision_mode,
+            edit = Edit(stack=stack, append=append,
+                        revision_mode=('required' if required else
+                                       get_settings().write_revision_mode),
                         expected_revision=kwargs.pop(
                             'expected_revision_id', None,
                         ))

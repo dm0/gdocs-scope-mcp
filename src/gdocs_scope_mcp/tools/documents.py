@@ -204,10 +204,13 @@ def register_editing(mcp):
         Repeated heading titles do not affect selection. Unknown IDs fail without
         writes. Omitted tab_id selects the first root tab.
 
-        Always uses a strict required revision, including in server target mode.
-        Any read/write revision race returns EDIT_CONFLICT without replanning;
-        expected_revision_id additionally protects an earlier caller read.
-        Table stages use strict revision chaining. Completed stages and unknown
+        Uses required revisions, including in server target mode. After a confirmed
+        revision rejection, rereads the pinned tab and recomputes this heading ID's
+        current boundary, up to three attempts. Changes to the heading's text,
+        level, ancestry, subtree contents and following headings are allowed.
+        A removed heading is not recreated or replaced by a text match.
+        expected_revision_id enforces that exact revision and disables retries.
+        Table stages use required revision chaining. Completed stages and unknown
         write outcomes are never replayed; inspect partial results before retrying.
 
         rich=True uses the same Markdown/reader HTML converter as docs_insert_after,

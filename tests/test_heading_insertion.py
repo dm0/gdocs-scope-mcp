@@ -1,5 +1,8 @@
 """Exercise heading-ID boundary insertion without text matching."""
 
+# Imported fixtures intentionally retain their pytest names.
+# ruff: noqa: F811
+
 import asyncio
 from copy import deepcopy
 
@@ -8,9 +11,10 @@ from fastmcp import Client
 
 from gdocs_scope_mcp.documents import editing, targeting
 from gdocs_scope_mcp.errors import ToolFailureError
+from gdocs_scope_mcp.rich_text.insertion import rich_insertion_requests
 from gdocs_scope_mcp.server import mcp
 
-from .test_revision_guards import api_error, reindex
+from .test_revision_guards import api_error, race_docs, reindex  # noqa: F401
 
 
 @pytest.mark.parametrize('heading,offset', [
@@ -93,24 +97,107 @@ def test_heading_only_at_tab_edges(simple_document, mock_docs, position):
 
 @pytest.mark.parametrize('mode', ['required', 'target'])
 @pytest.mark.parametrize('position', ['before_subtree', 'after_subtree'])
-def test_revision_race_never_retargets(monkeypatch, mock_docs, mode, position):
-    """Both sides enforce required revisions without retry in either mode."""
+def test_revision_race_recomputes_current_subtree(
+    monkeypatch, race_docs, mode, position,
+):
+    """Both sides replan the same heading ID even when its subtree changes."""
     monkeypatch.setenv('GDOCS_SCOPE_MCP_WRITE_REVISION_MODE', mode)
     from gdocs_scope_mcp.settings import get_settings
     get_settings.cache_clear()
     try:
-        mock_docs.batchUpdate.return_value.execute.side_effect = api_error(
-            'The provided revision ID does not match the current revision ID '
-            'of the document.',
-        )
-        with pytest.raises(ToolFailureError) as caught:
-            editing.insert_at_heading('example', 'parent', 'X', position)
-        assert caught.value.failure.code == 'EDIT_CONFLICT'
-        mock_docs.batchUpdate.assert_called_once()
-        assert mock_docs.batchUpdate.call_args.kwargs['body'][
-            'writeControl'] == {'requiredRevisionId': 'revision'}
+        def change(document):
+            body = document['body']['content']
+            body[1]['paragraph']['elements'][0]['textRun']['content'] = (
+                'Renamed heading😀\n')
+            body[1]['paragraph']['paragraphStyle']['namedStyleType'] = (
+                'HEADING_3')
+            body[2]['paragraph']['elements'][0]['textRun']['content'] += (
+                'Changed body\n')
+        race_docs['change'] = change
+        result = editing.insert_at_heading('example', 'parent', 'X', position)
+        assert result.ok
+        body = race_docs['document']['body']['content']
+        expected = body[1 if position == 'before_subtree' else 3]['startIndex']
+        assert result.at_index == expected
+        assert len(race_docs['writes']) == 2
+        assert race_docs['writes'][-1]['writeControl'] == {
+            'requiredRevisionId': race_docs['document']['revisionId'],
+        }
     finally:
         get_settings.cache_clear()
+
+
+@pytest.mark.parametrize('rich', [False, True])
+@pytest.mark.parametrize('to_end', [False, True])
+def test_retry_changes_boundary_breaks(race_docs, rich, to_end):
+    """Rebuild separators when a subtree becomes last or gains a successor."""
+    heading = 'parent' if to_end else 'other'
+    def change(document):
+        body = document['body']['content']
+        if to_end:
+            del body[5:]
+        else:
+            sibling = deepcopy(body[5])
+            sibling['paragraph']['paragraphStyle']['headingId'] = 'new'
+            body.append(sibling)
+    race_docs['change'] = change
+    result = editing.insert_at_heading('example', heading, 'X',
+                                      'after_subtree', rich=rich)
+    body = race_docs['document']['body']['content']
+    expected = body[-1]['endIndex'] - 1 if to_end else body[-1]['startIndex']
+    assert result.at_index == expected
+    assert result.inserted_text == ('\nX' if to_end else 'X\n')
+    batch = race_docs['writes'][-1]['requests']
+    assert batch[0]['insertText'] == {
+        'location': {'index': expected},
+        'text': '\nX' if to_end else 'X\n',
+    }
+    normal = next(r['updateParagraphStyle'] for r in batch
+                  if 'updateParagraphStyle' in r)
+    assert normal['range']['startIndex'] == expected + int(to_end)
+
+
+@pytest.mark.parametrize('scenario', ['deleted', 'exhausted', 'unknown',
+                                      'explicit'])
+def test_heading_retry_limits(race_docs, scenario):
+    """Never recreate deleted headings or replay uncertain/completed writes."""
+    kwargs = {}
+    expected = 'EDIT_CONFLICT'
+    if scenario == 'deleted':
+        race_docs['change'] = lambda doc: doc['body']['content'].pop(1)
+        expected = 'TARGET_DELETED'
+    elif scenario == 'exhausted':
+        race_docs['always'] = True
+        expected = 'REVISION_RETRY_EXHAUSTED'
+    elif scenario == 'unknown':
+        race_docs['documents'].batchUpdate.return_value.execute.side_effect = (
+            TimeoutError('unknown write outcome'))
+        expected = 'WRITE_OUTCOME_UNKNOWN'
+    elif scenario == 'explicit':
+        kwargs['expected_revision_id'] = 'revision'
+    with pytest.raises(ToolFailureError) as caught:
+        editing.insert_at_heading('example', 'parent', 'X', 'after_subtree',
+                                  **kwargs)
+    assert caught.value.failure.code == expected
+    assert race_docs['documents'].batchUpdate.call_count == (
+        3 if scenario == 'exhausted' else 1)
+
+
+def test_table_recompile_keeps_staged_sources():
+    """Changing boundary breaks retains body and cell image source mappings."""
+    source = 'https://example.com/source.png'
+    staged = 'https://example.com/staged.png'
+    text = f'![body]({source})\n\n| Cell |\n| --- |\n| ![cell]({source}) |'
+    with rich_insertion_requests(text, 20, newline_before=False,
+                                 drive_factory=None) as prepared:
+        prepared.requests.replace_image_uri(source, staged)
+        for newline_before in (True, False):
+            prepared.requests = prepared.recompile(newline_before)
+            assert prepared.requests.newline_before == newline_before
+            images = [r['insertInlineImage']['uri']
+                      for r in prepared.requests.iter_requests()
+                      if 'insertInlineImage' in r]
+            assert images == [staged, staged]
 
 
 def call(**arguments):

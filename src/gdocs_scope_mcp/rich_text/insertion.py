@@ -82,7 +82,9 @@ def insert_content(
                 }},
             ])
         context = nullcontext(PreparedInsertion(requests))
-    with insertion_context(context, index) as prepared:
+    managed = (insertion_context(context, index, newline_before=newline_before)
+               if rich else context)
+    with managed as prepared:
         if rich:
             validate_insertions(service, doc_id, prepared.requests,
                                 required_revision, tab_id=tab_id)
