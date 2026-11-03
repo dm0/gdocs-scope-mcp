@@ -336,6 +336,7 @@ def test_client_pair_for_local_and_saved_session(
 
 def test_cli_default_output_follows_xdg(monkeypatch, tmp_path):
     """New authorization writes under XDG without touching legacy paths."""
+    monkeypatch.delenv(credentials.TOKEN_ENV_VAR, raising=False)
     monkeypatch.setenv('XDG_CONFIG_HOME', str(tmp_path))
     monkeypatch.setattr(auth_setup.sys, 'argv', ['auth', '--client-id', 'id'])
     run = Mock()
