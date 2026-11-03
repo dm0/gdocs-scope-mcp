@@ -37,6 +37,7 @@ application operation merely to reuse one of its helpers.
 | `revision_guards.py` | Revision preconditions, source dependencies, bounded replanning and confirmed-batch accounting. |
 | `entities.py`, `entity_edit.py`, `image_layout.py` | Cohesive entity representations/edits and native image layout calculations. |
 | `tool_inputs.py`, `settings.py` | Pure shared input validation and configuration. They do not depend on MCP registration. |
+| `colors.py` | Fixed Google editor palette, color validation, native RGB conversion and bounded HTML color attributes, shared below readers and writers. |
 | `tool_errors.py`, `tool_logging.py`, `diagnostics.py` | Transport failure conversion, middleware/logging and source identity. |
 
 Keep small cohesive modules intact. There is no module-size target, generic

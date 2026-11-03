@@ -12,6 +12,7 @@ from gdocs_scope_mcp.code_reading import (
     block_markdown,
     inline_markdown,
 )
+from gdocs_scope_mcp.colors import color_label
 from gdocs_scope_mcp.documents.styles import (
     HEADING_LEVELS,
     GoogleDocumentAlignment,
@@ -121,6 +122,13 @@ def text_style_format_string(self) -> str:
     template = '{text}'
     for name in collected:
         template = f'{markers[name][0]}{template}{markers[name][1]}'
+    attributes = []
+    for key, optional in [('color', self.foreground_color),
+                          ('background-color', self.background_color)]:
+        if (label := color_label(optional)) is not None:
+            attributes.append(f'data-mcp-{key}="{label}"')
+    if attributes:
+        template = '<span ' + ' '.join(attributes) + '>' + template + '</span>'
     return template
 
 
@@ -129,6 +137,11 @@ def text_run_to_markdown(self, doc) -> str:
     content = self.content
     if not content:
         return content
+    if (color_label(self.text_style.foreground_color) is not None
+            or color_label(self.text_style.background_color) is not None):
+        return self.text_style.format_string.format(
+            text=boundary_whitespace(content),
+        )
     text = content
     orig_len = len(text)
     text = text.lstrip()
@@ -345,6 +358,10 @@ def paragraph_to_markdown(self, doc) -> str:  # noqa: PLR0911
                                and el.content == NATIVE_CODE_BOUNDARY))
     else:
         text = inline_markdown(self.elements, doc, html_code=html_list)
+    background = color_label(style.shading.background_color
+                             if style.shading else None)
+    attribute = (f' data-mcp-background-color="{background}"'
+                 if background is not None else '')
     if style.heading_id or style.named_style_type.level < len(
         HEADING_LEVELS
     ):
@@ -354,13 +371,25 @@ def paragraph_to_markdown(self, doc) -> str:  # noqa: PLR0911
             if style.heading_id is not None
             else ''
         )
+        if attribute:
+            level = style.named_style_type.level + 1
+            return f'<h{level}{attribute}>{anchor}{text}</h{level}>\n\n'
         return f'{prefix} {anchor}{text}\n\n'
     if self.bullet:
         tag = _list_tag(self, doc)
         prefix, suffix = doc.presentation.list_markup.get(
             self.start_index, (f'<{tag}><li>', f'</li></{tag}>\n\n'),
         )
+        if attribute:
+            text = f'<p{attribute}>{text}</p>'
         return prefix + text + suffix
+
+    if attribute:
+        alignment = {GoogleDocumentAlignment.CENTER: 'center',
+                     GoogleDocumentAlignment.JUSTIFIED: 'justify',
+                     GoogleDocumentAlignment.END: 'right'}.get(style.alignment)
+        align = f' style="text-align: {alignment};"' if alignment else ''
+        return f'<p{attribute}{align}>{text}</p>\n\n'
 
     match style.alignment:
         case GoogleDocumentAlignment.CENTER:
