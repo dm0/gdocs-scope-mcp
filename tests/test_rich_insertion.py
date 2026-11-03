@@ -8,14 +8,16 @@ from gdocs_scope_mcp.rich_text.compiler import markdown_to_requests
 from gdocs_scope_mcp.rich_text.models import InsertionTable
 from gdocs_scope_mcp.rich_text.parsing import markdown_to_html
 
+from .test_advanced_list_contracts import ListReplay
+
 
 @pytest.mark.parametrize(
     ('markdown', 'style'),
     [
         ('# Title', 'TITLE'),
         ('## Subtitle', 'SUBTITLE'),
-        ('### Heading', 'HEADING_1'),
-        ('######## Heading', 'HEADING_6'),
+        *[('#' * (level + 2) + ' Heading', f'HEADING_{level}')
+          for level in range(1, 7)],
     ],
 )
 @pytest.mark.parametrize('newline_before', [False, True])
@@ -33,13 +35,20 @@ def test_rich_heading_insertion(markdown, style, newline_before):
     assert requests[0] == {
         'insertText': {'location': {'index': 12}, 'text': text},
     }
-    assert requests[1] == {
+    assert requests[1] == {'deleteParagraphBullets': {'range': {
+        'startIndex': start, 'endIndex': start + len(plain),
+    }}}
+    assert requests[2] == {
         'updateParagraphStyle': {
             'range': {'startIndex': start, 'endIndex': start + len(plain)},
             'paragraphStyle': {'namedStyleType': style},
-            'fields': 'namedStyleType',
+            'fields': '*',
         }
     }
+    assert requests[3] == {'updateTextStyle': {
+        'range': {'startIndex': start, 'endIndex': start + len(plain)},
+        'textStyle': {}, 'fields': '*',
+    }}
 
 
 @pytest.mark.parametrize(
@@ -67,7 +76,8 @@ def test_emphasis_styles_cover_only_inserted_word(
         '\nA word end' if newline_before else 'A word end\n'
     )
     updates = [
-        r['updateTextStyle'] for r in requests if 'updateTextStyle' in r
+        r['updateTextStyle'] for r in requests
+        if r.get('updateTextStyle', {}).get('textStyle')
     ]
     assert len(updates) == 1
     start = 15 if newline_before else 14
@@ -133,7 +143,8 @@ def test_read_style_html_is_converted_to_text_style(markup, expected_style):
     requests = markdown_to_requests(markup, start=12)
 
     assert requests[0]['insertText']['text'] == '\nword'
-    styles = [r['updateTextStyle'] for r in requests if 'updateTextStyle' in r]
+    styles = [r['updateTextStyle'] for r in requests
+              if r.get('updateTextStyle', {}).get('textStyle')]
     assert len(styles) == 1
     assert styles[0]['textStyle'] == expected_style
     assert styles[0]['range'] == {'startIndex': 13, 'endIndex': 17}
@@ -150,7 +161,7 @@ def test_read_alignment_html_is_converted_to_paragraph_style():
         r['updateParagraphStyle'] for r in requests
         if 'updateParagraphStyle' in r
     ]
-    assert styles[0]['paragraphStyle']['alignment'] == 'CENTER'
+    assert styles[1]['paragraphStyle']['alignment'] == 'CENTER'
 
 
 def test_read_heading_anchor_is_not_inserted_as_visible_text():
@@ -180,10 +191,9 @@ def test_markdown_lists_create_item_paragraphs_and_native_bullets(
         markdown, start=12, newline_before=newline_before,
     )
 
-    inserted = ''.join(
-        request['insertText']['text'] for request in requests
-        if 'insertText' in request
-    )
+    replay = ListReplay('_' * 12 + '\n')
+    replay.apply(requests)
+    inserted = replay.text[12:-1]
     expected = '\nfirst\nsecond' if newline_before else 'first\nsecond\n'
     assert inserted == expected
     bullets = [
@@ -238,7 +248,8 @@ def test_inline_markdown_links_and_strikethrough_keep_style(
     assert requests[0]['insertText']['text'] == (
         '\nA word end' if newline_before else 'A word end\n'
     )
-    styles = [r['updateTextStyle'] for r in requests if 'updateTextStyle' in r]
+    styles = [r['updateTextStyle'] for r in requests
+              if r.get('updateTextStyle', {}).get('textStyle')]
     assert len(styles) == 1
     start = 14 + int(newline_before)
     assert styles[0]['range'] == {'startIndex': start, 'endIndex': start + 4}

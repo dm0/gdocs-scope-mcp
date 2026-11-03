@@ -41,7 +41,8 @@ def test_combined_styles_keep_exact_url_and_range(
         else prefix + label + ' after\n'
     )
     updates = [
-        r['updateTextStyle'] for r in requests if 'updateTextStyle' in r
+        r['updateTextStyle'] for r in requests
+        if r.get('updateTextStyle', {}).get('textStyle')
     ]
     assert len(updates) == 1
     update = updates[0]
@@ -65,7 +66,7 @@ def test_multiple_inline_styles_do_not_leak(newline_before):
     text = requests[0]['insertText']['text'].encode('utf-16-le')
     observed = []
     for request in requests:
-        if 'updateTextStyle' not in request:
+        if not request.get('updateTextStyle', {}).get('textStyle'):
             continue
         update = request['updateTextStyle']
         span = update['range']

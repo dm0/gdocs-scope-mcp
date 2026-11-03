@@ -169,7 +169,7 @@ def test_converter_recreates_native_entities(
     assert text == ('\nLeft😀 \ufffc Right' if newline_before else
                     'Left😀 \ufffc Right\n')
     style = next(r['updateTextStyle'] for r in requests
-                 if 'updateTextStyle' in r)
+                 if r.get('updateTextStyle', {}).get('textStyle'))
     assert style['range'] == {'startIndex': 10 + int(newline_before),
                               'endIndex': 15 + int(newline_before)}
 

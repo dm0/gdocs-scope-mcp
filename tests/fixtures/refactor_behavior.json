@@ -12,6 +12,22 @@
           }
         },
         {
+          "insertText": {
+            "location": {
+              "index": 13
+            },
+            "text": "\nBold😀 and link"
+          }
+        },
+        {
+          "deleteParagraphBullets": {
+            "range": {
+              "startIndex": 6,
+              "endIndex": 13
+            }
+          }
+        },
+        {
           "updateParagraphStyle": {
             "range": {
               "startIndex": 6,
@@ -20,15 +36,25 @@
             "paragraphStyle": {
               "namedStyleType": "HEADING_1"
             },
-            "fields": "namedStyleType"
+            "fields": "*"
           }
         },
         {
-          "insertText": {
-            "location": {
-              "index": 13
+          "updateTextStyle": {
+            "range": {
+              "startIndex": 6,
+              "endIndex": 13
             },
-            "text": "\nBold😀 and link"
+            "textStyle": {},
+            "fields": "*"
+          }
+        },
+        {
+          "deleteParagraphBullets": {
+            "range": {
+              "startIndex": 14,
+              "endIndex": 29
+            }
           }
         },
         {
@@ -40,7 +66,17 @@
             "paragraphStyle": {
               "namedStyleType": "NORMAL_TEXT"
             },
-            "fields": "namedStyleType"
+            "fields": "*"
+          }
+        },
+        {
+          "updateTextStyle": {
+            "range": {
+              "startIndex": 14,
+              "endIndex": 29
+            },
+            "textStyle": {},
+            "fields": "*"
           }
         },
         {
@@ -83,13 +119,40 @@
           }
         },
         {
+          "insertText": {
+            "location": {
+              "index": 11
+            },
+            "text": "\nSecond"
+          }
+        },
+        {
+          "deleteParagraphBullets": {
+            "range": {
+              "startIndex": 6,
+              "endIndex": 11
+            }
+          }
+        },
+        {
           "updateParagraphStyle": {
             "range": {
               "startIndex": 6,
               "endIndex": 11
             },
             "paragraphStyle": {
-              "namedStyleType": "NORMAL_TEXT",
+              "namedStyleType": "NORMAL_TEXT"
+            },
+            "fields": "*"
+          }
+        },
+        {
+          "updateParagraphStyle": {
+            "range": {
+              "startIndex": 6,
+              "endIndex": 11
+            },
+            "paragraphStyle": {
               "spaceAbove": {
                 "magnitude": 0,
                 "unit": "PT"
@@ -99,15 +162,25 @@
                 "unit": "PT"
               }
             },
-            "fields": "namedStyleType,spaceAbove,spaceBelow"
+            "fields": "spaceAbove,spaceBelow"
           }
         },
         {
-          "insertText": {
-            "location": {
-              "index": 11
+          "updateTextStyle": {
+            "range": {
+              "startIndex": 6,
+              "endIndex": 11
             },
-            "text": "\nSecond"
+            "textStyle": {},
+            "fields": "*"
+          }
+        },
+        {
+          "deleteParagraphBullets": {
+            "range": {
+              "startIndex": 12,
+              "endIndex": 18
+            }
           }
         },
         {
@@ -117,7 +190,18 @@
               "endIndex": 18
             },
             "paragraphStyle": {
-              "namedStyleType": "NORMAL_TEXT",
+              "namedStyleType": "NORMAL_TEXT"
+            },
+            "fields": "*"
+          }
+        },
+        {
+          "updateParagraphStyle": {
+            "range": {
+              "startIndex": 12,
+              "endIndex": 18
+            },
+            "paragraphStyle": {
               "spaceAbove": {
                 "magnitude": 0,
                 "unit": "PT"
@@ -127,7 +211,17 @@
                 "unit": "PT"
               }
             },
-            "fields": "namedStyleType,spaceAbove,spaceBelow"
+            "fields": "spaceAbove,spaceBelow"
+          }
+        },
+        {
+          "updateTextStyle": {
+            "range": {
+              "startIndex": 12,
+              "endIndex": 18
+            },
+            "textStyle": {},
+            "fields": "*"
           }
         },
         {
@@ -139,12 +233,51 @@
           }
         },
         {
-          "createParagraphBullets": {
+          "updateParagraphStyle": {
             "range": {
               "startIndex": 6,
               "endIndex": 18
             },
+            "paragraphStyle": {
+              "indentStart": {
+                "magnitude": 0,
+                "unit": "PT"
+              },
+              "indentFirstLine": {
+                "magnitude": 0,
+                "unit": "PT"
+              },
+              "indentEnd": {
+                "magnitude": 0,
+                "unit": "PT"
+              }
+            },
+            "fields": "indentStart,indentFirstLine,indentEnd"
+          }
+        },
+        {
+          "insertText": {
+            "location": {
+              "index": 6
+            },
+            "text": "\n"
+          }
+        },
+        {
+          "createParagraphBullets": {
+            "range": {
+              "startIndex": 7,
+              "endIndex": 19
+            },
             "bulletPreset": "BULLET_DISC_CIRCLE_SQUARE"
+          }
+        },
+        {
+          "deleteContentRange": {
+            "range": {
+              "startIndex": 6,
+              "endIndex": 7
+            }
           }
         }
       ],
@@ -161,16 +294,45 @@
           }
         },
         {
+          "deleteParagraphBullets": {
+            "range": {
+              "startIndex": 6,
+              "endIndex": 19
+            }
+          }
+        },
+        {
           "updateParagraphStyle": {
             "range": {
               "startIndex": 6,
               "endIndex": 19
             },
             "paragraphStyle": {
-              "lineSpacing": 100.0,
               "namedStyleType": "NORMAL_TEXT"
             },
-            "fields": "lineSpacing,namedStyleType"
+            "fields": "*"
+          }
+        },
+        {
+          "updateParagraphStyle": {
+            "range": {
+              "startIndex": 6,
+              "endIndex": 19
+            },
+            "paragraphStyle": {
+              "lineSpacing": 100.0
+            },
+            "fields": "lineSpacing"
+          }
+        },
+        {
+          "updateTextStyle": {
+            "range": {
+              "startIndex": 6,
+              "endIndex": 19
+            },
+            "textStyle": {},
+            "fields": "*"
           }
         },
         {
@@ -332,6 +494,14 @@
           }
         },
         {
+          "deleteParagraphBullets": {
+            "range": {
+              "startIndex": 6,
+              "endIndex": 20
+            }
+          }
+        },
+        {
           "updateParagraphStyle": {
             "range": {
               "startIndex": 6,
@@ -340,7 +510,17 @@
             "paragraphStyle": {
               "namedStyleType": "NORMAL_TEXT"
             },
-            "fields": "namedStyleType"
+            "fields": "*"
+          }
+        },
+        {
+          "updateTextStyle": {
+            "range": {
+              "startIndex": 6,
+              "endIndex": 20
+            },
+            "textStyle": {},
+            "fields": "*"
           }
         }
       ],
@@ -357,6 +537,14 @@
           }
         },
         {
+          "deleteParagraphBullets": {
+            "range": {
+              "startIndex": 0,
+              "endIndex": 1
+            }
+          }
+        },
+        {
           "updateParagraphStyle": {
             "range": {
               "startIndex": 0,
@@ -365,7 +553,17 @@
             "paragraphStyle": {
               "namedStyleType": "NORMAL_TEXT"
             },
-            "fields": "namedStyleType"
+            "fields": "namedStyleType,alignment,lineSpacing,direction,spacingMode,spaceAbove,spaceBelow,borderBetween,borderTop,borderBottom,borderLeft,borderRight,indentFirstLine,indentStart,indentEnd,keepLinesTogether,keepWithNext,avoidWidowAndOrphan,shading"
+          }
+        },
+        {
+          "updateTextStyle": {
+            "range": {
+              "startIndex": 0,
+              "endIndex": 1
+            },
+            "textStyle": {},
+            "fields": "*"
           }
         },
         {
@@ -401,6 +599,14 @@
           }
         },
         {
+          "deleteParagraphBullets": {
+            "range": {
+              "startIndex": 0,
+              "endIndex": 1
+            }
+          }
+        },
+        {
           "updateParagraphStyle": {
             "range": {
               "startIndex": 0,
@@ -409,7 +615,17 @@
             "paragraphStyle": {
               "namedStyleType": "NORMAL_TEXT"
             },
-            "fields": "namedStyleType"
+            "fields": "namedStyleType,alignment,lineSpacing,direction,spacingMode,spaceAbove,spaceBelow,borderBetween,borderTop,borderBottom,borderLeft,borderRight,indentFirstLine,indentStart,indentEnd,keepLinesTogether,keepWithNext,avoidWidowAndOrphan,shading"
+          }
+        },
+        {
+          "updateTextStyle": {
+            "range": {
+              "startIndex": 0,
+              "endIndex": 1
+            },
+            "textStyle": {},
+            "fields": "*"
           }
         },
         {
@@ -433,6 +649,14 @@
           }
         },
         {
+          "deleteParagraphBullets": {
+            "range": {
+              "startIndex": 0,
+              "endIndex": 2
+            }
+          }
+        },
+        {
           "updateParagraphStyle": {
             "range": {
               "startIndex": 0,
@@ -441,7 +665,17 @@
             "paragraphStyle": {
               "namedStyleType": "NORMAL_TEXT"
             },
-            "fields": "namedStyleType"
+            "fields": "namedStyleType,alignment,lineSpacing,direction,spacingMode,spaceAbove,spaceBelow,borderBetween,borderTop,borderBottom,borderLeft,borderRight,indentFirstLine,indentStart,indentEnd,keepLinesTogether,keepWithNext,avoidWidowAndOrphan,shading"
+          }
+        },
+        {
+          "updateTextStyle": {
+            "range": {
+              "startIndex": 0,
+              "endIndex": 2
+            },
+            "textStyle": {},
+            "fields": "*"
           }
         },
         {
@@ -453,6 +687,14 @@
           }
         },
         {
+          "deleteParagraphBullets": {
+            "range": {
+              "startIndex": 0,
+              "endIndex": 1
+            }
+          }
+        },
+        {
           "updateParagraphStyle": {
             "range": {
               "startIndex": 0,
@@ -461,7 +703,17 @@
             "paragraphStyle": {
               "namedStyleType": "NORMAL_TEXT"
             },
-            "fields": "namedStyleType"
+            "fields": "namedStyleType,alignment,lineSpacing,direction,spacingMode,spaceAbove,spaceBelow,borderBetween,borderTop,borderBottom,borderLeft,borderRight,indentFirstLine,indentStart,indentEnd,keepLinesTogether,keepWithNext,avoidWidowAndOrphan,shading"
+          }
+        },
+        {
+          "updateTextStyle": {
+            "range": {
+              "startIndex": 0,
+              "endIndex": 1
+            },
+            "textStyle": {},
+            "fields": "*"
           }
         }
       ],
@@ -521,6 +773,14 @@
             }
           },
           {
+            "deleteParagraphBullets": {
+              "range": {
+                "startIndex": 12,
+                "endIndex": 17
+              }
+            }
+          },
+          {
             "updateParagraphStyle": {
               "range": {
                 "startIndex": 12,
@@ -529,7 +789,17 @@
               "paragraphStyle": {
                 "namedStyleType": "NORMAL_TEXT"
               },
-              "fields": "namedStyleType"
+              "fields": "*"
+            }
+          },
+          {
+            "updateTextStyle": {
+              "range": {
+                "startIndex": 12,
+                "endIndex": 17
+              },
+              "textStyle": {},
+              "fields": "*"
             }
           },
           {

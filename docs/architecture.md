@@ -123,9 +123,19 @@ prohibited dependencies. Extend it when introducing a new boundary.
   root paragraphs in the same atomic batch, preserving parent list identity.
   Preview replay uses request order and net text changes, including those
   temporary insertions and deletions.
+  Complete text/object insertion before applying paragraph or inline styles.
+  Clear inherited bullets, reset the named-style baseline, then apply explicit
+  paragraph properties separately from that reset; Google can normalize those
+  properties during a named-style change. Reset direct text properties before
+  applying explicit inline styles. New list groups use a temporary plain
+  separator in the atomic batch to avoid inheriting an adjacent list's depth.
 - `rich_text.cells.convert_table` validates rectangular inline cell content and
   uses those same paragraph primitives. Existing-table patching shares it and
   does not depend on insertion execution.
+  Cell paragraph resets exclude body-only `pageBreakBefore` and read-only
+  properties; existing-cell patches retain paragraph properties altogether.
+  Image auto-sizing uses the destination named-style baseline and explicit
+  input list depth, consistently with paragraph formatting resets.
 - `rich_text.compiler.markdown_to_requests` and `gpars_to_requests` compose
   ordinary requests or a pure `plans.TableInsertionPlan`. Plans can group,
   rebase and preview requests without network access. They own no execution

@@ -57,7 +57,7 @@ def assert_style(mock_docs, theme, background):
     """Inspect native colors and paragraph fill, independently of settings."""
     requests = mock_docs.batchUpdate.call_args.kwargs['body']['requests']
     styles = [r['updateTextStyle']['textStyle'] for r in requests
-              if 'updateTextStyle' in r]
+              if r.get('updateTextStyle', {}).get('textStyle')]
     assert len(styles) == 1
     rgb = styles[0]['foregroundColor']['color']['rgbColor']
     color = tuple(rgb.get(key, 0) for key in ('red', 'green', 'blue'))

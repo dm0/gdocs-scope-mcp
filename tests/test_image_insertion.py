@@ -60,6 +60,9 @@ def replay(requests, original, start):
         item = next(iter(request.values()))
         left, right = item['range']['startIndex'], item['range']['endIndex']
         assert 1 <= left < right < len(cells)
+        if 'deleteContentRange' in request:
+            del cells[left:right]
+            continue
         if 'updateTextStyle' in request:
             for cell in cells[left:right]:
                 cell[1].update(item['textStyle'])

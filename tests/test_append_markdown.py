@@ -81,7 +81,7 @@ def test_append_preserves_boundaries_and_style_offsets(
             insertion = request['insertText']
             index = insertion['location']['index']
             text = text[:index] + insertion['text'] + text[index:]
-        elif 'updateTextStyle' in request:
+        elif request.get('updateTextStyle', {}).get('textStyle'):
             update = request['updateTextStyle']
             span = update['range']
             styles.append(
