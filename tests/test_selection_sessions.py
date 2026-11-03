@@ -28,7 +28,6 @@ from gdocs_scope_mcp.google_api import (
 from gdocs_scope_mcp.google_api.access import (
     DRIVE_FILE,
     DRIVE_FULL,
-    FULL_SCOPES,
 )
 from gdocs_scope_mcp.settings import default_token_path, get_settings
 from gdocs_scope_mcp.tool_logging import ToolCallLoggingMiddleware, logger
@@ -254,7 +253,7 @@ def test_mcp_full_drive_upgrade(sessions, monkeypatch, outcome):
     public = asyncio.run(start())
     query = parse_qs(urlsplit(public.authorization_url).query)
     assert query['client_id'] == ['original-client']
-    assert query['scope'][0].split() == FULL_SCOPES
+    assert query['scope'][0].split() == [DRIVE_FULL]
     assert 'trigger_onepick' not in query
     assert query['prompt'] == ['consent']
     if outcome == 'denied':
@@ -340,7 +339,7 @@ def test_mcp_initial_authorization(sessions, monkeypatch, mode):
     assert public.status == 'pending'
     query = parse_qs(urlsplit(public.authorization_url).query)
     assert ('trigger_onepick' in query) == (mode == 'selected_files')
-    assert expected in query['scope'][0].split()
+    assert query['scope'][0].split() == [expected]
     with urlopen(callback(public), timeout=2):
         pass
     result = finish(manager, public)

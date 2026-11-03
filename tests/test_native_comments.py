@@ -313,9 +313,8 @@ def test_obsolete_options_and_drive_cursors_are_rejected(native_api):
 
 
 def test_native_comments_need_no_script_scopes():
-    """Retain Docs/Drive access without requesting new script grants."""
+    """Native comments use the Drive grant without extra script scopes."""
     assert not any('/auth/script.' in scope for scope in auth_setup.SCOPES)
-    assert 'https://www.googleapis.com/auth/documents' in auth_setup.SCOPES
     assert 'https://www.googleapis.com/auth/drive' in auth_setup.SCOPES
 
 
