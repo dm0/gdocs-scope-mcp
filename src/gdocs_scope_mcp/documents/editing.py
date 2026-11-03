@@ -27,6 +27,7 @@ from gdocs_scope_mcp.contracts import (
 )
 from gdocs_scope_mcp.documents.receipts import (
     AppendSucceedResponse,
+    HeadingInsertResponse,
     InsertSucceedResponse,
     ReplaceSucceedResponse,
 )
@@ -41,6 +42,44 @@ from gdocs_scope_mcp.revision_guards import (
 from gdocs_scope_mcp.text_indices import utf16_length
 
 log = logging.getLogger(__name__)
+
+
+@guarded_edit(strict=True)
+def insert_at_heading(
+    doc_id: str, heading_id: str, text: str, position: str, *,
+    rich: bool = True, tab_id: str | None = None,
+    upload_local_images: bool = False, table_borders: bool = True,
+    expected_revision_id: str | None = None,  # noqa: ARG001 - decorator
+) -> HeadingInsertResponse:
+    """Insert whole paragraphs at a heading subtree's native boundary."""
+    if position not in {'before_subtree', 'after_subtree'} or not heading_id:
+        raise ToolFailureError(EditFailedResponse(
+            code='INVALID_ARGUMENT',
+            description='Provide a heading ID and before_subtree or '
+            'after_subtree position.',
+            suggested_action='Use a heading ID from docs_get_tree.',
+        ))
+    service = clients.get_service('docs', 'v1')
+    doc = fetching.get_document(service, doc_id, tab_id=tab_id)
+    index, newline_before = targeting.heading_insertion_point(
+        doc, heading_id, position,
+    )
+    inserted, images, entities, cleanup = insert_content(
+        service, doc_id, text, index, rich=rich,
+        newline_before=newline_before,
+        upload_local_images=upload_local_images,
+        required_revision=doc.get('revisionId'), table_borders=table_borders,
+        tab_id=doc.get('_mcp_tab_id'), document=doc,
+        reset_literal_paragraphs=True,
+    )
+    return HeadingInsertResponse(
+        document_id=doc_id, heading_id=heading_id, insert_position=position,
+        at_index=index, rich=rich, inserted_text=inserted,
+        inserted_char_count=len(inserted),
+        preview_truncated=len(inserted) > TEXT_PREVIEW_LIMIT,
+        inserted_image_count=images, inserted_entity_count=entities,
+        temporary_image_cleanup_pending=cleanup,
+    )
 
 # Preserve the public positional calling convention.
 @guarded_edit

@@ -103,6 +103,7 @@ class Edit:
     prepared_requests: object = None
     expected_revision: str | None = None
     revision_mode: str = 'required'
+    strict: bool = False
 
 
 def remember_snapshot(document):
@@ -118,6 +119,8 @@ def remember_snapshot(document):
             fail('EDIT_CONFLICT', 'The caller-provided document revision '
                  'is no longer current.')
         edit.snapshot = deepcopy(document)
+        if edit.strict and edit.expected_revision is None:
+            edit.expected_revision = document.get('revisionId')
         if edit.baseline is None:
             edit.baseline = deepcopy(document)
         elif edit.attempt:
@@ -303,16 +306,18 @@ def insertion_context(context, index):
     return nullcontext(edit.prepared)
 
 
-def guarded_edit(function=None, *, append=False):
+def guarded_edit(function=None, *, append=False, strict=False):
     """Rerun only an uncommitted plan after a confirmed revision rejection."""
     if function is None:
-        return lambda function: guarded_edit(function, append=append)
+        return lambda function: guarded_edit(
+            function, append=append, strict=strict,
+        )
 
     @wraps(function)
     def execute(*args, **kwargs):
         """Own call-scoped dependencies and cleanup across bounded attempts."""
         with ExitStack() as stack:
-            edit = Edit(stack=stack, append=append,
+            edit = Edit(stack=stack, append=append, strict=strict,
                         revision_mode=get_settings().write_revision_mode,
                         expected_revision=kwargs.pop(
                             'expected_revision_id', None,
