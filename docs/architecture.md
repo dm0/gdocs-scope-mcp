@@ -134,6 +134,9 @@ prohibited dependencies. Extend it when introducing a new boundary.
 - `rich_text.cells.convert_table` validates rectangular inline cell content and
   uses those same paragraph primitives. Existing-table patching shares it and
   does not depend on insertion execution.
+  New cells may contain a single paragraph wrapper for alignment and fill;
+  multiple paragraphs and mixed block/inline siblings remain unsupported.
+  Inline color spans are shared with cell patches, which retain paragraph styles.
   Cell paragraph resets exclude body-only `pageBreakBefore` and read-only
   properties; existing-cell patches retain paragraph properties altogether.
   Image auto-sizing uses the destination named-style baseline and explicit

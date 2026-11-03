@@ -41,7 +41,11 @@ are supported, while empty heading-ID anchors remain metadata.
 This is a bounded read-to-write subset, not complete HTML or formatting
 round-trip support. Other wrappers retain their child text without preserving
 unsupported formatting or attributes; non-text tags may contribute no content.
-For example, a styled `span` retains its text but loses its styling. Tables
+Color spans use `data-mcp-color` and `data-mcp-background-color`, accepting
+Google palette names or `#RRGGBB`. Paragraphs and headings accept
+`data-mcp-background-color` for whole-paragraph fill. CSS color properties
+accept HEX only. Discover names with `docs_get_color_palette`; see
+[color formatting](colors.md) for examples, resets and anchored tools. Tables
 support the [rectangular subset](#tables). Use `rich=False` to preserve
 HTML tags and Markdown literally.
 
@@ -99,7 +103,8 @@ positions are read from the newly created table before filling it.
 
 Simple rectangular HTML tables (`table`, `thead`/`tbody`, `tr`, `th`/`td`) use
 the same conversion. Cells can declare `align="left|center|right"` or a single
-`style="text-align: ..."`. Merged cells, nested tables, tables inside lists,
+`style="text-align: ..."`. A cell can contain one `p` wrapper for paragraph
+alignment/fill and colored inline spans. Merged cells, nested tables, tables inside lists,
 captions/column/footer groups, and block content inside cells (including lists,
 code blocks and multiple paragraphs) are rejected before
 writes. Arbitrary table styling and widths are not preserved.

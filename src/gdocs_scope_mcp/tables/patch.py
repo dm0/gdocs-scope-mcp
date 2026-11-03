@@ -92,13 +92,22 @@ def compile_cell(markdown):
     for paragraph in paragraphs:
         paragraph.unwrap()
     allowed = {'b', 'strong', 'i', 'em', 'u', 's', 'del', 'code', 'a',
-               'sup', 'sub', 'br'}
+               'sup', 'sub', 'br', 'span'}
     for node in soup.descendants:
         if isinstance(node, Comment):
             fail('INVALID_ARGUMENT', 'HTML comments are unsupported in cells.')
         if getattr(node, 'name', None) is None:
             continue
         attributes = {'href', 'title'} if node.name == 'a' else set()
+        if node.name == 'span':
+            attributes = {'data-mcp-color', 'data-mcp-background-color',
+                          'style'}
+            if node.get('style') and any(
+                item.partition(':')[0].strip().lower()
+                not in {'color', 'background-color'}
+                for item in str(node['style']).split(';') if item.strip()
+            ):
+                fail('INVALID_ARGUMENT', 'Spans support only color CSS.')
         if node.name not in allowed or set(node.attrs) - attributes:
             fail('INVALID_ARGUMENT', 'Cell patches support inline formatting '
                  'and br only; objects, entities and block content are '
