@@ -42,6 +42,10 @@ def test_code_spacing_preserves_only_outer_intervals(
         rows.append((position, position + utf16_length('After') + 1,
                      baseline.copy()))
     for request in requests:
+        for kind in ('updateTextStyle', 'updateParagraphStyle'):
+            if kind in request:
+                span = request[kind]['range']
+                assert span['startIndex'] < span['endIndex']
         update = request.get('updateParagraphStyle')
         if update is None:
             continue

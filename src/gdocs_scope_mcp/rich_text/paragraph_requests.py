@@ -194,6 +194,10 @@ def compile_paragraphs(
             # The block terminator belongs to its final empty paragraph.
             # Include it to format trailing blank lines without touching prose.
             paragraph_end += 1
+        if p.code_block:
+            # An empty block still owns a real paragraph terminator. Google
+            # rejects empty text-style ranges even when paragraph resets work.
+            paragraph_end = max(content_start + 1, paragraph_end)
         span = {
             'startIndex': p.start_index + offset,
             'endIndex': paragraph_end,
