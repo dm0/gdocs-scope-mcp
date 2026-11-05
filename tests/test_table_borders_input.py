@@ -39,8 +39,9 @@ def test_border_input_reaches_table_executor(tool, extra, expected,
     calls = []
 
     def execute(_self, _service, _doc_id, _revision, *,
-                table_borders, tab_id=None, size_images=None):
+                table_borders, tab_id=None, size_images=None, in_table=False):
         assert tab_id is None
+        assert in_table is False
         assert callable(size_images)
         calls.append(table_borders)
 

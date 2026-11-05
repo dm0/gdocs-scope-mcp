@@ -10,6 +10,7 @@ from gdocs_scope_mcp.entity_edit import (
 from gdocs_scope_mcp.google_api import clients
 from gdocs_scope_mcp.image_layout import fit_images
 from gdocs_scope_mcp.revision_guards import insertion_context, submit
+from gdocs_scope_mcp.rich_text.cells import cell_paragraph_requests
 from gdocs_scope_mcp.rich_text.compiler import (
     gpars_to_requests,
     inserted_text_from_requests,
@@ -52,6 +53,7 @@ def insert_content(
     table_borders: bool = True,
     tab_id: str | None = None,
     document: dict | None = None,
+    in_table: bool = False,
     reset_literal_paragraphs: bool = False,
 ) -> tuple[str, int, int, list[str]]:
     """Apply a validated insertion within the temporary-image lifecycle."""
@@ -97,11 +99,14 @@ def insert_content(
                 size_images=(lambda requests, paragraphs: fit_images(
                     requests, paragraphs, document or {}, index,
                 )),
+                in_table=in_table,
             )
             requests = list(prepared.requests.iter_requests())
         else:
             requests = prepared.requests
             if rich:
+                if in_table:
+                    requests = cell_paragraph_requests(requests)
                 fit_images(
                     requests, prepared.paragraphs, document or {}, index,
                 )

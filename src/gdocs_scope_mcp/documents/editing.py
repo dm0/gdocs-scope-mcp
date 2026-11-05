@@ -318,6 +318,7 @@ def insert_after(
         table_borders=table_borders,
         tab_id=doc.get('_mcp_tab_id'),
         document=doc,
+        in_table=found.paragraph.table_cell_end_index is not None,
     )
 
     return InsertSucceedResponse(
@@ -398,6 +399,7 @@ def insert_before(
         table_borders=table_borders,
         tab_id=doc.get('_mcp_tab_id'),
         document=doc,
+        in_table=found.paragraph.table_cell_end_index is not None,
     )
 
     return InsertSucceedResponse(

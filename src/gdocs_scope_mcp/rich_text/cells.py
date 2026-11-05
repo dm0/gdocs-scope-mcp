@@ -22,6 +22,32 @@ CELL_PARAGRAPH_RESET_FIELDS = (
 )
 
 
+def cell_paragraph_requests(requests: list[dict]) -> list[dict]:
+    """Adapt rich paragraph resets and spacing for a table-cell destination."""
+    result = []
+    for request in requests:
+        update = request.get('updateParagraphStyle', {})
+        style = update.get('paragraphStyle', {})
+        if update.get('fields') == '*':
+            # Body-only pageBreakBefore is invalid even as a reset in a cell.
+            update['fields'] = CELL_PARAGRAPH_RESET_FIELDS
+        for key in ('spaceAbove', 'spaceBelow'):
+            if key in style:
+                style[key] = {'magnitude': 0, 'unit': 'PT'}
+        result.append(request)
+        if 'namedStyleType' in style:
+            # Google can normalize properties during a named-style change.
+            result.append({'updateParagraphStyle': {
+                'range': update['range'].copy(),
+                'paragraphStyle': {
+                    'spaceAbove': {'magnitude': 0, 'unit': 'PT'},
+                    'spaceBelow': {'magnitude': 0, 'unit': 'PT'},
+                },
+                'fields': 'spaceAbove,spaceBelow',
+            }})
+    return result
+
+
 def shifted_requests(requests: list[dict], offset: int) -> list[dict]:
     """Translate relative cell requests without changing their styles."""
     result = deepcopy(requests)
@@ -97,12 +123,7 @@ def convert_table(element: Tag, start: int) -> InsertionTable:
                 line_break.replace_with(NavigableString('\u000b'))
             paragraphs = html_to_gpars(cell.decode_contents(), 0)
             requests = gpars_to_requests(paragraphs, newline_before=False)
-            for request in requests:
-                update = request.get('updateParagraphStyle', {})
-                if update.get('fields') == '*':
-                    # pageBreakBefore is invalid even as a reset in a table.
-                    # headingId and tabStops are read-only API properties.
-                    update['fields'] = CELL_PARAGRAPH_RESET_FIELDS
+            requests = cell_paragraph_requests(requests)
             # The native cell already contains its mandatory final newline.
             insertions = [r['insertText'] for r in requests
                           if 'insertText' in r]
@@ -118,6 +139,16 @@ def convert_table(element: Tag, start: int) -> InsertionTable:
                                   'paragraph; replace raw line breaks with '
                                   'spaces.')
             span = {'startIndex': 0, 'endIndex': max(1, utf16_length(text))}
+            if not requests:
+                # Even an empty cell contains a mandatory paragraph.
+                requests.append({'updateParagraphStyle': {
+                    'range': span.copy(),
+                    'paragraphStyle': {
+                        'spaceAbove': {'magnitude': 0, 'unit': 'PT'},
+                        'spaceBelow': {'magnitude': 0, 'unit': 'PT'},
+                    },
+                    'fields': 'spaceAbove,spaceBelow',
+                }})
             if cell.name == 'th':
                 requests.append({'updateTextStyle': {
                     'range': span.copy(), 'textStyle': {'bold': True},

@@ -124,6 +124,36 @@ def test_table_rendering_does_not_extend_preceding_paragraph(table_document):
 
 
 @pytest.mark.parametrize('operation', ['insert_before', 'insert_after'])
+@pytest.mark.parametrize('markup', [
+    'Plain **bold**\n\nNext', '### Heading',
+    '- First\n\n- Second', '```python\nreturn 1\n```',
+])
+def test_rich_paragraphs_inserted_in_existing_cells_have_zero_spacing(
+    table_document, mock_docs, operation, markup,  # noqa: ARG001
+):
+    """Apply table-safe resets and zero spacing to all new cell paragraphs."""
+    result = getattr(docs_edit, operation)('example', 'First😀', markup)
+    assert result.ok
+    requests = mock_docs.batchUpdate.call_args.kwargs['body']['requests']
+    updates = [r['updateParagraphStyle'] for r in requests
+               if 'updateParagraphStyle' in r]
+    resets = [u for u in updates if 'namedStyleType' in u['paragraphStyle']]
+    assert resets
+    for reset in resets:
+        assert not set(reset['fields'].split(',')) & {
+            '*', 'pageBreakBefore', 'headingId', 'tabStops',
+        }
+        assert any(u['range'] == reset['range'] and all(
+            u['paragraphStyle'].get(key) == {'magnitude': 0, 'unit': 'PT'}
+            for key in ('spaceAbove', 'spaceBelow')
+        ) for u in updates)
+    for update in updates:
+        for key in ('spaceAbove', 'spaceBelow'):
+            if key in update['paragraphStyle']:
+                assert update['paragraphStyle'][key]['magnitude'] == 0
+
+
+@pytest.mark.parametrize('operation', ['insert_before', 'insert_after'])
 def test_insert_around_body_paragraph_before_table(
     table_document, mock_docs, operation,
 ):

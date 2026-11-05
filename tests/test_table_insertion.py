@@ -216,6 +216,46 @@ def test_declared_alignment_and_header_ranges():
             assert alignments == [expected]
 
 
+@pytest.mark.parametrize('html', [False, True])
+def test_cell_spacing_overrides_named_style_without_changing_body(html):
+    """Keep populated and empty cells compact after the named-style reset."""
+    markup = (
+        '<table><tr><th>Header</th><th></th></tr>'
+        '<tr><td>😀<b>bold</b><br>line</td><td></td></tr></table>'
+        if html else '| Header | |\n| --- | --- |\n'
+        '| 😀**bold**<br>line | |'
+    )
+    native = NativeBuffer()
+    plan = markdown_to_requests('Before\n\n' + markup + '\n\nAfter',
+                                native.start)
+    TableInsertionExecution(plan).execute(native.service, 'test')
+    table = next(block for block in plan.blocks
+                 if isinstance(block, InsertionTable))
+    cells = [cell for row in table.cells for cell in row]
+    for cell in cells:
+        # Model nonzero named-style spacing, including restoration by resets.
+        baseline = {'spaceAbove': {'magnitude': 12, 'unit': 'PT'},
+                    'spaceBelow': {'magnitude': 8, 'unit': 'PT'}}
+        effective = dict(baseline)
+        for request in cell.requests:
+            update = request.get('updateParagraphStyle', {})
+            if not update:
+                continue
+            assert update['range']['startIndex'] == 0
+            style = update['paragraphStyle']
+            if 'namedStyleType' in style:
+                effective = dict(baseline)
+            effective.update(style)
+        assert effective['spaceAbove'] == {'magnitude': 0, 'unit': 'PT'}
+        assert effective['spaceBelow'] == {'magnitude': 0, 'unit': 'PT'}
+    for request, text in native.styles:
+        if text not in {'Before', 'After'}:
+            continue
+        style = request.get('updateParagraphStyle', {}).get(
+            'paragraphStyle', {})
+        assert 'spaceAbove' not in style and 'spaceBelow' not in style
+
+
 def test_failure_reports_partial_result_without_retries():
     """A later failure must not invite duplicating already inserted text."""
     native = NativeBuffer()
