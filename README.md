@@ -43,6 +43,9 @@ well suited to large Google Docs with structured headings.
 - **Read and write rich content.** Read documents as Markdown with HTML for
   supported formatting, and insert headings, emphasis, links, strikethrough,
   and supported reader-generated HTML through one shared converter.
+- **Use explicit colors.** Discover the 80 Google editor palette names, color
+  text, highlight fragments and fill paragraphs. Read/write matching HTML or
+  use anchored formatting tools to change only requested color properties.
 - **Create native lists and tables.** Write homogeneous or mixed nested lists with
   multiple paragraphs per item and continuations after nested lists. Insert
   rectangular Markdown or HTML tables with column alignment, inline formatting,
@@ -88,6 +91,8 @@ Supported content has explicit limits: arbitrary table writes and cross-document
 dropdown definition copying are not supported. Table positions are guarded by
 section structure; table pagination tokens bind the document revision.
 See the [tool reference](docs/tools/documents.md) for operation-specific details.
+See [color formatting](docs/colors.md) for palette discovery, HTML attributes,
+anchored formatting and reset semantics.
 
 ## Quick start
 
@@ -127,6 +132,15 @@ Typical workflow:
 3. Use `heading_id` with `docs_search_replace`, `docs_insert_before`, or
    `docs_insert_after` to restrict the edit to the chosen subtree.
 4. Read that section again to verify the result.
+
+To insert at a section boundary without a text anchor, use
+`docs_insert_at_heading(doc_id, heading_id, text, position="after_subtree")`.
+This inserts after the heading's complete subtree, including nested sections
+and tables. Use `position="before_subtree"` to insert before the heading itself.
+Pass `tab_id` for another tab. After a confirmed revision race, this operation
+rereads the same tab and recomputes the heading's current boundary, including
+changes to the subtree (up to three attempts). Set `expected_revision_id` to
+require an exact earlier revision without automatic replanning.
 
 Scoped reads reduce the document content sent to the agent. The server still
 fetches the Google Docs document snapshot internally to resolve its structure

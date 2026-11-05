@@ -67,6 +67,24 @@ def _mixed_list_requests(paragraphs: list[tuple]) -> list[dict]:
     return requests
 
 
+def _code_spacing_requests(text: str, start: int, end: int) -> list[dict]:
+    """Keep named-style spacing only at the outside of a code block."""
+    if '\n' not in text:
+        return []
+    first_end = start + utf16_length(text[:text.index('\n') + 1])
+    last_start = start + utf16_length(text[:text.rindex('\n') + 1])
+    # An exclusive end at a paragraph start leaves that paragraph untouched.
+    # The final empty code paragraph is included by the caller's block span.
+    return [{'updateParagraphStyle': {
+        'range': {'startIndex': left, 'endIndex': right},
+        'paragraphStyle': {field: {'magnitude': 0, 'unit': 'PT'}},
+        'fields': field,
+    }} for field, left, right in (
+        ('spaceAbove', first_end, end),
+        ('spaceBelow', start, last_start),
+    )]
+
+
 def compile_paragraphs(
     paragraphs: list[InsertionParagraph | InsertionTable], *,
     newline_before: bool = True,
@@ -176,6 +194,10 @@ def compile_paragraphs(
             # The block terminator belongs to its final empty paragraph.
             # Include it to format trailing blank lines without touching prose.
             paragraph_end += 1
+        if p.code_block:
+            # An empty block still owns a real paragraph terminator. Google
+            # rejects empty text-style ranges even when paragraph resets work.
+            paragraph_end = max(content_start + 1, paragraph_end)
         span = {
             'startIndex': p.start_index + offset,
             'endIndex': paragraph_end,
@@ -208,6 +230,11 @@ def compile_paragraphs(
                 'range': span.copy(), 'paragraphStyle': explicit,
                 'fields': ','.join(explicit),
             }})
+        if p.code_block:
+            formatting_requests.extend(_code_spacing_requests(
+                ''.join(element.content for element in p.elements),
+                content_start, paragraph_end,
+            ))
         formatting_requests.append({'updateTextStyle': {
             'range': span.copy(), 'textStyle': {}, 'fields': '*',
         }})

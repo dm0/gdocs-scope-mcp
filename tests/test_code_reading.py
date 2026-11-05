@@ -31,6 +31,8 @@ def code_settings(monkeypatch, tmp_path):
     monkeypatch.setenv('XDG_CONFIG_HOME', str(tmp_path))
     monkeypatch.delenv('GDOCS_SCOPE_MCP_CONFIG', raising=False)
     monkeypatch.setenv('GDOCS_SCOPE_MCP_READ_CODE_BLOCK_HEURISTIC', 'false')
+    # Existing synthetic captures exercise the explicitly configured 1.0 mode.
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_READ_CODE_BLOCK_LINE_SPACING', '1.0')
     get_settings.cache_clear()
     yield
     get_settings.cache_clear()
@@ -120,7 +122,7 @@ def test_inline_custom_fonts_colors_and_disabled(code_document, monkeypatch):
     assert render(doc) == '`word`\n\n'
     monkeypatch.setenv('GDOCS_SCOPE_MCP_READ_INLINE_CODE', 'false')
     get_settings.cache_clear()
-    assert render(doc) == 'word\n\n'
+    assert render(doc) == '<span data-mcp-color="black">word</span>\n\n'
 
 
 @pytest.mark.parametrize('text', [
@@ -205,6 +207,22 @@ def test_optional_block_heuristic_preserves_internal_blank_lines(
                        'true')
     get_settings.cache_clear()
     assert '```' not in render(doc)
+
+
+@pytest.mark.parametrize('spacing', [1.0, 1.15, 1.5])
+def test_default_and_configured_read_spacing(code_document, monkeypatch,
+                                            spacing):
+    """Match default-written blocks and preserve explicit legacy overrides."""
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_READ_CODE_BLOCK_HEURISTIC', 'true')
+    monkeypatch.delenv('GDOCS_SCOPE_MCP_READ_CODE_BLOCK_LINE_SPACING')
+    default_spacing = 1.15
+    if spacing != default_spacing:
+        monkeypatch.setenv('GDOCS_SCOPE_MCP_READ_CODE_BLOCK_LINE_SPACING',
+                           str(spacing))
+    get_settings.cache_clear()
+    doc = code_document(['first\n', 'last\n'], style=FONT,
+                        paragraph_style={'lineSpacing': spacing * 100})
+    assert render(doc) == '```\nfirst\nlast\n```\n\n'
 
 
 @pytest.mark.parametrize('mismatch', ['font', 'spacing', 'single', 'heading'])
@@ -326,7 +344,8 @@ def test_heuristic_stops_at_different_background(code_document, monkeypatch):
             'color': {'rgbColor': {'red': 1}},
         }},
     }
-    assert render(doc) == '```\na\nb\n```\n\nc\n\n'
+    assert render(doc) == ('```\na\nb\n```\n\n'
+                           '<p data-mcp-background-color="red">c</p>\n\n')
 
 
 def test_code_read_preserves_editable_utf16_positions(code_document,
@@ -412,7 +431,8 @@ def test_native_switch_is_independent(native_code_document, monkeypatch,
     assert '```' not in markup
     assert '`UI_CODE' not in markup
     assert '\ue907' not in markup
-    assert 'UI&#95;CODE&#95;20261027 &#61;&#32;1' in markup
+    assert ('UI&#95;CODE&#95;20261027&#32;&#61;&#32;</span>'
+            '<span data-mcp-color="#188038">1') in markup
     monkeypatch.setenv('GDOCS_SCOPE_MCP_READ_NATIVE_CODE_BLOCKS', 'true')
     get_settings.cache_clear()
     assert markup != render(native_code_document)

@@ -92,10 +92,18 @@ def convert_table(element: Tag, start: int) -> InsertionTable:
             if any(str(cell.get(key, '1')) != '1'
                    for key in ('rowspan', 'colspan')):
                 unsupported_table('Merged table cells are unsupported.')
-            if cell.find(['p', 'div', 'ul', 'ol', 'pre', 'blockquote', 'hr',
+            if cell.find(['div', 'ul', 'ol', 'pre', 'blockquote', 'hr',
                           'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'h7', 'h8',
                           'h9', 'h10']):
                 unsupported_table('Table cells support inline content only.')
+            paragraphs_in_cell = cell.find_all('p')
+            if paragraphs_in_cell and (
+                len(paragraphs_in_cell) != 1
+                or paragraphs_in_cell[0].parent is not cell
+                or any(node is not paragraphs_in_cell[0] and str(node).strip()
+                       for node in cell.contents)
+            ):
+                unsupported_table('A cell supports at most one paragraph.')
             alignment = cell.get('align')
             style = str(cell.get('style', '')).strip()
             if style:

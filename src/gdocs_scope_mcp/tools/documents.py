@@ -3,6 +3,8 @@
 # Preserve the exact public descriptions after nesting registration functions.
 # ruff: noqa: E501
 
+from typing import Literal
+
 from gdocs_scope_mcp.contracts import EditFailedResponse
 from gdocs_scope_mcp.documents import (
     editing as docs_edit,
@@ -13,6 +15,7 @@ from gdocs_scope_mcp.documents.receipts import (
     AppendSucceedResponse,
     BatchReplaceResponse,
     DeleteParagraphResponse,
+    HeadingInsertResponse,
     InsertSucceedResponse,
     ReplaceSucceedResponse,
 )
@@ -174,6 +177,72 @@ def register_reading(mcp):
 
 def register_editing(mcp):
     """Register documents tools in their established order."""
+
+    @mcp.tool(
+        output_schema=tool_response_schema(HeadingInsertResponse),
+        annotations={
+            'readOnlyHint': False, 'destructiveHint': False,
+            'idempotentHint': False, 'openWorldHint': True,
+        },
+    )
+    def docs_insert_at_heading(
+        doc_id: str, heading_id: NonemptyText, text: str,
+        position: Literal['before_subtree', 'after_subtree'], *,
+        rich: bool = True, tab_id: TabId | None = None,
+        upload_local_images: bool = False, table_borders: TableBorders = True,
+        code_block_style: CodeBlockStyle | None = None,
+        code_block_theme_background: CodeBlockThemeBackground | None = None,
+        expected_revision_id: ExpectedRevision | None = None,
+    ) -> HeadingInsertResponse | EditFailedResponse:
+        """
+        Insert complete paragraphs at a heading subtree boundary by heading_id.
+
+        No text anchor is required. Obtain heading_id from docs_get_tree in the
+        selected tab. before_subtree inserts immediately before that heading.
+        after_subtree inserts after its body, tables and all nested headings,
+        before the next heading of the same or higher level, or at the tab end.
+        Repeated heading titles do not affect selection. Unknown IDs fail without
+        writes. Omitted tab_id selects the first root tab.
+
+        Uses required revisions, including in server target mode. After a confirmed
+        revision rejection, rereads the pinned tab and recomputes this heading ID's
+        current boundary, up to three attempts. Changes to the heading's text,
+        level, ancestry, subtree contents and following headings are allowed.
+        A removed heading is not recreated or replaced by a text match.
+        expected_revision_id enforces that exact revision and disables retries.
+        Table stages use required revision chaining. Completed stages and unknown
+        write outcomes are never replayed; inspect partial results before retrying.
+
+        rich=True uses the same Markdown/reader HTML converter as docs_insert_after,
+        including inline styles, native lists, rectangular tables, images, smart
+        chips and code. Heading mapping: # is TITLE, ## is SUBTITLE,
+        ### is HEADING_1, and so on. Plain paragraphs do not inherit heading level.
+        rich=False inserts markup literally and creates normal text paragraphs.
+        Content determines heading levels; a sibling heading must be explicit.
+
+        upload_local_images=True permits temporary My Drive root uploads and
+        anyone-with-link access; sources are deleted after insertion. Inspect
+        temporary_image_cleanup_pending instead of repeating successful writes.
+        table_borders controls new table borders. code_block_style and
+        code_block_theme_background override server formatting for this call;
+        omitted/null inherits configuration. These options are ignored in literal
+        mode. Public images, chips, lists and tables retain the same limitations
+        as docs_insert_after, including multi-stage table partial failures.
+
+        Returns document_id, tab_id, heading_id, scope=heading_subtree,
+        insert_position, diagnostic at_index, rich, inserted_text (up to 200 code
+        points), full inserted_char_count, preview_truncated, image/chip counts
+        and temporary upload cleanup status. Counts include paragraph breaks
+        and U+FFFC placeholders for images/chips. Read back to verify formatting.
+        """
+        with code_formatting(style=code_block_style,
+                             theme_background=code_block_theme_background):
+            return docs_edit.insert_at_heading(
+                doc_id, heading_id, text, position, rich=rich, tab_id=tab_id,
+                upload_local_images=upload_local_images,
+                table_borders=table_borders,
+                expected_revision_id=expected_revision_id,
+            )
 
     @mcp.tool(
         output_schema=tool_response_schema(ReplaceSucceedResponse),

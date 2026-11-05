@@ -40,7 +40,7 @@ docs_read(doc_id="...")  # Usual single-tab path; no extra discovery needed.
 
 ## Shared insertion options
 
-The three insertion tools accept the same rich-content options:
+The insertion tools accept the same rich-content options:
 
 | Parameter | Default | Effect |
 | --- | --- | --- |
@@ -58,7 +58,8 @@ server defaults. Theme/background nulls inherit their server defaults.
 ## Revision preconditions
 
 `docs_search_replace`, `docs_batch_replace`, `docs_delete_paragraph`,
-`docs_append`, `docs_insert_before` and `docs_insert_after` accept optional
+`docs_append`, `docs_insert_before`, `docs_insert_after` and
+`docs_insert_at_heading` accept optional
 `expected_revision_id`. Omitting it uses the configured write policy;
 providing it requires that exact revision and disables rebasing. Native
 single-tool replace-all (`occurrence=0`) rejects this parameter.
@@ -206,6 +207,29 @@ while True:
 
 ## Editing
 
+### Color discovery and formatting
+
+`docs_get_color_palette()` returns eight rows of `{name, hex}` entries for
+the 80 standard Google editor colors, without document access.
+
+```text
+docs_format_text(doc_id, anchor_text, *, foreground_color=None,
+                 background_color=None, occurrence=None, heading_id=None,
+                 tab_id=None, expected_revision_id=None)
+docs_format_paragraph(doc_id, anchor_text, *, background_color,
+                      occurrence=None, heading_id=None, tab_id=None,
+                      expected_revision_id=None)
+```
+
+Accept Google palette names, `#RRGGBB`, or `reset`. Text formatting changes
+only the matched fragment's specified properties; paragraph formatting changes
+only its containing paragraph's fill. Null/omitted text properties are preserved.
+Anchors are literal and case-insensitive. Omitted occurrence requires uniqueness;
+positive occurrence selects a text match in document order, never format-all.
+Both tools support heading scope, tabs and existing revision safeguards.
+Receipts include `ok`, `document_id`, `tab_id`, `heading_id`, `scope`, `applied`,
+`occurrences_found` and `updated_properties`. See [colors](../colors.md).
+
 Existing-text editing uses **text anchors**; appends use the document end.
 The server resolves native indices internally. Structural table operations
 have their own [checked-reference tools](tables.md).
@@ -299,6 +323,68 @@ Returns document/scope metadata, `ok`, `anchor` (up to 80 code points),
 `inserted_char_count`, and `preview_truncated`.
 Rich insertion receipts also include `inserted_image_count`,
 `inserted_entity_count` and `temporary_image_cleanup_pending`.
+
+---
+
+### docs_insert_at_heading
+
+```text
+docs_insert_at_heading(
+    doc_id, heading_id, text, position,
+    *, rich=True, tab_id=None, upload_local_images=False,
+    table_borders=True, code_block_style=None,
+    code_block_theme_background=None, expected_revision_id=None,
+)
+```
+
+Insert complete paragraphs by heading ID without a text anchor:
+
+- `before_subtree`: immediately before the heading paragraph.
+- `after_subtree`: after all body content, tables and nested headings belonging
+  to that heading, before the next heading of the same or higher level, or at
+  the selected tab's end.
+
+Obtain `heading_id` from `docs_get_tree` for the selected tab. Repeated heading
+titles are safe because selection uses native IDs. Unknown IDs fail without
+writes. The hierarchy follows the outline's native named-style order, including
+TITLE and SUBTITLE where they have heading IDs. Headings inside table cells are
+not body subtree targets or boundaries.
+
+Rich/literal conversion and formatting options match the other insertion tools.
+Plain text creates normal paragraphs; it does not copy the target heading's
+level. To create a sibling heading, explicitly supply the appropriate Markdown
+heading (`###` maps to HEADING_1). Literal mode preserves markup verbatim while
+resetting inserted paragraph headings and bullets to normal text.
+
+This tool uses required revisions even in server target mode. After a confirmed
+revision rejection, it rereads the pinned tab and recomputes the current boundary
+of the same heading ID, up to three total attempts. Changes to heading text,
+level, ancestry, subtree contents and following headings are allowed. This means
+"before/after the current subtree", including content added by collaborators.
+If the heading is removed, the retry returns `TARGET_DELETED`; repeated races
+return `REVISION_RETRY_EXHAUSTED`. It never substitutes another heading by title.
+
+If the subtree becomes the last section or gains a successor, paragraph breaks
+are replanned too. Staged local images are reused without uploading again.
+`expected_revision_id` requires the exact earlier revision and disables retries,
+returning `EDIT_CONFLICT` on changes. Multi-stage tables retain required revision
+chaining; confirmed stages and unknown writes are never replayed. Inspect
+partial/unknown outcomes before another write.
+
+```text
+docs_insert_at_heading(
+    doc_id="...", heading_id="heading-id-from-outline",
+    text="New closing paragraph.", position="after_subtree"
+)
+```
+
+The receipt identifies `document_id`, `tab_id`, `heading_id`,
+`scope="heading_subtree"`, and `insert_position`. It includes diagnostic
+`at_index`, `rich`, `inserted_text` (up to 200 code points), full
+`inserted_char_count`, `preview_truncated`, `inserted_image_count`,
+`inserted_entity_count`, and `temporary_image_cleanup_pending`. Counts include
+paragraph breaks and U+FFFC image/chip placeholders. Successful insertions must
+not be repeated to clean up temporary uploads.
 
 ---
 

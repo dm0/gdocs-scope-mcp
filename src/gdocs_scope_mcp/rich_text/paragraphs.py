@@ -9,6 +9,7 @@ from bs4.element import NavigableString, PageElement
 from pydantic import ValidationError
 
 from gdocs_scope_mcp.code_highlighting import code_shading, code_spans
+from gdocs_scope_mcp.colors import html_colors, native_color
 from gdocs_scope_mcp.contracts import EditFailedResponse
 from gdocs_scope_mcp.documents.native_models import (
     GoogleDocumentColor,
@@ -16,6 +17,7 @@ from gdocs_scope_mcp.documents.native_models import (
     GoogleDocumentOptionalColor,
     GoogleDocumentParagraphStyle,
     GoogleDocumentRgbColor,
+    GoogleDocumentShading,
     GoogleDocumentTextRun,
     GoogleDocumentTextStyle,
     GoogleDocumentWeightedFontFamily,
@@ -167,7 +169,13 @@ def _collect_styles(
 ) -> GoogleDocumentTextStyle:
     style = GoogleDocumentTextStyle()
     parent = element.parent
+    colors = {}
     while parent and parent != stop:
+        explicit = html_colors(parent)
+        for key, value in explicit.items():
+            if key == 'background-color' and parent.name != 'span':
+                continue
+            colors.setdefault(key, value)
         if parent.name in ['b', 'strong']:
             style.bold = True
         if parent.name in ['i', 'em']:
@@ -196,6 +204,10 @@ def _collect_styles(
         if parent.name == 'sub':
             style.baseline_offset = GoogleDocumentBaselineOffset.SUBSCRIPT
         parent = parent.parent
+    for key, value in colors.items():
+        setattr(style, 'foreground_color' if key == 'color'
+                else 'background_color',
+                GoogleDocumentOptionalColor.model_validate(native_color(value)))
     return style
 
 
@@ -346,6 +358,14 @@ def _convert_page_elements(
                 )
             # FIXME: Implement other supported elements
             last = added[-1] if added else paragraph
+            if element.name == 'p' or re.fullmatch(r'h[1-8]', element.name):
+                background = html_colors(element).get('background-color')
+                if background:
+                    last.paragraph_style.shading = (
+                        GoogleDocumentShading.model_validate({
+                            'backgroundColor': native_color(background),
+                        })
+                    )
             added.extend(_convert_page_elements(
                 element.children, last, table_converter=table_converter,
             ))
@@ -362,6 +382,8 @@ def parse_html(
 ) -> list[InsertionParagraph | InsertionTable]:
     """Convert HTML into indexed paragraphs and structural table plans."""
     bs = BeautifulSoup(html, 'html.parser')
+    for element in bs.find_all(True):
+        html_colors(element)
     current_index = start
     paragraphs: list[InsertionParagraph | InsertionTable] = [
         InsertionParagraph(

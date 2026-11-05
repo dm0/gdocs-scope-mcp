@@ -23,8 +23,9 @@ a list or code block uses its heading style. Document named styles and existing
 surrounding content are preserved. `rich=False` retains Google's native
 insertion inheritance and inserts the input literally without style resets.
 
-All three rich insertion tools (`docs_append`, `docs_insert_before`, and
-`docs_insert_after`) also accept the reader's HTML for bold (`b`), italic (`i`),
+All rich insertion tools (`docs_append`, `docs_insert_before`,
+`docs_insert_after`, and `docs_insert_at_heading`) also accept the reader's
+HTML for bold (`b`), italic (`i`),
 underline (`u`), and paragraph alignment (`p` with `text-align: center`, `right`,
 or `justify`). Nested inline styles combine within their text ranges. Heading
 ID anchors (`<a id="..."></a>`) are omitted from inserted text; new headings use
@@ -41,7 +42,11 @@ are supported, while empty heading-ID anchors remain metadata.
 This is a bounded read-to-write subset, not complete HTML or formatting
 round-trip support. Other wrappers retain their child text without preserving
 unsupported formatting or attributes; non-text tags may contribute no content.
-For example, a styled `span` retains its text but loses its styling. Tables
+Color spans use `data-mcp-color` and `data-mcp-background-color`, accepting
+Google palette names or `#RRGGBB`. Paragraphs and headings accept
+`data-mcp-background-color` for whole-paragraph fill. CSS color properties
+accept HEX only. Discover names with `docs_get_color_palette`; see
+[color formatting](colors.md) for examples, resets and anchored tools. Tables
 support the [rectangular subset](#tables). Use `rich=False` to preserve
 HTML tags and Markdown literally.
 
@@ -70,7 +75,7 @@ therefore does not decode these references.
 
 ## Tables
 
-Markdown tables create native rows and cells in all three insertion tools.
+Markdown tables create native rows and cells in all insertion tools.
 
 The optional MCP parameter `table_borders` defaults to `true`: every new table
 has solid black 1 pt borders. Set `table_borders=false` to hide all outer and
@@ -106,7 +111,8 @@ and lists. The anchor and other existing paragraphs retain their formatting.
 
 Simple rectangular HTML tables (`table`, `thead`/`tbody`, `tr`, `th`/`td`) use
 the same conversion. Cells can declare `align="left|center|right"` or a single
-`style="text-align: ..."`. Merged cells, nested tables, tables inside lists,
+`style="text-align: ..."`. A cell can contain one `p` wrapper for paragraph
+alignment/fill and colored inline spans. Merged cells, nested tables, tables inside lists,
 captions/column/footer groups, and block content inside cells (including lists,
 code blocks and multiple paragraphs) are rejected before
 writes. Arbitrary table styling and widths are not preserved.
@@ -131,7 +137,7 @@ cell newlines, without Markdown pipes or table structural indices.
 
 Inline code (backticks or HTML `code`) and code blocks (backtick/tilde fences,
 indented Markdown code, or HTML `pre`) use the native **Roboto Mono** font in
-all three insertion tools by default. Inline code is formatted only on its code
+all insertion tools by default. Inline code is formatted only on its code
 span and defaults to green **#188038**, matching Google Docs' backtick recognition,
 and can combine with outer emphasis or a hyperlink. Markdown code-span whitespace
 follows CommonMark normalization, including turning a source newline into a
@@ -158,6 +164,12 @@ Enable backgrounds when choosing a dark theme with light text. Adjacent prose is
 unaffected; paragraph fills are applied after insertion to prevent inheritance.
 No custom font size or native language property is written. A versioned named
 range stores each inserted block's language for later reads.
+
+Paragraph spacing is inherited from the document's normal-text style only
+before the first code paragraph and after the last. All internal `spaceAbove`
+and `spaceBelow` values are explicitly zero, including on blank code lines.
+A single-paragraph block inherits both boundary intervals. Horizontal paragraph
+indentation and literal source whitespace are unchanged.
 
 Inline code works in supported list-item paragraphs. Code blocks inside
 list items return `INVALID_ARGUMENT` before writing; list-item block semantics
@@ -215,7 +227,7 @@ through their exposed formatting, not a presumed native type.
 - Normal text-only paragraphs without headings or list bullets.
 - Every nonempty text run uses an allowed code font (default: `code_font_family`).
 - Explicit paragraph line spacing matches `read_code_block_line_spacing`
-  (default `1.0`, represented by the API as `100` percent).
+  (default `1.15`, represented by the API as `115` percent).
 - Consecutive paragraphs have matching line spacing and paragraph shading,
   including consistently absent shading.
 - At least `read_code_block_min_lines` paragraphs remain after trimming blank
@@ -286,7 +298,7 @@ the native entity: Google resolves the person's name, resource title, date
 display, or selected dropdown option. Ordinary spans without `data-mcp-entity`
 keep their existing text conversion behavior.
 
-All three rich insertion tools recognize these spans, including inline chips
+All rich insertion tools recognize these spans, including inline chips
 in supported list paragraphs and table cells. They insert **new native
 instances**, preserving the person/resource reference, timestamp/display
 configuration, or dropdown definition/selection. `data-mcp-id` is a read/edit
@@ -418,7 +430,7 @@ Only the first paragraph of each logical item has a native marker. Continuation
 paragraphs align with its text (36 pt per nesting level); they do not increment
 numbering. Tight lists use zero paragraph spacing; loose lists use 6 pt above
 each paragraph and zero below, without inserting empty items. This applies to
-all three rich insertion tools. Reads preserve text and order, but indentation
+all rich insertion tools. Reads preserve text and order, but indentation
 alone cannot reconstruct the original Markdown item membership losslessly.
 
 Reads prefer Markdown lists, using four spaces per nesting level, whenever
@@ -472,7 +484,7 @@ to insert the original syntax literally.
 
 Markdown images (`![label](https://example.com/image.png "title")`) and HTML
 `<img src="https://example.com/image.png" alt="label" title="title">` create
-native inline images in all three insertion tools, including image-only inputs,
+native inline images in all insertion tools, including image-only inputs,
 multiple images, and images among formatted text or in supported list items.
 Their positions occupy one UTF-16 index each; subsequent text and style ranges
 account for those indices.
@@ -525,7 +537,7 @@ placeholder is a receipt representation; it is never submitted as text.
 
 ### Local images through temporary Google Drive files
 
-Set `upload_local_images=True` explicitly on any of the three insertion tools
+Set `upload_local_images=True` explicitly on any of the insertion tools
 to accept absolute local paths or `file:///` URLs in Markdown and HTML:
 
 ```python

@@ -3,8 +3,44 @@
 
 from gdocs_scope_mcp.contracts import EditFailedResponse
 from gdocs_scope_mcp.documents import parsing
+from gdocs_scope_mcp.documents.styles import HEADING_ORDER
 from gdocs_scope_mcp.errors import ToolFailureError
 from gdocs_scope_mcp.text_indices import utf16_length
+
+
+def heading_insertion_point(document, heading_id, position):
+    """Return a native body boundary and whether it needs a leading break."""
+    content = document.get('body', {}).get('content', [])
+    matches = [i for i, item in enumerate(content)
+               if item.get('paragraph', {}).get('paragraphStyle', {}).get(
+                   'headingId') == heading_id]
+    if len(matches) != 1:
+        raise ToolFailureError(EditFailedResponse(
+            code='TARGET_AMBIGUOUS' if matches else 'HEADING_NOT_FOUND',
+            description='The heading ID does not resolve to one body heading '
+            'in the selected tab.',
+            suggested_action='Run docs_get_tree for the selected tab and '
+            'use an existing heading ID.',
+        ))
+    offset = matches[0]
+    heading = content[offset]
+    style = heading['paragraph']['paragraphStyle']['namedStyleType']
+    if style not in HEADING_ORDER:
+        raise ToolFailureError(EditFailedResponse(
+            code='INVALID_ARGUMENT',
+            description='Target has no heading level.',
+            suggested_action='Choose a heading from docs_get_tree.',
+        ))
+    if position == 'before_subtree':
+        return heading['startIndex'], False
+    for item in content[offset + 1:]:
+        level = item.get('paragraph', {}).get('paragraphStyle', {}).get(
+            'namedStyleType')
+        if level in HEADING_ORDER and HEADING_ORDER[level] <= (
+            HEADING_ORDER[style]
+        ):
+            return item['startIndex'], False
+    return content[-1]['endIndex'] - 1, True
 
 
 def build_full_text_map(
