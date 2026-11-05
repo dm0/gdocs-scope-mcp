@@ -133,6 +133,15 @@ Typical workflow:
    `docs_insert_after` to restrict the edit to the chosen subtree.
 4. Read that section again to verify the result.
 
+To insert at a section boundary without a text anchor, use
+`docs_insert_at_heading(doc_id, heading_id, text, position="after_subtree")`.
+This inserts after the heading's complete subtree, including nested sections
+and tables. Use `position="before_subtree"` to insert before the heading itself.
+Pass `tab_id` for another tab. After a confirmed revision race, this operation
+rereads the same tab and recomputes the heading's current boundary, including
+changes to the subtree (up to three attempts). Set `expected_revision_id` to
+require an exact earlier revision without automatic replanning.
+
 Scoped reads reduce the document content sent to the agent. The server still
 fetches the Google Docs document snapshot internally to resolve its structure
 and edit positions.

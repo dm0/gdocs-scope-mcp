@@ -227,6 +227,13 @@ def test_empty_anchor_cannot_delete_document_with_empty_final_paragraph(
 
 
 TOOL_CASES = [
+    (
+        'docs_insert_at_heading',
+        {'doc_id': 'example', 'heading_id': 'parent',
+         'text': '**New**', 'position': 'after_subtree'},
+        {'ok': True, 'scope': 'heading_subtree', 'heading_id': 'parent',
+         'insert_position': 'after_subtree', 'inserted_text': 'New\n'},
+    ),
     ('docs_format_text', {'doc_id': 'example', 'anchor_text': 'Introduction',
                           'foreground_color': 'green'}, {'ok': True, 'applied': 1}),
     ('docs_format_paragraph', {'doc_id': 'example', 'anchor_text': 'Introduction',
