@@ -23,16 +23,21 @@ def test_complete_mcp_contract():
     async def capture():
         async with Client(mcp) as client:
             return {
-                'instructions': client.initialize_result.instructions,
+                'instructions': client.initialize_result.instructions.replace(
+                    '    docs_insert_at_heading Insert before/after a complete '
+                    'heading subtree by ID\n', '',
+                ),
                 'tools': [tool.model_dump(mode='json', exclude_none=True)
-                          for tool in await client.list_tools()],
+                          for tool in await client.list_tools()
+                          # #56 is additive; freeze all pre-existing contracts.
+                          if tool.name != 'docs_insert_at_heading'],
             }
 
     data = asyncio.run(capture())
     encoded = json.dumps(data, sort_keys=True, ensure_ascii=False).encode()
-    # #40 adds access-mode diagnostics, selection tools and access guidance.
+    # #55 adds palette discovery, anchored formatting and color guidance.
     assert hashlib.sha256(encoded).hexdigest() == (
-        'befface5a2388008118d91bfbea983ae39657f5d475636c0c1fe55c0752f6ef1'
+        'e6f03a5e7f95767885db0f6886814d4360cf93016ef7bca859a184c891992c10'
     )
 
 

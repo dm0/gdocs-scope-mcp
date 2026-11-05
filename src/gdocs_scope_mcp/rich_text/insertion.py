@@ -19,6 +19,7 @@ from gdocs_scope_mcp.rich_text.image_uploads import staged_local_images
 from gdocs_scope_mcp.rich_text.parsing import html_to_gpars, markdown_to_html
 from gdocs_scope_mcp.rich_text.plans import TableInsertionPlan
 from gdocs_scope_mcp.rich_text.preparation import PreparedInsertion
+from gdocs_scope_mcp.text_indices import utf16_length
 
 
 @contextmanager
@@ -51,6 +52,7 @@ def insert_content(
     table_borders: bool = True,
     tab_id: str | None = None,
     document: dict | None = None,
+    reset_literal_paragraphs: bool = False,
 ) -> tuple[str, int, int, list[str]]:
     """Apply a validated insertion within the temporary-image lifecycle."""
     if rich:
@@ -64,10 +66,25 @@ def insert_content(
         )
     else:
         literal = '\n' + text if newline_before else text + '\n'
-        context = nullcontext(PreparedInsertion([{'insertText': {
+        requests = [{'insertText': {
             'location': {'index': index}, 'text': literal,
-        }}]))
-    with insertion_context(context, index) as prepared:
+        }}]
+        if reset_literal_paragraphs:
+            start = index + int(newline_before)
+            end = index + utf16_length(literal)
+            span = {'startIndex': start, 'endIndex': end}
+            requests.extend([
+                {'deleteParagraphBullets': {'range': span}},
+                {'updateParagraphStyle': {
+                    'range': span,
+                    'paragraphStyle': {'namedStyleType': 'NORMAL_TEXT'},
+                    'fields': 'namedStyleType',
+                }},
+            ])
+        context = nullcontext(PreparedInsertion(requests))
+    managed = (insertion_context(context, index, newline_before=newline_before)
+               if rich else context)
+    with managed as prepared:
         if rich:
             validate_insertions(service, doc_id, prepared.requests,
                                 required_revision, tab_id=tab_id)

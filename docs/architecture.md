@@ -28,6 +28,7 @@ application operation merely to reuse one of its helpers.
 | `documents/parsing.py`, `targeting.py` | Parse hierarchy and source runs; map Python text offsets to checked UTF-16 source ranges. |
 | `documents/tabs.py`, `fetching.py` | Select tabs, scope native requests and fetch coherent native snapshots. |
 | `documents/reading.py`, `editing.py` | Accepted-content reads and direct document-edit workflows. |
+| `documents/formatting.py` | Anchored text colors and paragraph fill changes through shared source targeting and revision guards. |
 | `documents/snapshots.py` | Pure native-data normalization shared by revision guards and table snapshots. |
 | `suggestions/` | Proposal models, indexing, accepted-content projection, reading and explicit proposal writes. |
 | `comments.py`, `comment_models.py` | Native comment threads, anchored creation, persistence checks, pagination and receipts. |
@@ -37,6 +38,7 @@ application operation merely to reuse one of its helpers.
 | `revision_guards.py` | Revision preconditions, source dependencies, bounded replanning and confirmed-batch accounting. |
 | `entities.py`, `entity_edit.py`, `image_layout.py` | Cohesive entity representations/edits and native image layout calculations. |
 | `tool_inputs.py`, `settings.py` | Pure shared input validation and configuration. They do not depend on MCP registration. |
+| `colors.py` | Fixed Google editor palette, color validation, native RGB conversion and bounded HTML color attributes, shared below readers and writers. |
 | `tool_errors.py`, `tool_logging.py`, `diagnostics.py` | Transport failure conversion, middleware/logging and source identity. |
 
 Keep small cohesive modules intact. There is no module-size target, generic
@@ -92,6 +94,14 @@ prohibited dependencies. Extend it when introducing a new boundary.
 - `documents.parsing.parse_document_tree`, `extract_paragraphs` and
   `paragraph_text_map` expose hierarchy and original source runs. Rendering is
   display data; it must never become an edit-coordinate map.
+- `documents.targeting.heading_insertion_point` resolves body heading IDs and
+  complete subtree boundaries from native tab content, including tables without
+  treating cell headings as body boundaries. `editing.insert_at_heading` uses
+  the shared insertion pipeline and `guarded_edit(required=True)`, recomputing
+  the same heading ID's current boundary after confirmed revision races, even
+  when its subtree changes. Tab selection stays pinned; explicit caller revisions
+  disable replanning. `PreparedInsertion.recompile` changes leading/trailing
+  breaks when tab-end membership changes, retaining staged image URLs.
 - `documents.targeting.build_full_text_map`, `full_text_pos_to_doc_index` and
   `full_text_range_to_doc_indices` preserve UTF-16 width and reject matches
   crossing omitted native structure.
@@ -132,6 +142,9 @@ prohibited dependencies. Extend it when introducing a new boundary.
 - `rich_text.cells.convert_table` validates rectangular inline cell content and
   uses those same paragraph primitives. Existing-table patching shares it and
   does not depend on insertion execution.
+  New cells may contain a single paragraph wrapper for alignment and fill;
+  multiple paragraphs and mixed block/inline siblings remain unsupported.
+  Inline color spans are shared with cell patches, which retain paragraph styles.
   Cell paragraph resets exclude body-only `pageBreakBefore` and read-only
   properties; existing-cell patches retain paragraph properties altogether.
   Image auto-sizing uses the destination named-style baseline and explicit

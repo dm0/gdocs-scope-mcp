@@ -14,6 +14,8 @@ from gdocs_scope_mcp import server
 from gdocs_scope_mcp.google_api import clients
 from gdocs_scope_mcp.rich_text import image_uploads
 
+from .test_revision_guards import reindex
+
 URL = 'https://drive.google.com/uc?id=temporary&export=download'
 IMAGE_COUNT = 2
 
@@ -26,7 +28,10 @@ def api_error(status):
 def call(operation, markup, **kwargs):
     """Call an insertion tool through MCP with fake Google APIs."""
     args = {'doc_id': 'example', 'text': markup, **kwargs}
-    if operation != 'append':
+    if operation == 'insert_at_heading':
+        args.setdefault('heading_id', 'parent')
+        args.setdefault('position', 'after_subtree')
+    elif operation != 'append':
         args['anchor'] = 'Introduction'
 
     async def run():
@@ -132,6 +137,46 @@ def test_revision_retry_reuses_staged_image(
                if 'insertInlineImage' in r]
               for c in batches]
     assert images == [[URL], [URL]]
+
+
+@pytest.mark.parametrize('to_end', [False, True])
+def test_heading_boundary_retry_reuses_upload(
+    services, local_image, simple_document, to_end,
+):
+    """Recompile changed breaks without staging the same image again."""
+    docs, drive, _ = services
+    latest = deepcopy(simple_document)
+    body = latest['body']['content']
+    if to_end:
+        del body[5:]
+    else:
+        sibling = deepcopy(body[5])
+        sibling['paragraph']['paragraphStyle']['headingId'] = 'new'
+        body.append(sibling)
+    reindex(latest)
+    latest['revisionId'] = 'latest'
+    docs.get.return_value.execute.side_effect = [simple_document, latest]
+    stale = HttpError(httplib2.Response({'status': '400'}), json.dumps({
+        'error': {'message': 'The provided revision ID does not match '
+                 'the current revision ID of the document.'},
+    }).encode())
+    docs.batchUpdate.return_value.execute.side_effect = [stale, {}]
+    result = call('insert_at_heading', f'![one](<{local_image}>)',
+                  heading_id='parent' if to_end else 'other',
+                  upload_local_images=True)
+    assert not result.is_error, result.structured_content
+    assert result.structured_content['inserted_text'] == (
+        '\n\ufffc' if to_end else '\ufffc\n')
+    drive.files().create.assert_called_once()
+    drive.permissions().create.assert_called_once()
+    drive.files().delete.assert_called_once_with(fileId='temporary')
+    assert docs.batchUpdate.call_count == 2
+    images = [r['insertInlineImage'] for r in
+              docs.batchUpdate.call_args.kwargs['body']['requests']
+              if 'insertInlineImage' in r]
+    assert [i['uri'] for i in images] == [URL]
+    expected = body[-1]['endIndex'] - 1 if to_end else body[-1]['startIndex']
+    assert images[0]['location']['index'] == expected + int(to_end)
 
 
 @pytest.mark.parametrize('enabled', [False, True])

@@ -54,6 +54,7 @@ from gdocs_scope_mcp.tools import (
     documents,
     entities,
     files,
+    formatting,
     suggestions,
     tables,
 )
@@ -166,6 +167,17 @@ EDIT RECEIPTS:
     scope, including occurrence=1. Native replace-all reports only changes.
 
 EDITING TOOLS:
+    Colors accept English Google palette names or #RRGGBB. Discover all 80
+    names with docs_get_color_palette (no document access). Rich reads/writes
+    use data-mcp-color and data-mcp-background-color on span for foreground
+    and highlighting, and data-mcp-background-color on p/h1-h8 for paragraph
+    fill. Exact palette colors read as names, others as #RRGGBB; no nearest
+    color matching. CSS color/background-color accept #RRGGBB only. Nested
+    spans use the nearest explicit color. No mark shorthand is supported.
+    docs_format_text changes only matched text colors; docs_format_paragraph
+    changes only whole-paragraph fill. Omitted properties preserve formatting;
+    reset removes direct formatting. Both use text anchors and revision guards.
+
     Rich insertion accepts reader HTML for bold, italic, underline and aligned
     paragraphs. Heading-ID anchors are metadata, not visible inserted text or
     IDs to reuse. Other wrappers retain child text without unsupported styles;
@@ -243,6 +255,7 @@ EDITING TOOLS:
     docs_search_replace    Find and replace text (occurrence-targeted or all)
     docs_insert_after      Insert text after a specified paragraph anchor text
     docs_insert_before     Insert text before a specified paragraph anchor text
+    docs_insert_at_heading Insert before/after a complete heading subtree by ID
     docs_delete_paragraph  Delete a paragraph matching the specified anchor
     docs_append            Append paragraph at the end of a document
     docs_batch_replace     Multiple replacements atomically (one API call)
@@ -354,6 +367,7 @@ documents.register_reading(mcp)
 tables.register(mcp)
 entities.register(mcp)
 documents.register_editing(mcp)
+formatting.register(mcp)
 comments.register(mcp)
 files.register(mcp)
 access.register(mcp)

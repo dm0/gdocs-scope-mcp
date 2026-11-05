@@ -119,6 +119,27 @@ class AppendSucceedResponse(DocumentEditReceipt):
     ]
 
 
+class HeadingInsertResponse(DocumentEditReceipt):
+    """Identify a heading boundary and inserted content without an anchor."""
+
+    ok: Literal[True] = True
+    scope: Literal['heading_subtree'] = 'heading_subtree'
+    heading_id: str
+    insert_position: Literal['before_subtree', 'after_subtree']
+    at_index: int = Field(
+        description='Native insertion index; diagnostic only',
+    )
+    rich: bool
+    inserted_text: TruncatedStr200
+    inserted_char_count: int = Field(ge=0, description='Full inserted Unicode '
+                                    'code-point count, including breaks and '
+                                    'U+FFFC image/chip placeholders')
+    preview_truncated: bool
+    inserted_image_count: int = Field(default=0, ge=0)
+    inserted_entity_count: int = Field(default=0, ge=0)
+    temporary_image_cleanup_pending: list[str] = Field(default_factory=list)
+
+
 class ReplaceSucceedResponse(DocumentEditReceipt):
     """Result of successful text replacement request"""
 

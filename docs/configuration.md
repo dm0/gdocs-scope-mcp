@@ -128,7 +128,8 @@ Token paths, client secrets, Drive and logging environment variables retain
 their separate handling. Our config does not
 automatically load `.env` files.
 
-`docs_append`, `docs_insert_before` and `docs_insert_after` also accept optional
+`docs_append`, `docs_insert_before`, `docs_insert_after` and
+`docs_insert_at_heading` also accept optional
 agent-facing `code_block_style` and `code_block_theme_background` arguments.
 The `code_block_style` input schema advertises an `enum` of available themes,
 generated from the installed Pygments version when the server starts. Agents

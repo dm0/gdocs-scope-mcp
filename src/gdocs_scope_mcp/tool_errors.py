@@ -84,6 +84,7 @@ def failure_from_exception(
             )
         if status == HTTPStatus.BAD_REQUEST and tool_name in {
             'docs_append', 'docs_insert_before', 'docs_insert_after',
+            'docs_insert_at_heading',
         }:
             action = (
                 'Check input and document state. For images, use a publicly '
