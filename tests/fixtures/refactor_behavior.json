@@ -557,6 +557,25 @@
           }
         },
         {
+          "updateParagraphStyle": {
+            "range": {
+              "startIndex": 0,
+              "endIndex": 1
+            },
+            "paragraphStyle": {
+              "spaceAbove": {
+                "magnitude": 0,
+                "unit": "PT"
+              },
+              "spaceBelow": {
+                "magnitude": 0,
+                "unit": "PT"
+              }
+            },
+            "fields": "spaceAbove,spaceBelow"
+          }
+        },
+        {
           "updateTextStyle": {
             "range": {
               "startIndex": 0,
@@ -576,25 +595,6 @@
               "bold": true
             },
             "fields": "bold"
-          }
-        },
-        {
-          "updateParagraphStyle": {
-            "range": {
-              "startIndex": 0,
-              "endIndex": 1
-            },
-            "paragraphStyle": {
-              "spaceAbove": {
-                "magnitude": 0,
-                "unit": "PT"
-              },
-              "spaceBelow": {
-                "magnitude": 0,
-                "unit": "PT"
-              }
-            },
-            "fields": "spaceAbove,spaceBelow"
           }
         },
         {
@@ -638,16 +638,6 @@
           }
         },
         {
-          "updateTextStyle": {
-            "range": {
-              "startIndex": 0,
-              "endIndex": 1
-            },
-            "textStyle": {},
-            "fields": "*"
-          }
-        },
-        {
           "updateParagraphStyle": {
             "range": {
               "startIndex": 0,
@@ -664,6 +654,16 @@
               }
             },
             "fields": "spaceAbove,spaceBelow"
+          }
+        },
+        {
+          "updateTextStyle": {
+            "range": {
+              "startIndex": 0,
+              "endIndex": 1
+            },
+            "textStyle": {},
+            "fields": "*"
           }
         },
         {
@@ -707,16 +707,6 @@
           }
         },
         {
-          "updateTextStyle": {
-            "range": {
-              "startIndex": 0,
-              "endIndex": 2
-            },
-            "textStyle": {},
-            "fields": "*"
-          }
-        },
-        {
           "updateParagraphStyle": {
             "range": {
               "startIndex": 0,
@@ -733,6 +723,16 @@
               }
             },
             "fields": "spaceAbove,spaceBelow"
+          }
+        },
+        {
+          "updateTextStyle": {
+            "range": {
+              "startIndex": 0,
+              "endIndex": 2
+            },
+            "textStyle": {},
+            "fields": "*"
           }
         },
         {
@@ -764,16 +764,6 @@
           }
         },
         {
-          "updateTextStyle": {
-            "range": {
-              "startIndex": 0,
-              "endIndex": 1
-            },
-            "textStyle": {},
-            "fields": "*"
-          }
-        },
-        {
           "updateParagraphStyle": {
             "range": {
               "startIndex": 0,
@@ -790,6 +780,16 @@
               }
             },
             "fields": "spaceAbove,spaceBelow"
+          }
+        },
+        {
+          "updateTextStyle": {
+            "range": {
+              "startIndex": 0,
+              "endIndex": 1
+            },
+            "textStyle": {},
+            "fields": "*"
           }
         }
       ],

@@ -100,6 +100,9 @@ Every new cell paragraph, including an empty cell, has zero space before and
 after it, overriding the document's named-style paragraph spacing. Body
 paragraphs continue to use their named-style spacing. Replacing text with
 `docs_table_patch` preserves the existing cell's paragraph formatting.
+Rich paragraph insertion before or after an anchor inside an existing cell
+also uses zero space before and after each new paragraph, including headings
+and lists. The anchor and other existing paragraphs retain their formatting.
 
 Simple rectangular HTML tables (`table`, `thead`/`tbody`, `tr`, `th`/`td`) use
 the same conversion. Cells can declare `align="left|center|right"` or a single

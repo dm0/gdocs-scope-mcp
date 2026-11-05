@@ -9,7 +9,10 @@ from gdocs_scope_mcp.revision_guards import (
     RevisionRaceError,
     submit as guarded_submit,
 )
-from gdocs_scope_mcp.rich_text.cells import shifted_requests
+from gdocs_scope_mcp.rich_text.cells import (
+    cell_paragraph_requests,
+    shifted_requests,
+)
 from gdocs_scope_mcp.rich_text.models import InsertionTable
 from gdocs_scope_mcp.rich_text.paragraph_requests import (
     paragraph_text as inserted_text_from_requests,
@@ -27,12 +30,12 @@ class TableInsertionExecution:
     def execute(self, service, doc_id: str,
                 required_revision: str | None = None, *,
                 table_borders: bool = True, tab_id=None,
-                size_images=None) -> None:
+                size_images=None, in_table=False) -> None:
         """Insert each table, read real cell locations, then populate it."""
         self.completed_batches = 0
         try:
             self._execute(service, doc_id, required_revision, table_borders,
-                          tab_id, size_images=size_images)
+                          tab_id, size_images=size_images, in_table=in_table)
         except (RevisionRaceError, ToolFailureError):
             raise
         except Exception as error:
@@ -48,7 +51,7 @@ class TableInsertionExecution:
 
     def _execute(self, service, doc_id: str,
                  required_revision: str | None, table_borders: bool,
-                 tab_id=None, *, size_images=None) -> None:
+                 tab_id=None, *, size_images=None, in_table=False) -> None:
         """Guard each stage with the revision returned by the prior write."""
 
         documents = service.documents()
@@ -69,6 +72,8 @@ class TableInsertionExecution:
         for group in self.plan.request_groups():
             if not isinstance(group, InsertionTable):
                 requests = self.plan.paragraph_requests(group, cursor)
+                if in_table:
+                    requests = cell_paragraph_requests(requests)
                 if size_images is not None:
                     size_images(requests, group)
                 submit(requests)
