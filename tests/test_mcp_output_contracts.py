@@ -234,6 +234,10 @@ TOOL_CASES = [
         {'ok': True, 'scope': 'heading_subtree', 'heading_id': 'parent',
          'insert_position': 'after_subtree', 'inserted_text': 'New\n'},
     ),
+    ('docs_format_text', {'doc_id': 'example', 'anchor_text': 'Introduction',
+                          'foreground_color': 'green'}, {'ok': True, 'applied': 1}),
+    ('docs_format_paragraph', {'doc_id': 'example', 'anchor_text': 'Introduction',
+                               'background_color': 'yellow'}, {'ok': True, 'applied': 1}),
     ('server_info', {}, {'package_version': version('gdocs-scope-mcp')}),
     ('docs_tabs_list', {'doc_id': 'example'}, {'default_tab_id': None}),
     ('docs_get_tree', {'doc_id': 'example'}, {'document_id': 'example'}),
@@ -726,6 +730,7 @@ def test_catalog_contract_covers_every_registered_tool():
 
     # Entity/table outputs are schema-validated in their dedicated tests.
     expected = {name for name, _, _ in TOOL_CASES} | {
+        'docs_get_color_palette',
         'docs_reopen_comment', 'docs_edit_comment',
         'docs_delete_comment_reply',
         'docs_get_entity', 'docs_create_dropdown_definition',

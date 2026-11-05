@@ -133,7 +133,7 @@ def test_aligned_html_keeps_nested_styles_local(alignment, newline_before):
 
 
 @pytest.mark.parametrize('markup', [
-    '<span style="color: red;">word</span>',
+    '<span style="font-variant: small-caps;">word</span>',
     '<unsupported attribute="ignored">word</unsupported>',
 ])
 def test_unsupported_html_wrappers_keep_text_only(markup):
