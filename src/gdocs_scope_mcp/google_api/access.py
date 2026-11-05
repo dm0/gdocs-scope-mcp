@@ -5,12 +5,7 @@ from gdocs_scope_mcp.errors import ToolFailureError
 
 DRIVE_FILE = 'https://www.googleapis.com/auth/drive.file'
 DRIVE_FULL = 'https://www.googleapis.com/auth/drive'
-FULL_SCOPES = [
-    'https://www.googleapis.com/auth/documents',
-    DRIVE_FULL,
-    'https://www.googleapis.com/auth/drive.readonly',
-    DRIVE_FILE,
-]
+FULL_SCOPES = [DRIVE_FULL]
 AUTHORIZATION_ACTION = (
     'Call docs_authorize to request user consent for the configured '
     'access_mode, then poll docs_authorization_status with its session_id in '
