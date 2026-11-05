@@ -24,7 +24,8 @@ def test_complete_mcp_contract():
         async with Client(mcp) as client:
             return {
                 'instructions': client.initialize_result.instructions.replace(
-                    '    docs_insert_at_heading Insert before/after a complete '
+                    '    docs_insert_at_heading Insert before/after '
+                    'a complete '
                     'heading subtree by ID\n', '',
                 ),
                 'tools': [tool.model_dump(mode='json', exclude_none=True)
