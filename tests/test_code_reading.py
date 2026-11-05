@@ -120,7 +120,7 @@ def test_inline_custom_fonts_colors_and_disabled(code_document, monkeypatch):
     assert render(doc) == '`word`\n\n'
     monkeypatch.setenv('GDOCS_SCOPE_MCP_READ_INLINE_CODE', 'false')
     get_settings.cache_clear()
-    assert render(doc) == 'word\n\n'
+    assert render(doc) == '<span data-mcp-color="black">word</span>\n\n'
 
 
 @pytest.mark.parametrize('text', [
@@ -326,7 +326,8 @@ def test_heuristic_stops_at_different_background(code_document, monkeypatch):
             'color': {'rgbColor': {'red': 1}},
         }},
     }
-    assert render(doc) == '```\na\nb\n```\n\nc\n\n'
+    assert render(doc) == ('```\na\nb\n```\n\n'
+                           '<p data-mcp-background-color="red">c</p>\n\n')
 
 
 def test_code_read_preserves_editable_utf16_positions(code_document,
@@ -412,7 +413,8 @@ def test_native_switch_is_independent(native_code_document, monkeypatch,
     assert '```' not in markup
     assert '`UI_CODE' not in markup
     assert '\ue907' not in markup
-    assert 'UI&#95;CODE&#95;20261027 &#61;&#32;1' in markup
+    assert ('UI&#95;CODE&#95;20261027&#32;&#61;&#32;</span>'
+            '<span data-mcp-color="#188038">1') in markup
     monkeypatch.setenv('GDOCS_SCOPE_MCP_READ_NATIVE_CODE_BLOCKS', 'true')
     get_settings.cache_clear()
     assert markup != render(native_code_document)

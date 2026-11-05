@@ -206,6 +206,29 @@ while True:
 
 ## Editing
 
+### Color discovery and formatting
+
+`docs_get_color_palette()` returns eight rows of `{name, hex}` entries for
+the 80 standard Google editor colors, without document access.
+
+```text
+docs_format_text(doc_id, anchor_text, *, foreground_color=None,
+                 background_color=None, occurrence=None, heading_id=None,
+                 tab_id=None, expected_revision_id=None)
+docs_format_paragraph(doc_id, anchor_text, *, background_color,
+                      occurrence=None, heading_id=None, tab_id=None,
+                      expected_revision_id=None)
+```
+
+Accept Google palette names, `#RRGGBB`, or `reset`. Text formatting changes
+only the matched fragment's specified properties; paragraph formatting changes
+only its containing paragraph's fill. Null/omitted text properties are preserved.
+Anchors are literal and case-insensitive. Omitted occurrence requires uniqueness;
+positive occurrence selects a text match in document order, never format-all.
+Both tools support heading scope, tabs and existing revision safeguards.
+Receipts include `ok`, `document_id`, `tab_id`, `heading_id`, `scope`, `applied`,
+`occurrences_found` and `updated_properties`. See [colors](../colors.md).
+
 Existing-text editing uses **text anchors**; appends use the document end.
 The server resolves native indices internally. Structural table operations
 have their own [checked-reference tools](tables.md).
