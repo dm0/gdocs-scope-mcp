@@ -110,6 +110,17 @@ def convert_table(element: Tag, start: int) -> InsertionTable:
                                   'paragraph; replace raw line breaks with '
                                   'spaces.')
             span = {'startIndex': 0, 'endIndex': max(1, utf16_length(text))}
+            # The API reset restores named-style spacing, unlike applying a
+            # style in the Docs table UI. Override it after the reset, even
+            # for the mandatory paragraph of an empty cell.
+            requests.append({'updateParagraphStyle': {
+                'range': span.copy(),
+                'paragraphStyle': {
+                    'spaceAbove': {'magnitude': 0, 'unit': 'PT'},
+                    'spaceBelow': {'magnitude': 0, 'unit': 'PT'},
+                },
+                'fields': 'spaceAbove,spaceBelow',
+            }})
             if cell.name == 'th':
                 requests.append({'updateTextStyle': {
                     'range': span.copy(), 'textStyle': {'bold': True},

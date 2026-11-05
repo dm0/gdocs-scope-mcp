@@ -133,7 +133,9 @@ prohibited dependencies. Extend it when introducing a new boundary.
   uses those same paragraph primitives. Existing-table patching shares it and
   does not depend on insertion execution.
   Cell paragraph resets exclude body-only `pageBreakBefore` and read-only
-  properties; existing-cell patches retain paragraph properties altogether.
+  properties. New cell paragraphs explicitly use zero space above and below
+  after the named-style reset, including empty cells; existing-cell patches
+  retain paragraph properties altogether.
   Image auto-sizing uses the destination named-style baseline and explicit
   input list depth, consistently with paragraph formatting resets.
 - `rich_text.compiler.markdown_to_requests` and `gpars_to_requests` compose
