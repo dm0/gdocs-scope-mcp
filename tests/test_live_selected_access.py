@@ -6,28 +6,31 @@ import os
 import time
 import uuid
 from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
 from gdocs_scope_mcp.google_api import clients
+from gdocs_scope_mcp.google_api.access import DRIVE_FULL
 from gdocs_scope_mcp.google_api.authorization import token_path
 
 pytestmark = pytest.mark.live
 
 
-async def complete_selection(client, state, root, report, evidence):
+async def complete_selection(client, state, root, report, evidence,
+                             *, label='PICKER_URL'):
     """Wait for one browser response without retaining its sensitive URL."""
     callback_file = root / 'callback-url.txt'
     assert not callback_file.exists(), 'Remove the stale callback file first'
     report['selection'] = state
     report['manual_callback_file'] = str(callback_file)
     evidence.write_text(json.dumps(report, indent=2))
-    print('PICKER_URL=' + state['authorization_url'], flush=True)
+    print(label + '=' + state['authorization_url'], flush=True)
     print('CALLBACK_FILE=' + str(callback_file), flush=True)
     deadline = time.monotonic() + 310
     try:
         while state['status'] == 'pending':
-            assert time.monotonic() < deadline, 'Picker wait expired'
+            assert time.monotonic() < deadline, 'Authorization wait expired'
             await asyncio.sleep(1)
             if callback_file.exists():
                 try:
@@ -52,6 +55,69 @@ async def complete_selection(client, state, root, report, evidence):
         return state
     finally:
         callback_file.unlink(missing_ok=True)
+
+
+def test_live_full_authorization_and_restart(isolated_mcp, live_test_doc):
+    """Request drive alone, then read with a fresh token across processes."""
+    target = os.environ.get('GDOCS_SCOPE_MCP_LIVE_FULL_TOKEN')
+    if not target:
+        pytest.skip('Set LIVE_FULL_TOKEN for interactive full authorization')
+    token = Path(target).resolve()
+    assert token != token_path().resolve()
+    assert not token.exists(), 'Use a new isolated full-token destination'
+    root = token.parent
+    root.mkdir(mode=0o700, parents=True, exist_ok=True)
+    evidence = root / 'authorization-report.json'
+    environment = {
+        **os.environ, 'GDOCS_SCOPE_MCP_ACCESS_MODE': 'full_drive',
+        'GDOCS_SCOPE_MCP_TOKEN': str(token),
+    }
+    report = {}
+
+    async def read(client):
+        result = await client.call_tool('docs_read', {'doc_id': live_test_doc})
+        assert not result.is_error
+
+    async def run():
+        async with isolated_mcp(root / 'authorization.stderr',
+                                environment=environment) as (client, info):
+            assert info['access_mode'] == 'full_drive'
+            report['server'] = info
+            started = await client.call_tool('docs_authorize', {
+                'open_browser': False,
+            })
+            assert not started.is_error
+            state = started.structured_content
+            query = parse_qs(urlsplit(state['authorization_url']).query)
+            assert query['scope'] == [DRIVE_FULL]
+            assert 'trigger_onepick' not in query
+            report['requested_scopes'] = query['scope']
+            state = await complete_selection(
+                client, state, root, report, evidence,
+                label='AUTHORIZATION_URL',
+            )
+            assert state['documents'] == []
+            saved = json.loads(token.read_text())
+            assert saved['scopes'] == [DRIVE_FULL]
+            assert saved['refresh_token'] and 'access_token' not in saved
+            report['saved_scopes'] = saved['scopes']
+            await read(client)
+            report['initial_read'] = 'passed'
+        report['initial_process_reaped'] = True
+        async with isolated_mcp(root / 'restart.stderr',
+                                environment=environment) as (client, info):
+            report['restarted_server'] = info
+            await read(client)
+            listing = await client.call_tool('docs_list', {'limit': 1})
+            assert not listing.is_error
+            report['restart_read_and_listing'] = 'passed'
+        report['restart_process_reaped'] = True
+
+    try:
+        asyncio.run(run())
+    finally:
+        (root / 'callback-url.txt').unlink(missing_ok=True)
+        evidence.write_text(json.dumps(report, indent=2))
 
 
 def test_live_picker_selection_and_restart(isolated_mcp, live_test_doc):

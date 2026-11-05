@@ -245,17 +245,16 @@ See [migration and validation](configuration.md#environment-name-migration-and-v
 
 ## Scopes
 
-In the default `full_drive` mode, the authorization command requests these
-permissions:
+Each mode requests one scope:
 
-| Scope | Permission |
-|-------|------------|
-| `https://www.googleapis.com/auth/documents` | Read and write Google Docs |
-| `https://www.googleapis.com/auth/drive` | View and manage Drive files |
-| `https://www.googleapis.com/auth/drive.readonly` | View and download Drive files |
-| `https://www.googleapis.com/auth/drive.file` | Access files created by or granted to the application |
+| Mode | Scope | Permission |
+|------|-------|------------|
+| `full_drive` (default) | `https://www.googleapis.com/auth/drive` | Discover, read and edit Google Docs and manage Drive files used by operations such as image uploads |
+| `selected_files` | `https://www.googleapis.com/auth/drive.file` | Access files created by or granted to the application |
 
-In `selected_files` mode it requests only `drive.file`.
+Google Docs reads and edits accept `drive`; full mode does not also request
+`documents`, `drive.readonly` or `drive.file`. Existing full-mode tokens with
+the previous overlapping scopes remain usable without rewriting their files.
 New authorizations do not request identity scopes (`openid`, `email`, `profile`)
 or Apps Script scopes. Existing tokens with these permissions remain usable in
 `full_drive` mode; selected-file mode rejects additional scopes.

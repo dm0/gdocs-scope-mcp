@@ -13,19 +13,15 @@ import pytest
 
 from gdocs_scope_mcp import auth_setup
 from gdocs_scope_mcp.google_api import credentials, oauth
+from gdocs_scope_mcp.google_api.access import DRIVE_FULL
 
 OWNER_READ_WRITE = 0o600
 
 
 @pytest.fixture
 def document_scopes():
-    """Return the document permissions retained by identity cleanup."""
-    return [
-        'https://www.googleapis.com/auth/documents',
-        'https://www.googleapis.com/auth/drive',
-        'https://www.googleapis.com/auth/drive.readonly',
-        'https://www.googleapis.com/auth/drive.file',
-    ]
+    """Return the minimum permission for full document and Drive access."""
+    return [DRIVE_FULL]
 
 
 def test_consent_requests_only_document_scopes(document_scopes):
@@ -56,6 +52,7 @@ def test_authorization_saves_token_without_identity(
 
     def browser(url):
         query = parse_qs(urlparse(url).query)
+        assert query['scope'] == [DRIVE_FULL]
         callback = (query['redirect_uri'][0] + '?code=test-code&state='
                     + query['state'][0])
         requests.append(pool.submit(urlopen, callback, timeout=3))
@@ -111,10 +108,17 @@ def test_authorization_saves_token_without_identity(
 
 
 @pytest.mark.parametrize('legacy', [False, True])
+@pytest.mark.parametrize('previous_scopes', [False, True])
 def test_new_and_legacy_token_files_refresh(
-    tmp_path, monkeypatch, document_scopes, legacy,
+    tmp_path, monkeypatch, document_scopes, legacy, previous_scopes,
 ):
     """Real credential construction accepts both formats without rewriting."""
+    if previous_scopes:
+        document_scopes = [
+            'https://www.googleapis.com/auth/documents', DRIVE_FULL,
+            'https://www.googleapis.com/auth/drive.readonly',
+            'https://www.googleapis.com/auth/drive.file',
+        ]
     token = {'client_id': 'client', 'client_secret': 'secret',
              'refresh_token': 'refresh', 'scopes': document_scopes.copy()}
     if legacy:
