@@ -25,7 +25,7 @@ An absent default file is allowed; an explicitly selected file must exist.
   "inline_code_color": "#188038",
   "code_block_highlighting": true,
   "code_block_style": "default",
-  "code_block_line_spacing": 1.0,
+  "code_block_line_spacing": 1.15,
   "code_block_theme_background": false,
   "code_block_named_ranges": true,
   "read_inline_code": true,
@@ -35,7 +35,7 @@ An absent default file is allowed; an explicitly selected file must exist.
   "read_code_block_heuristic": true,
   "read_native_code_blocks": true,
   "read_code_block_fonts": null,
-  "read_code_block_line_spacing": 1.0,
+  "read_code_block_line_spacing": 1.15,
   "read_code_block_require_background": false,
   "read_code_block_min_lines": 2
 }
@@ -65,11 +65,17 @@ Set `code_block_highlighting` to `false` to keep language-labelled blocks plain
 monospace. `code_block_style` selects a Pygments theme such as `default`,
 `friendly` or `monokai`; an unknown theme fails startup validation. Themes can
 be previewed in the [Pygments gallery](https://pygments.org/styles/).
-`code_block_line_spacing` sets a positive finite line-height multiplier: `1.0`
-is single spacing, `1.5` is one-and-a-half spacing. It applies to all code blocks,
+`code_block_line_spacing` sets a positive finite line-height multiplier, default
+`1.15`: `1.0` is single spacing, `1.5` is one-and-a-half spacing. It applies to
+all code blocks,
 including unlabelled/unknown languages and blocks with highlighting disabled;
 inline code and surrounding prose are unaffected. Google Docs stores this as
-a percentage (`1.0` becomes `100`). `code_block_theme_background` controls both
+a percentage (`1.15` becomes `115`). Explicit JSON/environment values still
+override the default. The reading heuristic's `read_code_block_line_spacing`
+also defaults to `1.15`; configure it separately to recognize unmarked blocks
+with other spacing (for example `1.0` for older single-spaced blocks).
+Named-range code metadata does not depend on line spacing.
+`code_block_theme_background` controls both
 the theme's base background and token-specific backgrounds; it takes effect only
 when syntax highlighting is active for a recognised language.
 Font names must be nonempty, and colors must use six-digit RGB hex syntax
@@ -96,7 +102,7 @@ Environment variables override individual file settings:
 | `GDOCS_SCOPE_MCP_INLINE_CODE_COLOR` | `inline_code_color` | `#188038` |
 | `GDOCS_SCOPE_MCP_CODE_BLOCK_HIGHLIGHTING` | `code_block_highlighting` | `true` |
 | `GDOCS_SCOPE_MCP_CODE_BLOCK_STYLE` | `code_block_style` | `default` |
-| `GDOCS_SCOPE_MCP_CODE_BLOCK_LINE_SPACING` | `code_block_line_spacing` | `1.0` |
+| `GDOCS_SCOPE_MCP_CODE_BLOCK_LINE_SPACING` | `code_block_line_spacing` | `1.15` |
 | `GDOCS_SCOPE_MCP_CODE_BLOCK_THEME_BACKGROUND` | `code_block_theme_background` | `false` |
 | `GDOCS_SCOPE_MCP_CODE_BLOCK_NAMED_RANGES` | `code_block_named_ranges` | `true` |
 | `GDOCS_SCOPE_MCP_READ_INLINE_CODE` | `read_inline_code` | `true` |
@@ -106,7 +112,7 @@ Environment variables override individual file settings:
 | `GDOCS_SCOPE_MCP_READ_CODE_BLOCK_HEURISTIC` | `read_code_block_heuristic` | `true` |
 | `GDOCS_SCOPE_MCP_READ_NATIVE_CODE_BLOCKS` | `read_native_code_blocks` | `true` |
 | `GDOCS_SCOPE_MCP_READ_CODE_BLOCK_FONTS` | `read_code_block_fonts` | `null` (insertion font) |
-| `GDOCS_SCOPE_MCP_READ_CODE_BLOCK_LINE_SPACING` | `read_code_block_line_spacing` | `1.0` |
+| `GDOCS_SCOPE_MCP_READ_CODE_BLOCK_LINE_SPACING` | `read_code_block_line_spacing` | `1.15` |
 | `GDOCS_SCOPE_MCP_READ_CODE_BLOCK_REQUIRE_BACKGROUND` | `read_code_block_require_background` | `false` |
 | `GDOCS_SCOPE_MCP_READ_CODE_BLOCK_MIN_LINES` | `read_code_block_min_lines` | `2` |
 

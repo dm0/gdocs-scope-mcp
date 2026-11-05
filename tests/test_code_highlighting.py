@@ -18,7 +18,7 @@ from gdocs_scope_mcp.rich_text.compiler import (
 from gdocs_scope_mcp.settings import get_settings
 
 CUSTOM_LINE_SPACING = 1.25
-SINGLE_LINE_SPACING_PERCENT = 100
+DEFAULT_LINE_SPACING_PERCENT = 115
 
 
 @pytest.fixture(autouse=True)
@@ -112,8 +112,10 @@ def test_file_and_environment_control_highlighting(monkeypatch, tmp_path):
 
 
 def test_layout_defaults():
-    """Use single-spaced code and omit theme backgrounds by default."""
-    assert get_settings().code_block_line_spacing == 1.0
+    """Use 1.15-spaced code and omit theme backgrounds by default."""
+    expected = DEFAULT_LINE_SPACING_PERCENT / 100
+    assert get_settings().code_block_line_spacing == expected
+    assert get_settings().read_code_block_line_spacing == expected
     assert not get_settings().code_block_theme_background
 
 
@@ -275,7 +277,7 @@ def test_spacing_only_targets_code_after_all_insertions(
 
 @pytest.mark.parametrize('newline_before', [False, True])
 def test_spacing_includes_trailing_empty_code_paragraphs(newline_before):
-    """Keep trailing blank lines single-spaced without formatting prose."""
+    """Apply default spacing to trailing blank lines without touching prose."""
     requests = markdown_to_requests(
         'Before\n\n```python\nfirst\n\n\n```\n\nAfter', start=10,
         newline_before=newline_before,
@@ -291,7 +293,8 @@ def test_spacing_includes_trailing_empty_code_paragraphs(newline_before):
         'endIndex': 10 + inserted.index('After'),
     }
     assert (
-        update['paragraphStyle']['lineSpacing'] == SINGLE_LINE_SPACING_PERCENT
+        update['paragraphStyle']['lineSpacing']
+        == pytest.approx(DEFAULT_LINE_SPACING_PERCENT)
     )
 
 

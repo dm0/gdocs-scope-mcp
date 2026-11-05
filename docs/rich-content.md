@@ -158,6 +158,12 @@ unaffected; paragraph fills are applied after insertion to prevent inheritance.
 No custom font size or native language property is written. A versioned named
 range stores each inserted block's language for later reads.
 
+Paragraph spacing is inherited from the document's normal-text style only
+before the first code paragraph and after the last. All internal `spaceAbove`
+and `spaceBelow` values are explicitly zero, including on blank code lines.
+A single-paragraph block inherits both boundary intervals. Horizontal paragraph
+indentation and literal source whitespace are unchanged.
+
 Inline code works in supported list-item paragraphs. Code blocks inside
 list items return `INVALID_ARGUMENT` before writing; list-item block semantics
 remain outside the supported subset. `rich=False` preserves code markup
@@ -214,7 +220,7 @@ through their exposed formatting, not a presumed native type.
 - Normal text-only paragraphs without headings or list bullets.
 - Every nonempty text run uses an allowed code font (default: `code_font_family`).
 - Explicit paragraph line spacing matches `read_code_block_line_spacing`
-  (default `1.0`, represented by the API as `100` percent).
+  (default `1.15`, represented by the API as `115` percent).
 - Consecutive paragraphs have matching line spacing and paragraph shading,
   including consistently absent shading.
 - At least `read_code_block_min_lines` paragraphs remain after trimming blank

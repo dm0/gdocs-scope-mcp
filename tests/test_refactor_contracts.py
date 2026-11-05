@@ -24,7 +24,8 @@ def test_complete_mcp_contract():
         async with Client(mcp) as client:
             return {
                 'instructions': client.initialize_result.instructions.replace(
-                    '    docs_insert_at_heading Insert before/after a complete '
+                    '    docs_insert_at_heading Insert before/after '
+                    'a complete '
                     'heading subtree by ID\n', '',
                 ),
                 'tools': [tool.model_dump(mode='json', exclude_none=True)
@@ -43,6 +44,7 @@ def test_complete_mcp_contract():
 
 def test_rendering_requests_receipts_and_failures_match_baseline():
     """Compare exact outputs with the pre-refactor source snapshot."""
+    # #58 deliberately changes only code paragraph intervals and line spacing.
     expected = json.loads((Path(__file__).parent / 'fixtures'
                            / 'refactor_behavior.json').read_text())
     assert capture_behavior(
