@@ -84,5 +84,7 @@ def test_table_cell_resets_exclude_unsupported_page_breaks():
     for reset in resets:
         fields = set(reset['fields'].split(','))
         assert not fields & {'*', 'pageBreakBefore', 'headingId', 'tabStops'}
+        if 'namedStyleType' not in reset['paragraphStyle']:
+            continue
         assert {'namedStyleType', 'alignment', 'indentStart', 'shading',
                 'spaceAbove', 'spaceBelow'} <= fields

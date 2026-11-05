@@ -251,7 +251,8 @@ def test_cell_spacing_overrides_named_style_without_changing_body(html):
     for request, text in native.styles:
         if text not in {'Before', 'After'}:
             continue
-        style = request.get('updateParagraphStyle', {}).get('paragraphStyle', {})
+        style = request.get('updateParagraphStyle', {}).get(
+            'paragraphStyle', {})
         assert 'spaceAbove' not in style and 'spaceBelow' not in style
 
 
