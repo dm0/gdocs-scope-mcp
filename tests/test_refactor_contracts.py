@@ -38,6 +38,7 @@ def test_complete_mcp_contract():
 
 def test_rendering_requests_receipts_and_failures_match_baseline():
     """Compare exact outputs with the pre-refactor source snapshot."""
+    # #58 deliberately changes only code paragraph intervals and line spacing.
     expected = json.loads((Path(__file__).parent / 'fixtures'
                            / 'refactor_behavior.json').read_text())
     assert capture_behavior(

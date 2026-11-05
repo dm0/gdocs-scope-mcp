@@ -320,9 +320,39 @@
               "endIndex": 19
             },
             "paragraphStyle": {
-              "lineSpacing": 100.0
+              "lineSpacing": 114.99999999999999
             },
             "fields": "lineSpacing"
+          }
+        },
+        {
+          "updateParagraphStyle": {
+            "range": {
+              "startIndex": 18,
+              "endIndex": 19
+            },
+            "paragraphStyle": {
+              "spaceAbove": {
+                "magnitude": 0,
+                "unit": "PT"
+              }
+            },
+            "fields": "spaceAbove"
+          }
+        },
+        {
+          "updateParagraphStyle": {
+            "range": {
+              "startIndex": 6,
+              "endIndex": 18
+            },
+            "paragraphStyle": {
+              "spaceBelow": {
+                "magnitude": 0,
+                "unit": "PT"
+              }
+            },
+            "fields": "spaceBelow"
           }
         },
         {
