@@ -24,6 +24,13 @@ arguments, examples and supported behavior, start with the [document tools](../t
 | [Table discovery](../table-discovery.md) | Selected-tab traversal, physical/logical geometry, pagination and bounds | [Tests and reproduction](../table-discovery.md#validation) |
 | [Cell merge/unmerge](table-cell-merging.md) | Logical heads, complete rectangles, content rules and safe reference readback | [Tests and reproduction](table-cell-merging.md#verification) |
 
+## Planned experiments
+
+[Tool interface evaluation](tool-interface-evaluation.md) defines separate
+post-implementation studies for tool consolidation and on-demand catalogs,
+using the current, weaker and stronger models of one provider and generation.
+The design is planned work, not a completed evaluation.
+
 ## API research
 
 [Cache validation](cache-validation.md) records direct Docs/Drive latency and
