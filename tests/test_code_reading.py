@@ -31,6 +31,8 @@ def code_settings(monkeypatch, tmp_path):
     monkeypatch.setenv('XDG_CONFIG_HOME', str(tmp_path))
     monkeypatch.delenv('GDOCS_SCOPE_MCP_CONFIG', raising=False)
     monkeypatch.setenv('GDOCS_SCOPE_MCP_READ_CODE_BLOCK_HEURISTIC', 'false')
+    # Existing synthetic captures exercise the explicitly configured 1.0 mode.
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_READ_CODE_BLOCK_LINE_SPACING', '1.0')
     get_settings.cache_clear()
     yield
     get_settings.cache_clear()
@@ -205,6 +207,22 @@ def test_optional_block_heuristic_preserves_internal_blank_lines(
                        'true')
     get_settings.cache_clear()
     assert '```' not in render(doc)
+
+
+@pytest.mark.parametrize('spacing', [1.0, 1.15, 1.5])
+def test_default_and_configured_read_spacing(code_document, monkeypatch,
+                                            spacing):
+    """Match default-written blocks and preserve explicit legacy overrides."""
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_READ_CODE_BLOCK_HEURISTIC', 'true')
+    monkeypatch.delenv('GDOCS_SCOPE_MCP_READ_CODE_BLOCK_LINE_SPACING')
+    default_spacing = 1.15
+    if spacing != default_spacing:
+        monkeypatch.setenv('GDOCS_SCOPE_MCP_READ_CODE_BLOCK_LINE_SPACING',
+                           str(spacing))
+    get_settings.cache_clear()
+    doc = code_document(['first\n', 'last\n'], style=FONT,
+                        paragraph_style={'lineSpacing': spacing * 100})
+    assert render(doc) == '```\nfirst\nlast\n```\n\n'
 
 
 @pytest.mark.parametrize('mismatch', ['font', 'spacing', 'single', 'heading'])

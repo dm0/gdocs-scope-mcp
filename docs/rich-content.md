@@ -214,7 +214,7 @@ through their exposed formatting, not a presumed native type.
 - Normal text-only paragraphs without headings or list bullets.
 - Every nonempty text run uses an allowed code font (default: `code_font_family`).
 - Explicit paragraph line spacing matches `read_code_block_line_spacing`
-  (default `1.0`, represented by the API as `100` percent).
+  (default `1.15`, represented by the API as `115` percent).
 - Consecutive paragraphs have matching line spacing and paragraph shading,
   including consistently absent shading.
 - At least `read_code_block_min_lines` paragraphs remain after trimming blank

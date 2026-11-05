@@ -108,7 +108,7 @@ class Settings(BaseSettings):
     code_block_style: str = 'default'
     code_block_line_spacing: Annotated[
         float, Field(gt=0, allow_inf_nan=False),
-    ] = 1.0
+    ] = 1.15
     code_block_theme_background: bool = False
     code_block_named_ranges: bool = True
     read_inline_code: bool = True
@@ -120,7 +120,7 @@ class Settings(BaseSettings):
     read_code_block_fonts: list[FontName] | None = None
     read_code_block_line_spacing: Annotated[
         float, Field(gt=0, allow_inf_nan=False),
-    ] = 1.0
+    ] = 1.15
     read_code_block_require_background: bool = False
     read_code_block_min_lines: Annotated[int, Field(ge=1)] = 2
 
