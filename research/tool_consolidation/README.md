@@ -8,6 +8,7 @@ both treatments, with no continuation beyond that budget. See the frozen
 fresh task instances from 25 declared templates; each is paired across the two
 arms and three models. Only full-task completion is tested. Of 1500 attempts,
 150 use disposable native Docs and 1350 use the repaired API seam.
+Progress and final evidence are recorded in the [stage-one report](NI_STAGE1_REPORT.md).
 
 Run from this worktree's root project with a new private artifact directory:
 
