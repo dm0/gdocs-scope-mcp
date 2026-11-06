@@ -89,6 +89,22 @@ All test-owned subprocesses were reaped. Logs and per-variant receipts are under
 session report is `/tmp/gdocs-scope-mcp-live-session-r4slg4dc/report.json`.
 The four expected `EDIT_CONFLICT` failures in stderr are negative assertions.
 
+An additional combined run of the pre-existing insertion-style, native-comment
+and heading-subtree live regressions lost its tool launcher (exit 143), while
+the pytest child continued. Read-only host inspection confirmed PID 699070
+owned the shared-document lock and matched this exact test command. A second
+native-comment invocation correctly refused the occupied lock without touching
+the document. Its diagnostic log is `/tmp/gdocs-59-native-comments.log`.
+The original run completed: **7 passed in 528.64 seconds**. Its log and JUnit
+are `/tmp/gdocs-59-live-regressions.log` and
+`/tmp/gdocs-59-live-regressions.xml`. This covers hostile source styles for all
+three original insertion tools, nested-list heading insertion, native comment
+lifecycle, and heading-subtree revision races in required and target modes.
+The session report `/tmp/gdocs-scope-mcp-live-session-hhhjf2h4/report.json`
+confirms final reset and subprocess cleanup. The second lock-refused invocation
+is retained as an infrastructure attempt, not counted as an application failure
+or a passing test.
+
 Worktree live identity: Python 3.14.4, FastMCP 3.3.1, package path
 `/home/lapin/.codex/worktrees/4444/gdocs-scope-mcp/src/gdocs_scope_mcp`, source
 SHA-256 `24a7be585f48b91ff41368c75bbdbb2a50bc025973a9f088b8692e8444ca9990`.
