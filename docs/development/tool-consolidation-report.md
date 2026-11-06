@@ -265,5 +265,14 @@ Private campaign artifacts are under
 `manifest.json`, `protocol.md`, `ledger.json`, per-run `result.json` and
 `events.json`, `analysis/pilot.json`, and a 26-item blinded audit packet with
 initial fixtures, observed reads, normalized operation names and final states.
-Its model/arm key is separate. Human audit has not occurred. These local traces
-are not published evidence; publication remains a separate action.
+Its model/arm key is separate. The full blinded trace audit has not occurred.
+These local traces are not published; publication remains a separate action.
+
+During the main run, the user adjudicated m09's unquoted closing text as
+allowing both `Verified against the original` and the same phrase with a final
+period. The frozen exact-state grader penalizes the latter. Preserve its
+primary results and report a separately labeled post-hoc sensitivity using
+`--m09-human-sensitivity`. The recorded decision is bound to the main corpus
+hash and relaxes only that action-post text; every other target, status,
+post-count, content and style invariant remains enforced. This single intent
+adjudication does not replace the pending blinded trace audit.

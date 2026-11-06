@@ -75,3 +75,16 @@ authorization operations or public uploads are permitted.
 The analyzer reports scenario-family bootstrap intervals, incomplete paired
 blocks and infrastructure separately. Its blinded audit packet requires human
 review; machine grades alone do not authorize changing the default interface.
+
+The user accepted an optional final period in m09's closing action text on
+2026-11-06. That narrow decision is recorded in `adjudications/` and bound to
+the frozen main corpus hash. Preserve the original machine report and request
+a separate post-hoc sensitivity report with:
+
+```bash
+uv run --locked python research/tool_consolidation/analyze_reduced_study.py --stage main --output ARTIFACTS --m09-human-sensitivity
+```
+
+This changes no model prompt, execution, raw trace or frozen primary grade.
+It does not relax status, target, post count or any other state invariant, and
+does not constitute a complete human audit.

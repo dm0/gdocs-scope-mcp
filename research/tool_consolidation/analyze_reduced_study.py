@@ -5,6 +5,7 @@ import hashlib
 import json
 import random
 from collections import Counter, defaultdict
+from copy import deepcopy
 from itertools import combinations, groupby
 from pathlib import Path
 from statistics import mean
@@ -212,7 +213,61 @@ def compact_state(state):
     return {**state, 'tabs': tabs}
 
 
-def analyze(directory, stage, draws=5000):
+def m09_state(state):
+    """Apply only the user's explicit terminal-period adjudication."""
+    state = deepcopy(state)
+    if state is not None:
+        for thread in state['comments']:
+            if thread['id'] != 'c.citation':
+                continue
+            for post in thread['replies']:
+                if (post['action'] == 'RESOLVE'
+                        and post['text'] == 'Verified against the original.'):
+                    post['text'] = 'Verified against the original'
+    return state
+
+
+def m09_sensitivity(row, reference):
+    """Regrade all m09 arms identically without changing any raw trace."""
+    if row['case'] != 'm09' or row['status'] != 'completed':
+        return row
+    row = deepcopy(row)
+    before = reference[0]
+    prefix, errors, unintended = 0, 0, False
+    advances = []
+    for call in row['trace']:
+        after = m09_state(call['post_state'])
+        advance = (prefix + 1 < len(reference)
+                   and after == reference[prefix + 1])
+        wrong = before != after and not advance
+        errors += bool(call['schema_valid']
+                       and (call['result'].get('ok') is False or wrong))
+        unintended |= wrong
+        prefix += int(advance)
+        advances.append(advance)
+        before = after
+    if row['level'] == 'decision':
+        row['first_action_correct'] = bool(
+            row['trace'] and row['trace'][0]['schema_valid'] and advances[0])
+        row['final_success'] = row['first_action_correct']
+    else:
+        first = row['trace'][0] if row['trace'] else None
+        row['first_action_correct'] = bool(
+            first and first['schema_valid']
+            and first['result'].get('ok') is not False
+            and (first['tool'] in {'docs_get_tree', 'docs_read',
+                                  'docs_read_comments', 'docs_tabs_list'}
+                 or advances[0]))
+        row['final_success'] = m09_state(row['final_state']) == reference[-1]
+    row['semantic_errors'] = errors
+    row['unintended_changes'] = unintended
+    row['recovery_free'] = (row['final_success'] and not row['schema_errors']
+                            and not errors
+                            and not row['unnecessary_clarification'])
+    return row
+
+
+def analyze(directory, stage, draws=5000, *, human_sensitivity=False):
     """Analyze a complete or partial stage without imputing missing trials."""
     manifest = json.loads((directory / 'manifest.json').read_text())
     ledger = json.loads((directory / 'ledger.json').read_text())
@@ -226,6 +281,27 @@ def analyze(directory, stage, draws=5000):
             rows.append(json.loads(path.read_text()))
         else:
             missing.append(attempt['id'])
+    adjudication = None
+    label = stage
+    if human_sensitivity:
+        if stage != 'main':
+            raise ValueError('The m09 adjudication applies only to main')
+        path = directory / 'analysis' / 'm09-adjudication.json'
+        if not path.exists():
+            path = (Path(__file__).parent / 'adjudications'
+                    / 'm09-terminal-period.json')
+        adjudication = json.loads(path.read_text())
+        if adjudication['accepted_texts'] != [
+            'Verified against the original', 'Verified against the original.',
+        ] or adjudication['reviewer'] != 'user':
+            raise ValueError('Unsupported human adjudication')
+        if adjudication['main_corpus_sha256'] != (
+            manifest['dataset_hashes']['main']
+        ):
+            raise ValueError('Adjudication belongs to another corpus')
+        reference = manifest['references']['m09']['states']
+        rows = [m09_sensitivity(row, reference) for row in rows]
+        label += '-human-sensitivity'
     report = {
         'stage': stage, 'manifest_sha256': (
             directory / 'manifest.sha256').read_text().strip(),
@@ -235,6 +311,7 @@ def analyze(directory, stage, draws=5000):
         'reserved_attempts': len(attempts), 'missing_results': missing,
         'overall': rate_summary(rows), 'groups': {}, 'paired_effects': {},
         'treatment_by_model': {},
+        'human_adjudication': adjudication,
         'error_taxonomy': {
             'omitted_required_tool': sum(
                 r['status'] == 'completed' and not r.get('trace')
@@ -294,9 +371,9 @@ def analyze(directory, stage, draws=5000):
     packet, key = audit_packet(rows, cases)
     output = directory / 'analysis'
     output.mkdir(exist_ok=True, mode=0o700)
-    for name, value in [(stage + '.json', report),
-                        (stage + '-blinded-audit.json', packet),
-                        (stage + '-audit-key.json', key)]:
+    for name, value in [(label + '.json', report),
+                        (label + '-blinded-audit.json', packet),
+                        (label + '-audit-key.json', key)]:
         (output / name).write_text(json.dumps(value, indent=2,
                                             ensure_ascii=False))
     return report
@@ -307,8 +384,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--stage', choices=['pilot', 'main'], required=True)
+    parser.add_argument('--m09-human-sensitivity', action='store_true')
     args = parser.parse_args()
-    report = analyze(args.output, args.stage)
+    report = analyze(args.output, args.stage,
+                     human_sensitivity=args.m09_human_sensitivity)
     print(json.dumps({key: report[key] for key in (
         'stage', 'scheduled', 'reserved_attempts', 'missing_results',
         'overall',

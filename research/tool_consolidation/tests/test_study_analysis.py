@@ -1,5 +1,9 @@
 """Check pairing, missing-data handling and treatment blinding."""
 
+from copy import deepcopy
+
+import pytest
+
 from .test_study_corpus import load_research
 
 analysis = load_research('analyze_reduced_study')
@@ -74,3 +78,39 @@ def test_audit_projection_keeps_literal_text_and_style_boundaries():
         {'text': 'X', 'style': {'bold': True}},
         {'text': '\n', 'style': {}},
     ]
+
+
+@pytest.mark.parametrize('level', ['decision', 'end_to_end'])
+@pytest.mark.parametrize('defect', [None, 'protected', 'status', 'extra_post'])
+def test_human_punctuation_adjudication_preserves_every_other_invariant(
+    level, defect,
+):
+    """Allow the reviewed period without erasing damage or raw evidence."""
+    initial = {'tabs': ['Protected'], 'comments': [{
+        'id': 'c.citation', 'resolved': False, 'replies': [],
+    }]}
+    expected = deepcopy(initial)
+    expected['comments'][0].update(resolved=True, replies=[{
+        'action': 'RESOLVE', 'text': 'Verified against the original',
+    }])
+    actual = deepcopy(expected)
+    actual['comments'][0]['replies'][0]['text'] += '.'
+    if defect == 'protected':
+        actual['tabs'] = ['Changed']
+    elif defect == 'status':
+        actual['comments'][0]['resolved'] = False
+    elif defect == 'extra_post':
+        actual['comments'][0]['replies'].append({
+            'action': None, 'text': 'Unexpected reply',
+        })
+    row = {'case': 'm09', 'level': level, 'status': 'completed',
+           'schema_errors': 0, 'unnecessary_clarification': False,
+           'first_action_correct': False, 'final_state': actual,
+           'trace': [{'tool': 'docs_comment_status', 'schema_valid': True,
+                      'post_state': actual, 'result': {'ok': True}}]}
+    before = deepcopy(row)
+    reviewed = analysis.m09_sensitivity(row, [initial, expected])
+    assert reviewed['final_success'] == (defect is None)
+    assert reviewed['first_action_correct'] == (defect is None)
+    assert reviewed['unintended_changes'] == (defect is not None)
+    assert row == before
