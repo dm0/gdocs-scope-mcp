@@ -62,8 +62,9 @@ def paired_effect(rows, cases, metric, contrast, models, *, draws=5000,
         return {'estimate': None, 'ci95': None, 'families': 0,
                 'complete_four_arm_blocks': complete}
     rng = random.Random(20261106)
-    bootstrap = [mean(rng.choices(values, k=len(values)))
-                 for _ in range(draws)]
+    bootstrap = ([values[0]] if len(set(values)) == 1 else [
+        mean(rng.choices(values, k=len(values))) for _ in range(draws)
+    ])
     return {
         'estimate': mean(values),
         'ci95': [percentile(bootstrap, 0.025),
