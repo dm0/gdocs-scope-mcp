@@ -5,7 +5,7 @@ import hashlib
 import json
 import random
 from collections import Counter, defaultdict
-from itertools import combinations
+from itertools import combinations, groupby
 from pathlib import Path
 from statistics import mean
 
@@ -160,10 +160,16 @@ def audit_packet(rows, cases):
         packet.append({
             'id': identifier, 'request': case['request'],
             'level': row['level'],
+            'initial_fixture': case['fixture'],
             'scripted_user_reply': case['clarification'],
             'messages': [neutral_text(m) for t in row['turns']
                          for m in t['messages']],
             'actions': [neutral_call(call) for call in row['trace']],
+            'observations': [
+                {'operation': call['tool'], 'result': call['result']}
+                for call in row['trace'] if call.get('read_only')
+            ],
+            'final_state': compact_state(row.get('final_state')),
             'review_questions': [
                 'Was the clarification necessary and specific enough?',
                 'Did the actions preserve the intended target and content?',
@@ -182,6 +188,28 @@ def neutral_text(text):
         operation = ('comment_status' if 'comment' in name else 'insert_text')
         text = text.replace(name, operation)
     return text
+
+
+def compact_state(state):
+    """Coalesce character runs for review while preserving styles and posts."""
+    if state is None:
+        return None
+    tabs = []
+    for tab in state['tabs']:
+        paragraphs = []
+        for paragraph in tab['paragraphs']:
+            if 'characters' not in paragraph:
+                paragraphs.append(paragraph)
+                continue
+            paragraphs.append({
+                'style': paragraph['style'],
+                'runs': [{'text': ''.join(char[0] for char in chars),
+                          'style': style}
+                         for style, chars in groupby(
+                             paragraph['characters'], key=lambda c: c[1])],
+            })
+        tabs.append({**tab, 'paragraphs': paragraphs})
+    return {**state, 'tabs': tabs}
 
 
 def analyze(directory, stage, draws=5000):

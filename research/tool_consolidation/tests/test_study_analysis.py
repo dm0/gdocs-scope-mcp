@@ -59,3 +59,18 @@ def test_semantic_calls_hide_treatment_names():
     })
     assert analysis.neutral_text('Used docs_insert_before safely') == (
         'Used insert_text safely')
+
+
+def test_audit_projection_keeps_literal_text_and_style_boundaries():
+    """Compact display must not hide formatting or comment action posts."""
+    state = {'tabs': [{'id': 't', 'title': 'Main', 'paragraphs': [
+        {'style': {}, 'characters': [['*', {}], ['*', {}],
+                                     ['X', {'bold': True}], ['\n', {}]]},
+    ]}], 'comments': [{'replies': [{'action': 'RESOLVE'}]}]}
+    compact = analysis.compact_state(state)
+    assert compact['comments'] == state['comments']
+    assert compact['tabs'][0]['paragraphs'][0]['runs'] == [
+        {'text': '**', 'style': {}},
+        {'text': 'X', 'style': {'bold': True}},
+        {'text': '\n', 'style': {}},
+    ]
