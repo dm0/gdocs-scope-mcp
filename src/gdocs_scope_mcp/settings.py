@@ -76,6 +76,9 @@ class Settings(BaseSettings):
         str, StringConstraints(strip_whitespace=True, min_length=1),
     ] | None = None
     access_mode: Literal['full_drive', 'selected_files'] = 'full_drive'
+    tool_interface_variant: Literal[
+        'baseline', 'insertion', 'status', 'both',
+    ] = 'baseline'
     write_revision_mode: Literal['required', 'target'] = 'required'
     document_cache_enabled: bool = False
     document_cache_storage: Literal['disk', 'memory'] = 'disk'

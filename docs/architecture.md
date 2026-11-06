@@ -11,6 +11,7 @@ application operation merely to reuse one of its helpers.
 | --- | --- |
 | `server.py`, `__main__.py` | Construct the server, capture startup identity, configure middleware, register tools and start STDIO. |
 | `tools/` | Thin MCP contracts, descriptions, schemas, annotations and explicit registration functions. |
+| `tools/consolidation.py` | Opt-in static Study 1 insertion/status adapters over the existing tool functions; strict target unions, unchanged application operations and receipts. |
 | `google_api/credentials.py` | Token precedence, canonical environment overrides, legacy token-file paths, gog fallback and OAuth refresh. |
 | `google_api/access.py` | Shared access-mode scope policy, grant validation and authorization recovery guidance, independent of MCP. |
 | `google_api/authorization.py` | Desktop client selection, narrow-to-full grant upgrades, account/file verification and private atomic token installation. |
@@ -178,6 +179,11 @@ client, and review deliberate changes to the frozen transport contract.
 Access tools register from the startup access mode: common authorization and
 status tools are always present, while file selection is registered only for
 `selected_files`. Verify each catalog through a fresh STDIO server.
+Study 1 also selects a static `tool_interface_variant` at startup (baseline,
+insertion, status or both). The default preserves the frozen catalog. Treatment
+registration removes only the corresponding baseline tools before connections
+are accepted and calls their unchanged Python adapters. It never activates
+tools per client or changes the catalog during a session.
 
 ### Add a document feature
 

@@ -23,10 +23,11 @@ from gdocs_scope_mcp.tool_inputs import (
     NonemptyText,
     PositiveInteger,
 )
+from gdocs_scope_mcp.tools.consolidation import register_status
 from gdocs_scope_mcp.tools.schema import tool_response_schema
 
 
-def register(mcp):
+def register(mcp, *, consolidated=False):
     """Register comments tools in their established order."""
 
     @mcp.tool(
@@ -252,3 +253,6 @@ def register(mcp):
             doc_id, comment_id, 'delete_reply', post_id=reply_id,
             expected_revision_id=expected_revision_id,
         ))
+
+    if consolidated:
+        register_status(mcp, docs_resolve_comment, docs_reopen_comment)

@@ -12,6 +12,7 @@ An absent default file is allowed; an explicitly selected file must exist.
 {
   "client_id": null,
   "access_mode": "full_drive",
+  "tool_interface_variant": "baseline",
   "write_revision_mode": "required",
   "document_cache_enabled": false,
   "document_cache_storage": "disk",
@@ -89,6 +90,7 @@ Environment variables override individual file settings:
 |---|---|---|
 | `GDOCS_SCOPE_MCP_CLIENT_ID` | `client_id` | `null` (bundled client for new authorization) |
 | `GDOCS_SCOPE_MCP_ACCESS_MODE` | `access_mode` | `full_drive` |
+| `GDOCS_SCOPE_MCP_TOOL_INTERFACE_VARIANT` | `tool_interface_variant` | `baseline` |
 | `GDOCS_SCOPE_MCP_WRITE_REVISION_MODE` | `write_revision_mode` | `required` |
 | `GDOCS_SCOPE_MCP_DOCUMENT_CACHE_ENABLED` | `document_cache_enabled` | `false` |
 | `GDOCS_SCOPE_MCP_DOCUMENT_CACHE_STORAGE` | `document_cache_storage` | `disk` |

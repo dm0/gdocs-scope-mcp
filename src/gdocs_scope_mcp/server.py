@@ -58,8 +58,10 @@ from gdocs_scope_mcp.tools import (
     suggestions,
     tables,
 )
+from gdocs_scope_mcp.tools.consolidation import variant_instructions
 
 SERVER_INFO = capture_server_info()
+TOOL_INTERFACE_VARIANT = get_settings().tool_interface_variant
 
 
 
@@ -68,7 +70,7 @@ mcp = FastMCP(
     name='gdocs-scope-mcp',
     version=SERVER_INFO.package_version,
     middleware=[ToolCallLoggingMiddleware()],
-    instructions="""
+    instructions=variant_instructions("""
 Surgical Google Docs editing — search by text, never by character index.
 
 ERRORS:
@@ -293,7 +295,7 @@ SURGICAL GOOGLE DOCS EDITING WORKFLOW:
 All edits preserve version history. Use short, distinctive anchor_text
 (a few unique words) for reliable text matching and combine with heading ids
 to further reduce the scope.
-""".strip(),
+""".strip(), TOOL_INTERFACE_VARIANT),
 )
 
 
@@ -367,9 +369,13 @@ suggestions.register(mcp)
 documents.register_reading(mcp)
 tables.register(mcp)
 entities.register(mcp)
-documents.register_editing(mcp)
+documents.register_editing(
+    mcp, consolidated=TOOL_INTERFACE_VARIANT in {'insertion', 'both'},
+)
 formatting.register(mcp)
-comments.register(mcp)
+comments.register(
+    mcp, consolidated=TOOL_INTERFACE_VARIANT in {'status', 'both'},
+)
 files.register(mcp)
 access.register(mcp)
 
