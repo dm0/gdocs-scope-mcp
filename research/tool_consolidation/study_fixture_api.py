@@ -286,6 +286,12 @@ class FixtureAPI:
                                 self.update_style(item['paragraphStyle'],
                                                   payload['paragraphStyle'],
                                                   payload['fields'])
+                                if (item['paragraphStyle'].get(
+                                    'namedStyleType',
+                                ) == 'NORMAL_TEXT'):
+                                    item['paragraphStyle'].pop(
+                                        'headingId', None,
+                                    )
                         par_start = par_end + 1
             return {}
         return reject('Native operation is outside the fixture API: ' + name)

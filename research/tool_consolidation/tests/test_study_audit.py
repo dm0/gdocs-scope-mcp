@@ -95,8 +95,8 @@ def test_recovery_diagnostic_never_relaxes_final_state_or_other_errors(
     assert original['semantic_errors'] == 2  # noqa: PLR2004
 
 
-def test_fixture_copies_heading_identity_to_normal_paragraph():
-    """Expose the invalid duplicate ID hidden by canonical state projection."""
+def test_fixture_clears_heading_identity_from_normal_paragraph():
+    """Preserve the real heading while clearing inherited identity on text."""
     fixture = load_research('study_fixture_api').FixtureAPI({
         'tabs': [{'id': 't', 'title': 'T', 'paragraphs': [
             {'text': 'Heading', 'heading_id': 'h', 'level': 'HEADING_1'},
@@ -113,11 +113,9 @@ def test_fixture_copies_heading_identity_to_normal_paragraph():
     ]})
     tab = fixture.snapshot()['tabs'][0]['documentTab']
     paragraphs = [x['paragraph'] for x in tab['body']['content']]
-    assert [p['paragraphStyle']['headingId'] for p in paragraphs] == ['h', 'h']
-    assert scope_ranges(tab, ['h']) is None
-    repaired = json.loads(json.dumps(tab))
-    repaired['body']['content'][0]['paragraph']['paragraphStyle'].pop('headingId')
-    assert scope_ranges(repaired, ['h']) is not None
+    assert [p['paragraphStyle'].get('headingId')
+            for p in paragraphs] == [None, 'h']
+    assert scope_ranges(tab, ['h']) is not None
 
 
 def test_rendered_answer_diagnostic_retains_raw_text_and_scope(audit_module):
@@ -145,10 +143,10 @@ def test_rendered_answer_diagnostic_retains_raw_text_and_scope(audit_module):
     ('m05', ['h.exercises', 'h.reading']),
     ('m16', ['h.reviews', 'h.notes']),
 ])
-def test_plain_gold_equivalent_write_causes_synthetic_scoped_read_error(
+def test_plain_gold_equivalent_write_retains_readable_heading_selection(
     tmp_path, case_id, headings,
 ):
-    """Reproduce failures for gold-equivalent rich=False actor trajectories."""
+    """Keep scoped reads available after rich=False actor trajectories."""
     case = next(c for c in scenarios.MAIN if c['id'] == case_id)
 
     async def run():
@@ -163,15 +161,16 @@ def test_plain_gold_equivalent_write_causes_synthetic_scoped_read_error(
             body = native['tabs'][0]['documentTab']['body']['content']
             styles = [x['paragraph']['paragraphStyle'] for x in body]
             counts = Counter(s.get('headingId') for s in styles)
-            assert any(s.get('namedStyleType') == 'NORMAL_TEXT'
-                       and s.get('headingId') in headings
-                       and counts[s['headingId']] > 1 for s in styles)
+            assert not any(s.get('namedStyleType') == 'NORMAL_TEXT'
+                           and s.get('headingId') in headings for s in styles)
+            assert all(counts[h] == 1 for h in headings)
             result = await backend.call({
                 'tool': 'docs_read', 'arguments': {
                     'doc_id': backend.document_id, 'heading_ids': headings,
                 },
             })
-            assert result['code'] == 'TARGET_CHANGED'
+            assert result.get('ok') is not False
+            assert len(result['sections']) == len(headings)
             whole = await backend.call({
                 'tool': 'docs_read',
                 'arguments': {'doc_id': backend.document_id},

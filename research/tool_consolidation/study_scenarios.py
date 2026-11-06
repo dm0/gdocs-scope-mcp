@@ -170,7 +170,9 @@ MAIN = [
     scenario('m11', 'multi_step', 'runbook-insert-after-and-reopen', 'en',
              'First add a paragraph Rollback tested after the Recovery trigger '
              'paragraph in Operations. Then reopen Rollback review without '
-             'additional reply text. Leave Reference unchanged.',
+             'additional reply text. Leave the text and formatting of Reference '
+             'unchanged. Reopening this comment is explicitly allowed even '
+             'when it is anchored in Reference.',
              [tab('t.main', 'Reference', 'Protected reference'),
               tab('t.ops', 'Operations', heading('Recovery', 'h.recovery'),
                   'Recovery trigger', 'Emergency contacts')],
