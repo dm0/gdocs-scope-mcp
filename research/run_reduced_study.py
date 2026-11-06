@@ -269,9 +269,12 @@ async def run_job(job, case, manifest, output):
                          and not set(args) - set(
                              tool['inputSchema'].get('properties', {})))
                 before = await backend.state()
-                read_only = bool((tool or {}).get('annotations', {})
+                read_only = bool(((tool or {}).get('annotations') or {})
                                  .get('readOnlyHint'))
-                if case['clarification'] and not clarified and not read_only:
+                if tool is None or not isinstance(args, dict):
+                    payload = failure('INVALID_ARGUMENT',
+                                      'Unknown tool or non-object arguments.')
+                elif case['clarification'] and not clarified and not read_only:
                     payload = failure(
                         'TARGET_AMBIGUOUS',
                         'The request needs user clarification before writing.',

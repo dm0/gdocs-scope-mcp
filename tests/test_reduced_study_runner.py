@@ -137,3 +137,13 @@ def test_read_only_state_comparison_does_not_hide_changes(runner):
         {'method': 'thread/tokenUsage/updated',
          'params': {'tokenUsage': {'total': {'inputTokens': 20}}}},
     ]) == {'inputTokens': 20}
+
+
+@pytest.mark.usefixtures('runner')
+def test_native_seed_ignores_the_preamble_outline_entry():
+    """A normal-text preamble is not a native heading to count or alias."""
+    live = load_research('study_live')
+    section = {'id': 'h.real', 'title': 'Real heading', 'level': 'h1'}
+    assert live.body_headings({'sections': [
+        {'id': '', 'title': '', 'level': 'n'}, section,
+    ]}) == [section]

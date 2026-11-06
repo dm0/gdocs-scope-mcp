@@ -24,6 +24,11 @@ RESET = importlib.util.module_from_spec(RESET_SPEC)
 RESET_SPEC.loader.exec_module(RESET)
 
 
+def body_headings(outline):
+    """Exclude the production reader's empty-ID preamble outline entry."""
+    return [section for section in outline['sections'] if section['id']]
+
+
 class LiveBackend(FixtureBackend):
     """Keep the same model-facing operations and native-state grading seam."""
 
@@ -105,9 +110,10 @@ class LiveBackend(FixtureBackend):
                 'doc_id': AUTHORIZED_DOC, 'tab_id': native_id,
             })
             expected = [p for p in tab['paragraphs'] if p.get('heading_id')]
-            if len(outline['sections']) != len(expected):
+            sections = body_headings(outline)
+            if len(sections) != len(expected):
                 raise RuntimeError('Native seed produced unexpected headings')
-            for section, paragraph in zip(outline['sections'], expected,
+            for section, paragraph in zip(sections, expected,
                                            strict=True):
                 if section['title'].strip() != paragraph['text']:
                     raise RuntimeError('Native heading title mismatch')
