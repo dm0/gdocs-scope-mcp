@@ -1,11 +1,13 @@
 """Summarize frozen study outcomes without treating repeats as scenarios."""
 
 import argparse
+import csv
 import hashlib
 import json
 import random
 from collections import Counter, defaultdict
 from copy import deepcopy
+from io import StringIO
 from itertools import combinations, groupby
 from pathlib import Path
 from statistics import mean
@@ -227,6 +229,27 @@ def compact_state(state):
             })
         tabs.append({**tab, 'paragraphs': paragraphs})
     return {**state, 'tabs': tabs}
+
+
+def compact_outcomes(rows, level):
+    """Export outcomes without account, document or chat identifiers."""
+    fields = (
+        'case', 'model', 'variant', 'repeat', 'backend', 'status',
+        'first_action_correct', 'final_success', 'recovery_free',
+        'unintended_changes', 'schema_errors', 'semantic_errors',
+        'clarifications', 'final_state_has_optional_period_difference',
+    )
+    buffer = StringIO(newline='')
+    writer = csv.writer(buffer, lineterminator='\n')
+    writer.writerow(fields)
+    selected = sorted((r for r in rows if r['level'] == level),
+                      key=lambda r: (r['case'], r['model'],
+                                     r['variant'], r['repeat']))
+    for row in selected:
+        values = [row.get(field) for field in fields]
+        writer.writerow([int(value) if isinstance(value, bool) else value
+                         for value in values])
+    return buffer.getvalue()
 
 
 def m09_state(state):
@@ -464,6 +487,10 @@ def analyze(directory, stage, draws=5000, *, human_sensitivity=False,
                         (label + '-audit-key.json', key)]:
         (output / name).write_text(json.dumps(value, indent=2,
                                             ensure_ascii=False))
+    for level in ('decision', 'end_to_end'):
+        (output / f'{label}-{level}.csv').write_text(
+            compact_outcomes(rows, level),
+        )
     return report
 
 

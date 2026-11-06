@@ -1,8 +1,10 @@
 """Check pairing, missing-data handling and treatment blinding."""
 
+import csv
 import hashlib
 import json
 from copy import deepcopy
+from io import StringIO
 
 import pytest
 
@@ -147,3 +149,22 @@ def test_analysis_checks_manifest_and_does_not_reapply_restart_sensitivity(
         hashlib.sha256(text.encode()).hexdigest())
     with pytest.raises(ValueError, match='already uses the period rule'):
         analysis.analyze(tmp_path, 'pilot', human_sensitivity=True)
+
+
+def test_compact_export_retains_missing_outcomes_and_excludes_private_fields():
+    """Keep infrastructure blank rather than false and omit raw identifiers."""
+    row = {'id': 'private-chat', 'level': 'decision', 'case': 'm01',
+           'model': 'model', 'variant': 'baseline', 'repeat': 0,
+           'backend': 'fixture', 'status': 'infrastructure_failure',
+           'final_success': None, 'unintended_changes': False,
+           'trace': [{'arguments': {'doc_id': 'private-document'}}],
+           'author': 'Private account'}
+    exported = analysis.compact_outcomes([row], 'decision')
+    assert 'private' not in exported.lower()
+    parsed = list(csv.DictReader(StringIO(exported)))
+    assert parsed[0]['final_success'] == ''
+    assert parsed[0]['unintended_changes'] == '0'
+    assert parsed[0]['status'] == 'infrastructure_failure'
+    assert list(csv.DictReader(StringIO(
+        analysis.compact_outcomes([row], 'end_to_end'),
+    ))) == []
