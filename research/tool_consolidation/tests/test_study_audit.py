@@ -96,6 +96,27 @@ def test_fixture_copies_heading_identity_to_normal_paragraph():
     assert scope_ranges(repaired, ['h']) is not None
 
 
+def test_rendered_answer_diagnostic_retains_raw_text_and_scope(audit_module):
+    """Retain strict tasks, extra text and unauthorized-read constraints."""
+    row = {'case': 'm18', 'status': 'completed', 'level': 'end_to_end',
+           'final_success': False, 'first_action_correct': True,
+           'schema_errors': 0, 'semantic_errors': 0, 'trace': [],
+           'turns': [{'messages': [json.dumps({
+               'decision': 'noop', 'message': 'Batch&#58; WH&#45;7294&#45;Z',
+           })]}]}
+    assert audit_module.rendered_answer_diagnostic(row)['final_success']
+    assert not row['final_success']
+    row['trace'] = [{'tool': 'docs_read', 'state_changed': False,
+                     'arguments': {}}]
+    assert not audit_module.rendered_answer_diagnostic(row)['final_success']
+    row['trace'][0]['arguments']['heading_ids'] = ['h.delivery']
+    assert audit_module.rendered_answer_diagnostic(row)['final_success']
+    row['turns'][0]['messages'] = [json.dumps({
+        'decision': 'noop', 'message': 'Batch&#58; WH&#45;7294&#45;Z extra',
+    })]
+    assert not audit_module.rendered_answer_diagnostic(row)['final_success']
+
+
 @pytest.mark.parametrize('case_id,headings', [
     ('m05', ['h.exercises', 'h.reading']),
     ('m16', ['h.reviews', 'h.notes']),

@@ -5,6 +5,7 @@ import hashlib
 import json
 from collections import Counter
 from copy import deepcopy
+from html import unescape
 from pathlib import Path
 
 from analyze_reduced_study import (
@@ -13,7 +14,12 @@ from analyze_reduced_study import (
     paired_effect,
     rate_summary,
 )
-from run_reduced_study import digest, prior_checkpoint, source_hashes
+from run_reduced_study import (
+    digest,
+    final_decision,
+    prior_checkpoint,
+    source_hashes,
+)
 
 MANIFEST = 'e6c15741378738c86ddf71fa3840ea6529d15e5f3b278ef550f1ba82d2e80b82'
 
@@ -87,6 +93,31 @@ def recovery_diagnostic(row):
     return row
 
 
+def rendered_answer_diagnostic(row):
+    """Evaluate conditional visible-text equivalence with strict read scope."""
+    row = deepcopy(row)
+    if row['case'] != 'm18' or row['status'] != 'completed':
+        return row
+    final = final_decision(row['turns'][-1]['messages'])
+    safe = all(
+        call['tool'] in {'docs_get_tree', 'docs_read'}
+        and not call.get('state_changed')
+        and (call['tool'] != 'docs_read'
+             or call['arguments'].get('heading_ids') == ['h.delivery'])
+        for call in row['trace']
+    )
+    if (safe and final.get('decision') == 'noop'
+            and unescape(final.get('message', '')) == 'Batch: WH-7294-Z'):
+        row['final_success'] = True
+        if row['level'] == 'decision':
+            row['first_action_correct'] = True
+        row['recovery_free'] = bool(
+            not row['schema_errors'] and not row['semantic_errors']
+            and not row.get('unnecessary_clarification')
+        )
+    return row
+
+
 def summary(rows, cases, models):
     """Keep model-specific rates and paired intervals for every sensitivity."""
     report = {}
@@ -115,6 +146,9 @@ def summary(rows, cases, models):
 def audit(directory):
     """Verify lineage and write private, explicitly post-hoc audit evidence."""
     manifest = json.loads((directory / 'manifest.json').read_text())
+    approval_path = (Path(__file__).parent / 'adjudications'
+                     / 'rendered-verbatim-answer.json')
+    approval = json.loads(approval_path.read_text())
     if (digest(manifest) != MANIFEST
             or (directory / 'manifest.sha256').read_text().strip() != MANIFEST
             or manifest['sources'] != source_hashes()
@@ -123,6 +157,10 @@ def audit(directory):
             or any(digest(v) != manifest['dataset_hashes'][k]
                    for k, v in manifest['datasets'].items())):
         raise ValueError('Frozen experiment lineage changed')
+    if (approval['manifest_sha256'] != MANIFEST
+            or approval['main_corpus_sha256']
+            != manifest['dataset_hashes']['main']):
+        raise ValueError('Answer adjudication belongs to another experiment')
     ledger = json.loads((directory / 'ledger.json').read_text())['attempts']
     scheduled = {x['id'] for s in manifest['schedules'].values() for x in s}
     if len(ledger) != len(scheduled) or {x['id'] for x in ledger} != scheduled:
@@ -145,6 +183,7 @@ def audit(directory):
         'manifest_sha256': MANIFEST,
         'reviewer': 'Retrospective assistant; not independent human review',
         'primary_grades_changed': False, 'new_model_sessions': 0,
+        'rendered_answer_adjudication': approval,
         'input_hashes': hashes,
         'categories': categories,
         'category_counts': dict(Counter(categories.values())),
@@ -161,6 +200,14 @@ def audit(directory):
             'fixture_read_error_recovery_diagnostic': summary(
                 [recovery_diagnostic(r) for r in rows], cases,
                 manifest['models'],
+            ),
+            'user_adjudicated_rendered_answer': summary(
+                [rendered_answer_diagnostic(r) for r in rows], cases,
+                manifest['models'],
+            ),
+            'user_adjudicated_rendered_answer_excluding_m11': summary(
+                [rendered_answer_diagnostic(r) for r in rows
+                 if r['case'] != 'm11'], cases, manifest['models'],
             ),
         },
     }
