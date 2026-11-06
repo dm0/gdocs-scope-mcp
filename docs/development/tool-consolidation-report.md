@@ -1,8 +1,8 @@
 # Study 1: implementation and validation report
 
 Date: 2026-11-06.
-Status: implementation validated; 120-session pilot complete; the approved
-960-session main stage is running. Machine grades await human audit.
+Status: first campaign stopped at the user's request; parallel disposable-Doc
+restart preparation is in progress. Machine grades await human audit.
 Issue: [#59](https://github.com/dm0/gdocs-scope-mcp/issues/59).
 
 ## Decision and scope
@@ -12,10 +12,12 @@ There is insufficient evidence that consolidation improves correctness. Issue
 #59 remains open: regression checks do not satisfy its required model study.
 No push, release, publication or deployment was performed.
 
-The approved reduced profile contains 120 pilot sessions (5 scenarios) and
-960 main sessions (20 scenarios). The 60 native-document confirmations are
-included in the main schedule. Failed attempts consume the same cap; no
-automatic replacement model sessions are permitted.
+The approved restart contains 120 new pilot sessions (5 scenarios) and 960 new
+main sessions (20 scenarios). The first campaign consumed 241 reservations;
+the user explicitly approved 1080 additional sessions, for a cumulative cap of
+1321. The 60 native confirmations remain included in the new main schedule.
+Failed and interrupted attempts consume the cap; no automatic replacements
+are permitted. Earlier outcomes are preserved separately and never pooled.
 
 Pre-inference native calibration exposed setup constraints: tab titles must be
 unique; ordinary-text preambles are not headings; whole-paragraph text styling
@@ -196,6 +198,8 @@ interface. Keep the baseline until the required evidence supports a decision.
 
 ## Reduced pilot: 120 completed sessions
 
+This section describes the first campaign, before the authorized restart.
+
 All scheduled pilot attempts completed, with no infrastructure exclusion,
 automatic replacement, budget failure or unreaped actor process. Each exact
 model ran 40 sessions at `medium`, without provider-model fallback. The pilot
@@ -297,3 +301,42 @@ style boundaries, action/status and post counts. Read-only validation against
 all five saved native-reference trajectories also passed. Global Ruff and
 explicit research-test lint passed. No new model sessions were used for these
 analysis checks.
+
+## Restart 001 readiness
+
+The first campaign was stopped for the user-requested infrastructure change:
+120 pilot and 118 main sessions completed. Three in-flight reservations remain
+counted: one recorded a disconnected-client error during SIGINT; two were
+cancelled while waiting for the shared document. Preserve their original
+ledger/results and the separate `restart-audit.json`, rather than reclassifying
+them as model failures or freeing their budget. The previous ledger SHA-256 is
+`0a498a0a8b5a4845b63bf3694414ddb94b39040ee49bf567c212173b009470a7`.
+
+The interrupted shared-document cleanup did not finish inside that run. A
+separate existing native-reference context performed and verified final
+cleanup: one empty tab, no active comments or suggestions, and all owned MCP
+processes reaped. Evidence is `interruption-cleanup/live-cleanup.json` under
+the first campaign's artifact directory. No actor model was invoked for it.
+
+Local `main` at `2070654` introduced test-owned disposable documents. It was
+merged in `3ef6aee`; 55 integration checks and 21 lifecycle checks passed.
+Pytest hook signatures were reduced to their used arguments and interruption
+error propagation kept an explicit lint exception. No product implementation
+or MCP catalog changed. The authorized folder is read from the workspace's
+current instructions and still requires an explicit environment opt-in.
+
+Commit `b556893` adapted research to one document per native job and verified
+independent ownership, cleanup and lack of a permanent-Doc fallback. A real
+m01 calibration passed in 24.51 seconds; the owned document was verified
+trashed and both isolated MCP processes reaped. Its evidence is under
+`/tmp/pytest-of-lapin/pytest-109/test_native_fixture_calibratio0/live/`.
+
+The restart will calibrate all 25 gold trajectories on native Docs before
+inference and freeze the user-approved period rule as primary grading, with
+exact matching as a diagnostic. Native snapshots occur initially, after
+mutating calls and finally, avoiding repeated observer reads around unchanged
+read-only operations. Native jobs use three independent documents concurrently.
+SIGINT/SIGTERM stop new reservations and drain active jobs. Budget lineage,
+protocol text/hash, native references and executable hashes are frozen before
+new model trials; the previously evaluated scenarios are not described as a
+fresh unseen confirmatory dataset.

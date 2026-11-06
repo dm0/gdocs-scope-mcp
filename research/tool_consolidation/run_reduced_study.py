@@ -6,6 +6,7 @@ import fcntl
 import hashlib
 import json
 import random
+import signal
 import subprocess
 import time
 from pathlib import Path
@@ -21,6 +22,7 @@ from study_execution import (
     translated,
 )
 from study_scenarios import corpus
+from terminal_period_adjudication import normalized, permissions
 from tool_consolidation_preflight import (
     FINAL_SCHEMA,
     VARIANTS,
@@ -30,12 +32,16 @@ from tool_consolidation_preflight import (
 
 SEED = 20261106
 CAP = 1080
+PRIOR_ATTEMPTS = 241
+TOTAL_CAP = 1321
 LIVE_CASES = {'m01', 'm08', 'm11', 'm15', 'm20'}
 LEVELS = ('decision', 'end_to_end')
 EXECUTION_SOURCES = (
     'codex_study_runtime.py', 'tool_consolidation_preflight.py',
     'study_scenarios.py', 'study_fixture_api.py', 'study_fixture_server.py',
     'study_execution.py', 'study_live.py', 'run_reduced_study.py',
+    'terminal_period_adjudication.py',
+    'adjudications/unquoted-terminal-periods.json',
     '../../tests/probes/table_server.py',
     '../../tests/live_document_state.py',
 )
@@ -69,7 +75,9 @@ def digest(value):
 
 def write_json(path, value):
     """Persist study data in its owner-private artifact directory."""
-    path.write_text(json.dumps(value, ensure_ascii=False, indent=2))
+    temporary = path.with_name(path.name + '.tmp')
+    temporary.write_text(json.dumps(value, ensure_ascii=False, indent=2))
+    temporary.replace(path)
 
 
 def schedule(stage):
@@ -85,7 +93,8 @@ def schedule(stage):
         rng.shuffle(variants)
         for variant in variants:
             jobs.append({
-                'id': f'{stage}-{case_id}-{model}-{level}-{repeat}-{variant}',
+                'id': (f'restart-001-{stage}-{case_id}-{model}-'
+                       f'{level}-{repeat}-{variant}'),
                 'stage': stage, 'case': case_id, 'model': model,
                 'level': level,
                 'repeat': repeat, 'variant': variant,
@@ -123,11 +132,31 @@ def ordered_tools(catalog, case_id, repeat):
     return [tool for key in keys for tool in groups[key]]
 
 
-async def prepare(output):
+def prior_checkpoint(directory):
+    """Bind the restart budget to the immutable first campaign ledger."""
+    directory = directory.resolve()
+    ledger_bytes = (directory / 'ledger.json').read_bytes()
+    ledger = json.loads(ledger_bytes)
+    manifest = json.loads((directory / 'manifest.json').read_text())
+    if digest(manifest) != (directory / 'manifest.sha256').read_text().strip():
+        raise ValueError('Prior manifest changed')
+    if len(ledger['attempts']) != PRIOR_ATTEMPTS:
+        raise ValueError('Restart requires the approved 241 prior attempts')
+    return {
+        'directory': str(directory), 'attempts': len(ledger['attempts']),
+        'ledger_sha256': hashlib.sha256(ledger_bytes).hexdigest(),
+        'manifest_sha256': digest(manifest),
+    }
+
+
+async def prepare(output, previous):
     """Freeze datasets, catalogs, schedules and reference states."""
     output.mkdir(parents=True, exist_ok=True, mode=0o700)
     if (output / 'manifest.json').exists():
         raise ValueError('An existing study manifest cannot be overwritten')
+    prior = prior_checkpoint(previous)
+    if output.resolve() == previous.resolve():
+        raise ValueError('Restart must preserve the previous campaign')
     catalogs = {}
     for variant in VARIANTS:
         catalogs[variant] = await capture_catalog(variant, output)
@@ -147,10 +176,15 @@ async def prepare(output):
     from study_live import native_reference  # noqa: PLC0415
     live_directory = output / 'live-references'
     live_directory.mkdir(mode=0o700)
-    for case in datasets['main']:
-        if case['id'] not in LIVE_CASES:
-            continue
+    live_semaphore = asyncio.Semaphore(3)
+
+    async def calibrate(case):
+        async with live_semaphore:
+            await native_parity(case)
+
+    async def native_parity(case):
         native = await native_reference(case, live_directory / case['id'])
+        require_frozen_source(native['identity'], catalogs['baseline'])
         async with fixture_backend(
             case, 'baseline', output / 'parity' / case['id'],
         ) as (backend, _identity):
@@ -168,9 +202,26 @@ async def prepare(output):
         write_json(live_directory / (case['id'] + '.json'), native)
         print(json.dumps({'native_parity': case['id'], 'passed': True}),
               flush=True)
+    cases = [case for entries in datasets.values() for case in entries]
+    results = await asyncio.gather(*(calibrate(c) for c in cases),
+                                   return_exceptions=True)
+    failures = [{'case': case['id'], 'error': str(result)}
+                for case, result in zip(cases, results, strict=True)
+                if isinstance(result, BaseException)]
+    if failures:
+        write_json(output / 'native-conformance-errors.json', failures)
+        raise RuntimeError('Native conformance failed: '
+                           + json.dumps(failures))
+    protocol = (ROOT / 'docs/development/tool-interface-evaluation.md'
+                ).read_bytes()
+    (output / 'protocol.md').write_bytes(protocol)
     manifest = {
-        'version': 1, 'seed': SEED, 'session_cap': CAP,
+        'version': 2, 'campaign': 'restart-001', 'seed': SEED,
+        'session_cap': CAP, 'total_session_cap': TOTAL_CAP, 'prior_run': prior,
+        'protocol_sha256': hashlib.sha256(protocol).hexdigest(),
         'models': MODELS, 'effort': 'medium',
+        'codex_cli': subprocess.check_output(['codex', '--version'],
+                                            cwd=ROOT, text=True).strip(),
         'commit': subprocess.check_output(['git', 'rev-parse', 'HEAD'],
                                           cwd=ROOT, text=True).strip(),
         'sources': source_hashes(), 'datasets': datasets,
@@ -181,9 +232,18 @@ async def prepare(output):
         'policy': POLICY, 'final_schema': FINAL_SCHEMA,
         'budgets': {'domain_calls': 16, 'decision_calls': 1,
                     'turn_seconds': 120, 'output_tokens': 4096,
+                    'native_turn_seconds': 240,
                     'scripted_clarifications': 1,
                     'automatic_model_retries': 0},
         'live_cases': sorted(LIVE_CASES),
+        'native_conformance_cases': sorted(c['id'] for c in cases),
+        'native_document_policy': 'unique disposable document per native job',
+        'grading': {
+            'primary': 'native state with user-approved optional final period',
+            'exact_state': 'retained as a diagnostic',
+            'observer_reads': 'initial, after mutating calls and final',
+            'prior_outcomes': 'preserved separately, never pooled',
+        },
         'decision_criteria': {
             'primary': 'both minus baseline first-action correctness',
             'minimum_effect': 0.03, 'final_success_margin': -0.02,
@@ -193,7 +253,10 @@ async def prepare(output):
     }
     write_json(output / 'manifest.json', manifest)
     (output / 'manifest.sha256').write_text(digest(manifest) + '\n')
-    write_json(output / 'ledger.json', {'attempts': [], 'cap': CAP})
+    write_json(output / 'ledger.json', {
+        'attempts': [], 'cap': CAP, 'prior_attempts': prior['attempts'],
+        'total_cap': TOTAL_CAP,
+    })
     print(json.dumps({'manifest_sha256': digest(manifest),
                       'dataset_hashes': manifest['dataset_hashes'],
                       'pilot_sessions': len(manifest['schedules']['pilot']),
@@ -259,9 +322,15 @@ async def run_job(job, case, manifest, output):
             if job['backend'] == 'live':
                 reference = backend.references
             initial = await backend.state()
+            observed = initial
+            allowed_periods = permissions(case, reference)
+
+            def matches(state, index):
+                return normalized(state, reference[index],
+                                  allowed_periods[index]) == reference[index]
 
             async def execute(call):
-                nonlocal prefix
+                nonlocal prefix, observed
                 args = call['arguments']
                 tool = definitions.get(call['tool'])
                 valid = (tool is not None and isinstance(args, dict)
@@ -270,7 +339,7 @@ async def run_job(job, case, manifest, output):
                          ).iter_errors(args))
                          and not set(args) - set(
                              tool['inputSchema'].get('properties', {})))
-                before = await backend.state()
+                before = observed
                 read_only = bool(((tool or {}).get('annotations') or {})
                                  .get('readOnlyHint'))
                 if tool is None or not isinstance(args, dict):
@@ -283,11 +352,15 @@ async def run_job(job, case, manifest, output):
                     )
                 else:
                     payload = await backend.call(call)
-                after = await backend.state()
+                after = before if read_only else await backend.state()
+                observed = after
                 failed = payload.get('ok') is False
                 advances = (prefix + 1 < len(reference)
-                            and after == reference[prefix + 1])
-                wrong_mutation = before != after and not advances
+                            and matches(after, prefix + 1))
+                wrong_mutation = (normalized(
+                    before, reference[prefix], allowed_periods[prefix],
+                ) != normalized(after, reference[prefix],
+                                allowed_periods[prefix]) and not advances)
                 if advances:
                     prefix += 1
                 result['schema_errors'] += int(not valid)
@@ -388,7 +461,8 @@ async def run_job(job, case, manifest, output):
                     if not trace and not case['oracle']:
                         correct = (answer_ok and final_state == initial
                                    and final.get('decision') != 'clarify')
-                    success = final_state == reference[-1] and answer_ok
+                    success = matches(final_state, len(reference) - 1)
+                    success &= answer_ok
                     if not case['oracle']:
                         success &= final.get('decision') != 'clarify'
                 unnecessary_question = (result['clarifications'] > 0
@@ -400,6 +474,10 @@ async def run_job(job, case, manifest, output):
                                    and not unnecessary_question),
                     unnecessary_clarification=unnecessary_question,
                     status='completed',
+                    exact_final_state_matches=final_state == reference[-1],
+                    final_state_has_optional_period_difference=(
+                        matches(final_state, len(reference) - 1)
+                        and final_state != reference[-1]),
                 )
     except (StudyAgentError, TimeoutError) as error:
         result.update(status='agent_failure', error=str(error),
@@ -423,6 +501,9 @@ async def run_stage(output, stage, concurrency):
         raise ValueError('Frozen study manifest changed')
     if manifest['sources'] != source_hashes():
         raise ValueError('Research source changed after manifest freeze')
+    prior = prior_checkpoint(Path(manifest['prior_run']['directory']))
+    if prior != manifest['prior_run']:
+        raise ValueError('Prior campaign ledger changed after restart freeze')
     if any(digest(cases) != manifest['dataset_hashes'][name]
            for name, cases in manifest['datasets'].items()):
         raise ValueError('Frozen study corpus changed')
@@ -433,6 +514,9 @@ async def run_stage(output, stage, concurrency):
             raise ValueError('Resolve pilot infrastructure before main trials')
     ledger_path = output / 'ledger.json'
     ledger = json.loads(ledger_path.read_text())
+    if (ledger['cap'] != CAP or ledger['total_cap'] != TOTAL_CAP
+            or ledger['prior_attempts'] != prior['attempts']):
+        raise ValueError('Restart ledger budget does not match approval')
     if stage == 'main':
         pilot_attempts = [a for a in ledger['attempts']
                           if a['stage'] == 'pilot']
@@ -447,12 +531,20 @@ async def run_stage(output, stage, concurrency):
     for job in jobs:
         queue.put_nowait(job)
     stop = asyncio.Event()
+    stop_reasons = []
     complete = []
+
+    def request_stop(name):
+        stop_reasons.append(name)
+        stop.set()
+        print(json.dumps({'draining_after_signal': name}), flush=True)
 
     async def worker():
         while not queue.empty() and not stop.is_set():
             job = queue.get_nowait()
-            if len(ledger['attempts']) >= CAP:
+            if (len(ledger['attempts']) >= CAP
+                    or prior['attempts'] + len(ledger['attempts'])
+                    >= TOTAL_CAP):
                 raise RuntimeError('Approved model-session cap reached')
             entry = {**job, 'status': 'reserved', 'started_at': time.time()}
             ledger['attempts'].append(entry)
@@ -466,11 +558,23 @@ async def run_stage(output, stage, concurrency):
                 'error',
             )}), flush=True)
             if result['status'] == 'infrastructure_failure':
+                stop_reasons.append('infrastructure_failure')
                 stop.set()
-    await asyncio.gather(*[worker() for _ in range(concurrency)])
+    loop = asyncio.get_running_loop()
+    for signum in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(signum, request_stop, signum.name)
+    try:
+        await asyncio.gather(*[worker() for _ in range(concurrency)])
+    finally:
+        for signum in (signal.SIGINT, signal.SIGTERM):
+            loop.remove_signal_handler(signum)
     summary = {'stage': stage, 'completed_this_run': len(complete),
                'attempts_total': len(ledger['attempts']),
-               'stopped_on_infrastructure_failure': stop.is_set()}
+               'attempts_including_prior': (prior['attempts']
+                                            + len(ledger['attempts'])),
+               'stop_reasons': stop_reasons,
+               'stopped_on_infrastructure_failure': (
+                   'infrastructure_failure' in stop_reasons)}
     write_json(output / f'{stage}-run-status.json', summary)
     print(json.dumps(summary), flush=True)
 
@@ -480,14 +584,17 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('action', choices=['prepare', 'pilot', 'main'])
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--previous-campaign', type=Path)
     parser.add_argument('--concurrency', type=int, default=3,
                         choices=[1, 2, 3])
     args = parser.parse_args()
+    if args.action == 'prepare' and args.previous_campaign is None:
+        parser.error('Restart preparation requires --previous-campaign')
     args.output.mkdir(parents=True, exist_ok=True, mode=0o700)
     with (args.output / 'campaign.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         if args.action == 'prepare':
-            asyncio.run(prepare(args.output))
+            asyncio.run(prepare(args.output, args.previous_campaign))
         else:
             asyncio.run(run_stage(args.output, args.action, args.concurrency))
 

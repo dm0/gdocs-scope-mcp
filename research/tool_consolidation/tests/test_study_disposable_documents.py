@@ -114,3 +114,49 @@ def test_no_permanent_document_fallback(native, monkeypatch, tmp_path):
             ):
                 pytest.fail('A permanent document was reused')
     asyncio.run(run())
+
+
+def test_cancelled_creation_waits_for_owned_id_before_disposal(
+    native, monkeypatch, tmp_path,
+):
+    """A cancelled await must not race cleanup against in-flight creation."""
+    started, release = threading.Event(), threading.Event()
+
+    class Documents:
+        """Delay the owned ID until the parent requests cancellation."""
+
+        def __init__(self, *_args, **_kwargs):
+            self.documents = []
+
+        def create(self):
+            started.set()
+            assert release.wait(timeout=5)
+            self.documents.append({'id': 'owned', 'status': 'placed'})
+            return {'id': 'owned'}
+
+        def finish(self, *, failed):
+            assert failed
+            assert self.documents == [{'id': 'owned', 'status': 'placed'}]
+            self.documents[0]['status'] = 'trashed'
+
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_LIVE_TEST_FOLDER',
+                       native.AUTHORIZED_FOLDER)
+    monkeypatch.setattr(native.DOCUMENTS, 'LiveDocuments', Documents)
+
+    async def job():
+        async with native.live_backend(
+            scenarios.PILOT[0], 'baseline', tmp_path, reference_mode=True,
+        ):
+            pytest.fail('Creation cancellation was swallowed')
+
+    async def run():
+        task = asyncio.create_task(job())
+        assert await asyncio.to_thread(started.wait, 5)
+        task.cancel()
+        await asyncio.sleep(0.01)
+        release.set()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+    asyncio.run(run())
+    report = json.loads((tmp_path / 'live-cleanup.json').read_text())
+    assert report['documents'] == [{'id': 'owned', 'status': 'trashed'}]

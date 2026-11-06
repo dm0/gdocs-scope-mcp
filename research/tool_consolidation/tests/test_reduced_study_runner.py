@@ -21,7 +21,9 @@ def runner(monkeypatch):
     """Load research dependencies explicitly without changing sys.path."""
     for name, module in [('codex_study_runtime', runtime),
                          ('study_execution', execution),
-                         ('study_scenarios', scenarios)]:
+                         ('study_scenarios', scenarios),
+                         ('terminal_period_adjudication',
+                          load_research('terminal_period_adjudication'))]:
         monkeypatch.setitem(sys.modules, name, module)
     preflight = load_research('tool_consolidation_preflight')
     monkeypatch.setitem(sys.modules, 'tool_consolidation_preflight', preflight)
@@ -47,9 +49,11 @@ def test_session_cap_and_predeclared_native_subset(runner):
 
 
 @pytest.mark.parametrize('variant', ['baseline', 'both'])
-@pytest.mark.parametrize('case_id', ['p1', 'p3', 'p4'])
+@pytest.mark.parametrize('case_id,optional_period', [
+    ('p1', False), ('p1', True), ('p3', False), ('p3', True), ('p4', False),
+])
 def test_actual_fixture_grading_with_a_scripted_model(
-    runner, monkeypatch, tmp_path, variant, case_id,
+    runner, monkeypatch, tmp_path, variant, *, case_id, optional_period,
 ):
     """Execute production MCP writes while replacing only model inference."""
     case = next(c for c in scenarios.PILOT if c['id'] == case_id)
@@ -82,6 +86,10 @@ def test_actual_fixture_grading_with_a_scripted_model(
             else:
                 for original in case['oracle']:
                     call = execution.translated(original, variant)
+                    if optional_period and original['tool'] in {
+                        'docs_append', 'docs_insert_before',
+                    }:
+                        call['arguments']['text'] += '.'
                     await execute(call)
                     calls.append(call)
                 decision = 'action'
@@ -122,7 +130,81 @@ def test_actual_fixture_grading_with_a_scripted_model(
     assert result['final_success']
     assert result['recovery_free']
     assert not result['unintended_changes']
+    if optional_period:
+        assert result['final_state_has_optional_period_difference']
     assert result['process_reaped']
+
+
+def test_prior_campaign_budget_is_counted_and_bound_to_its_ledger(
+    runner, tmp_path,
+):
+    """Interrupted reservations still consume budget and cannot disappear."""
+    manifest = {'version': 'original'}
+    (tmp_path / 'manifest.json').write_text(json.dumps(manifest))
+    (tmp_path / 'manifest.sha256').write_text(runner.digest(manifest))
+    ledger = {'attempts': [{'status': 'reserved'}] * runner.PRIOR_ATTEMPTS}
+    path = tmp_path / 'ledger.json'
+    path.write_text(json.dumps(ledger))
+    checkpoint = runner.prior_checkpoint(tmp_path)
+    assert checkpoint['attempts'] + runner.CAP == runner.TOTAL_CAP
+    ledger['attempts'][0] = {'status': 'completed'}
+    path.write_text(json.dumps(ledger))
+    assert runner.prior_checkpoint(tmp_path) != checkpoint
+    ledger['attempts'].pop()
+    path.write_text(json.dumps(ledger))
+    with pytest.raises(ValueError, match='241 prior attempts'):
+        runner.prior_checkpoint(tmp_path)
+
+
+def test_requested_stop_drains_reserved_jobs_without_starting_more(
+    runner, monkeypatch, tmp_path,
+):
+    """Keep interruption cleanup out of active actors and preserve the cap."""
+    prior = {'directory': '/unused', 'attempts': runner.PRIOR_ATTEMPTS}
+    case = {'id': 'case'}
+    jobs = [{'id': f'job-{i}', 'case': 'case', 'stage': 'pilot'}
+            for i in range(5)]
+    manifest = {'sources': {}, 'prior_run': prior,
+                'datasets': {'pilot': [case]},
+                'dataset_hashes': {'pilot': runner.digest([case])},
+                'schedules': {'pilot': jobs}}
+    (tmp_path / 'manifest.json').write_text(json.dumps(manifest))
+    (tmp_path / 'manifest.sha256').write_text(runner.digest(manifest))
+    (tmp_path / 'ledger.json').write_text(json.dumps({
+        'attempts': [], 'cap': runner.CAP, 'total_cap': runner.TOTAL_CAP,
+        'prior_attempts': runner.PRIOR_ATTEMPTS,
+    }))
+    monkeypatch.setattr(runner, 'source_hashes', dict)
+    monkeypatch.setattr(runner, 'prior_checkpoint', lambda _path: prior)
+    handlers, started = {}, []
+
+    async def run():
+        ready = asyncio.Event()
+        loop = asyncio.get_running_loop()
+        monkeypatch.setattr(loop, 'add_signal_handler',
+                            lambda sig, callback, *args: handlers.update(
+                                {sig: (callback, args)}))
+        monkeypatch.setattr(loop, 'remove_signal_handler', handlers.pop)
+
+        async def actor(job, *_args):
+            ledger = json.loads((tmp_path / 'ledger.json').read_text())
+            assert job['id'] in {a['id'] for a in ledger['attempts']}
+            started.append(job['id'])
+            if len(started) == 3:  # noqa: PLR2004
+                callback, args = handlers[runner.signal.SIGINT]
+                callback(*args)
+                ready.set()
+            await ready.wait()
+            return {'id': job['id'], 'status': 'completed'}
+        monkeypatch.setattr(runner, 'run_job', actor)
+        await runner.run_stage(tmp_path, 'pilot', concurrency=3)
+    asyncio.run(run())
+    ledger = json.loads((tmp_path / 'ledger.json').read_text())
+    assert len(ledger['attempts']) == 3  # noqa: PLR2004
+    assert all(a['status'] == 'completed' for a in ledger['attempts'])
+    summary = json.loads((tmp_path / 'pilot-run-status.json').read_text())
+    assert summary['stop_reasons'] == ['SIGINT']
+    assert not summary['stopped_on_infrastructure_failure']
 
 
 def test_read_only_state_comparison_does_not_hide_changes(runner):

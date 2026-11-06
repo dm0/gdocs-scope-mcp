@@ -11,7 +11,7 @@ uv run --locked pytest research/tool_consolidation/tests -m 'not live' -q
 ```
 
 Native calibration tests carry the `live` marker and require the explicitly
-authorized development-document ID in `GDOCS_SCOPE_MCP_LIVE_TEST_DOC`. Model
+authorized folder ID in `GDOCS_SCOPE_MCP_LIVE_TEST_FOLDER`. Model
 inference never runs as part of pytest. Product adapter/contract regressions
 remain under the root `tests/` directory.
 
@@ -44,29 +44,36 @@ not a formal pilot and does not support a default-adoption claim.
 
 ## Approved reduced Study 1
 
-The user approved a maximum of 1080 model sessions: 120 pilot sessions over
-five scenarios, then up to 960 main sessions over twenty scenarios. The corpus
+The user approved a fresh 1080-session restart: 120 pilot sessions over five
+scenarios, then 960 main sessions over twenty scenarios. The prior campaign's
+241 attempts remain counted, giving a cumulative cap of 1321. Its outcomes
+remain separate. The corpus
 is `study_scenarios.py`. `study_fixture_api.py` supplies only the deterministic
 Google API seam; `study_fixture_server.py` runs unchanged production MCP tools.
-`study_live.py` serializes the predeclared native confirmation subset under the
-authorized development-document lock and verifies reset/process cleanup.
+`study_live.py` creates an independent document per native job in the authorized
+test folder, using the repository's `LiveDocuments` infrastructure. Jobs run
+in parallel and verify trashing only their owned IDs plus process cleanup.
 
 `run_reduced_study.py prepare` freezes datasets, catalogs, paired schedules,
-source hashes, state references and native conformance before model trials.
-Preparation performs authorized development-document setup/cleanup but does
+source hashes, state references and native conformance for all 25 cases before
+model trials. Preparation performs authorized test-document creation/trashing
+but does
 not start model sessions. Run commands from this linked worktree:
 
 ```bash
-uv run --locked python research/tool_consolidation/run_reduced_study.py prepare --output ARTIFACTS
+GDOCS_SCOPE_MCP_LIVE_TEST_FOLDER=1j5SqJ2Iu95te9-u_9y_A0DyLcPbOheWt uv run --locked python research/tool_consolidation/run_reduced_study.py prepare --output ARTIFACTS --previous-campaign PRIOR_ARTIFACTS
 uv run --locked python research/tool_consolidation/run_reduced_study.py pilot --output ARTIFACTS
-uv run --locked python research/tool_consolidation/run_reduced_study.py main --output ARTIFACTS
+GDOCS_SCOPE_MCP_LIVE_TEST_FOLDER=1j5SqJ2Iu95te9-u_9y_A0DyLcPbOheWt uv run --locked python research/tool_consolidation/run_reduced_study.py main --output ARTIFACTS
 uv run --locked python research/tool_consolidation/analyze_reduced_study.py --stage main --output ARTIFACTS
 ```
 
-Use one persistent owner-private artifact directory for the whole campaign.
+Use a separate persistent owner-private directory for the authorized restart,
+preserving the prior campaign. Its immutable ledger is bound by hash and count
+in the new manifest. Never use a new directory to reset cumulative spending.
 Each attempt is reserved once in `ledger.json`; failed attempts consume the
-same global cap and are not silently rerun. Never create a new campaign
-directory to evade that cap. The main stage is gated on finishing the pilot.
+same global cap and are not silently rerun. The main stage is gated on
+finishing the pilot. SIGINT/SIGTERM drain current jobs before exiting; they
+do not cancel actors or document cleanup in flight.
 The runner rejects changed source/manifests, interleaves paired variants,
 counterbalances catalog groups, enforces finite budgets, retains all traces,
 and stops new work on infrastructure failure. No unrelated document/file/
@@ -85,7 +92,7 @@ a separate post-hoc sensitivity report with:
 uv run --locked python research/tool_consolidation/analyze_reduced_study.py --stage main --output ARTIFACTS --m09-human-sensitivity
 ```
 
-This changes no model prompt, execution, raw trace or frozen primary grade.
+For the original cohort this changes no prompt, raw trace or primary grade.
 It does not relax status, target, post count or any other state invariant, and
 does not constitute a complete human audit.
 
@@ -101,4 +108,8 @@ uv run --locked python research/tool_consolidation/analyze_reduced_study.py --st
 Only the newly inserted paragraph at its gold target, or the new action post,
 can differ by one final period. Its style must match the preceding text.
 Protected paragraphs, literal markup, action/status, post count and replacement
-strings remain exact. This is a post-hoc sensitivity, not a new primary endpoint.
+strings remain exact. This remains a post-hoc sensitivity for the original
+cohort. The explicitly approved restart freezes the rule as its primary
+state grading before new inference and retains exact-state matching as a
+diagnostic. The observer snapshots initial/final state and every mutating call;
+read-only calls reuse the last observed state in each private job document.

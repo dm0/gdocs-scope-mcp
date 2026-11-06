@@ -22,6 +22,16 @@ DOCUMENTS = importlib.util.module_from_spec(DOCUMENTS_SPEC)
 DOCUMENTS_SPEC.loader.exec_module(DOCUMENTS)
 
 
+async def owned_thread_call(function, *args, **kwargs):
+    """Wait for confirmed creation or disposal even after cancellation."""
+    task = asyncio.create_task(asyncio.to_thread(function, *args, **kwargs))
+    try:
+        return await asyncio.shield(task)
+    except asyncio.CancelledError:
+        await task
+        raise
+
+
 def body_headings(outline):
     """Exclude the production reader's empty-ID preamble outline entry."""
     return [section for section in outline['sections'] if section['id']]
@@ -160,7 +170,7 @@ async def live_backend(case, variant, output, *, reference_mode=False):
               'started_at': time.time()}
     failed = True
     try:
-        created = await asyncio.to_thread(documents.create)
+        created = await owned_thread_call(documents.create)
         report['document_id'] = created['id']
         report['created_at'] = time.time()
         env = {**os.environ,
@@ -202,7 +212,7 @@ async def live_backend(case, variant, output, *, reference_mode=False):
             failed = False
     finally:
         try:
-            await asyncio.to_thread(documents.finish, failed=failed)
+            await owned_thread_call(documents.finish, failed=failed)
         finally:
             report.update(
                 documents=documents.documents, identities=identities,

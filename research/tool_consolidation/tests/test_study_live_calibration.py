@@ -13,7 +13,7 @@ from .test_study_corpus import execution, load_research, scenarios
 @pytest.mark.parametrize('case', scenarios.PILOT + scenarios.MAIN,
                          ids=lambda case: case['id'])
 def test_native_fixture_calibration(case, tmp_path, monkeypatch):
-    """Use the research context's own lock/reset rather than double-locking."""
+    """Use independent study-owned documents outside pytest's factory scope."""
     monkeypatch.setitem(sys.modules, 'study_execution', execution)
     live = load_research('study_live')
     if os.environ.get('GDOCS_SCOPE_MCP_LIVE_TEST_FOLDER') != (
