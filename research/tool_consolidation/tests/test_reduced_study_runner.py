@@ -11,9 +11,9 @@ from fastmcp import Client
 
 from gdocs_scope_mcp.tools import documents
 
+from .helpers import study_server
 from .test_codex_study_runtime import runtime
 from .test_study_corpus import execution, load_research, scenarios
-from .test_tool_consolidation import study_server
 
 
 @pytest.fixture

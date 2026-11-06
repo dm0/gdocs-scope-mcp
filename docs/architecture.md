@@ -206,6 +206,14 @@ feature. Unsupported input must fail before uploads or document mutations.
 
 ## Compatibility and validation
 
+Research code is outside the installed package. Each study owns a separate
+`research/<study>/` directory with its README, scripts, fixtures and `tests/`.
+Research tests run explicitly from the repository root and are excluded from
+the default product suite (`testpaths = ["tests"]`). Product behavior and
+transport contract tests remain under the root `tests/` directory. Studies use
+the root Python project and may reuse documented product/probe APIs without
+moving experiment-specific code into the production package.
+
 Preserve the MCP initialization instructions, registration order, names,
 descriptions, annotations, input/output schemas and structured failures.
 `tests/test_refactor_contracts.py` freezes the complete serialized catalog and

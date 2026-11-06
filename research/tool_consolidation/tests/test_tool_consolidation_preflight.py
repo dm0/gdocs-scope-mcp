@@ -9,8 +9,8 @@ from pathlib import Path
 import pytest
 from fastmcp import Client
 
+from .helpers import study_server
 from .test_codex_study_runtime import runtime
-from .test_tool_consolidation import study_server
 
 
 @pytest.fixture
@@ -18,7 +18,7 @@ def preflight(monkeypatch):
     """Load the research CLI without launching it or changing sys.path."""
     monkeypatch.setitem(sys.modules, 'codex_study_runtime', runtime)
     path = (Path(__file__).parents[1]
-            / 'research/tool_consolidation_preflight.py')
+            / 'tool_consolidation_preflight.py')
     spec = importlib.util.spec_from_file_location('study_preflight', path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

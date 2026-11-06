@@ -128,7 +128,7 @@ Keep the baseline default. Issue #59 remains open.
 Run from the assigned worktree, with its project environment:
 
 ```bash
-uv run --locked python research/tool_consolidation_preflight.py \
+uv run --locked python research/tool_consolidation/tool_consolidation_preflight.py \
   --output /tmp/gdocs-59-catalog-preflight-new
 ```
 

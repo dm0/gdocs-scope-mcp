@@ -13,7 +13,7 @@ from fastmcp.client.transports import StdioTransport
 
 from gdocs_scope_mcp.rich_text.parsing import markdown_to_html
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 BLOCKED_TOOLS = {
     'docs_list', 'docs_create', 'docs_authorize', 'docs_select_files',
     'docs_authorization_complete', 'docs_authorization_status',
@@ -193,7 +193,7 @@ async def fixture_backend(case, variant, output):
     path.write_text(json.dumps(case['fixture'], ensure_ascii=False, indent=2))
     transport = StdioTransport(
         command=sys.executable,
-        args=[str(ROOT / 'research/study_fixture_server.py')],
+        args=[str(Path(__file__).with_name('study_fixture_server.py'))],
         cwd=str(ROOT), env={
             **os.environ, 'GDOCS_STUDY_FIXTURE': str(path),
             'GDOCS_SCOPE_MCP_TOOL_INTERFACE_VARIANT': variant,

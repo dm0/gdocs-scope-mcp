@@ -10,7 +10,7 @@ import pytest
 
 pytest.importorskip('tomllib', reason='Research runner requires Python 3.11+')
 
-MODULE_PATH = Path(__file__).parents[1] / 'research/codex_study_runtime.py'
+MODULE_PATH = Path(__file__).parents[1] / 'codex_study_runtime.py'
 SPEC = importlib.util.spec_from_file_location(
     'codex_study_runtime', MODULE_PATH,
 )

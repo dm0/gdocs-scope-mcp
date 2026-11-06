@@ -44,7 +44,7 @@ PROMPT = (
 
 async def capture_catalog(variant, output):
     """Record the actual worktree STDIO contract without document access."""
-    root = Path(__file__).resolve().parents[1]
+    root = Path(__file__).resolve().parents[2]
     transport = StdioTransport(
         command=str(Path(sys.executable).parent / 'gdocs-scope-mcp'),
         args=[],

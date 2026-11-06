@@ -16,7 +16,7 @@ No increase beyond this cap is authorized by the original larger plan.
 The five pilot cases cover one scenario per stratum. Main-stage counts are six
 insertion, four comment status, four multi-step, three ambiguity/absent-target
 and three unchanged controls, with ten Russian and ten English requests.
-The corpus is `research/study_scenarios.py`; its pilot and main family labels
+The corpus is `research/tool_consolidation/study_scenarios.py`; its family labels
 and templates are disjoint. It does not cover every edge case in the larger
 design: tables/cells, uploads, chips and complex list insertion are outside
 this reduced corpus and cannot be generalized from these results.

@@ -10,7 +10,7 @@ import pytest
 
 def load_research(name):
     """Load a research module without changing the interpreter search path."""
-    path = Path(__file__).parents[1] / 'research' / (name + '.py')
+    path = Path(__file__).parents[1] / (name + '.py')
     spec = importlib.util.spec_from_file_location(name, path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

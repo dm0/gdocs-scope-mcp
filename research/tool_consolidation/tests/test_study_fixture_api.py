@@ -15,7 +15,7 @@ from gdocs_scope_mcp.tools import comments, documents, formatting
 
 SPEC = importlib.util.spec_from_file_location(
     'study_fixture_api', Path(__file__).parents[1]
-    / 'research/study_fixture_api.py',
+    / 'study_fixture_api.py',
 )
 fixture_api = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(fixture_api)

@@ -16,13 +16,13 @@ def test_fixture_stdio_round_trip(fixture_specification, tmp_path):  # noqa: F81
     """Check real tool validation, native state and server process cleanup."""
     path = tmp_path / 'fixture.json'
     path.write_text(json.dumps(fixture_specification))
-    root = Path(__file__).parents[1]
+    root = Path(__file__).parents[3]
 
     async def run():
         info = None
         transport = StdioTransport(
             command=sys.executable,
-            args=[str(root / 'research/study_fixture_server.py')],
+            args=[str(Path(__file__).parents[1] / 'study_fixture_server.py')],
             cwd=str(root), env={
                 **os.environ, 'GDOCS_STUDY_FIXTURE': str(path),
                 'GDOCS_SCOPE_MCP_TOOL_INTERFACE_VARIANT': 'both',
