@@ -5,6 +5,7 @@ import hashlib
 import json
 import random
 from collections import Counter, defaultdict
+from itertools import combinations
 from pathlib import Path
 from statistics import mean
 
@@ -30,7 +31,8 @@ def percentile(values, fraction):
     return values[lower] + (values[upper] - values[lower]) * (position - lower)
 
 
-def paired_effect(rows, cases, metric, contrast, models, *, draws=5000):
+def paired_effect(rows, cases, metric, contrast, models, *, draws=5000,
+                  weights=None):
     """Bootstrap whole scenario families with models and repeats paired."""
     blocks = defaultdict(dict)
     for row in rows:
@@ -48,9 +50,12 @@ def paired_effect(rows, cases, metric, contrast, models, *, draws=5000):
             for arm, weight in contrast.items()
         ))
     clusters = defaultdict(list)
+    weights = (dict.fromkeys(models, 1 / len(models)) if weights is None
+               else weights)
     for case in {key[0] for key in by_case_model}:
         if all((case, model) in by_case_model for model in models):
-            effect = mean(mean(by_case_model[case, model]) for model in models)
+            effect = sum(weights[model] * mean(by_case_model[case, model])
+                         for model in models)
             clusters[cases[case]['family']].append(effect)
     values = [mean(values) for values in clusters.values()]
     if not values:
@@ -81,6 +86,12 @@ def rate_summary(rows):
         'semantic_errors': sum(r.get('semantic_errors', 0) for r in graded),
         'unnecessary_clarifications': sum(
             r.get('unnecessary_clarification', False) for r in graded),
+        'domain_calls': sum(len(r.get('trace', [])) for r in rows),
+        'discovery_calls': sum(c['tool'] in {'docs_tabs_list', 'docs_get_tree'}
+                               for r in rows for c in r.get('trace', [])),
+        'content_read_calls': sum(c['tool'] in {'docs_read',
+                                               'docs_read_comments'}
+                                  for r in rows for c in r.get('trace', [])),
         'usage': dict(Counter({key: sum(r.get('usage', {}).get(key, 0)
                                        for r in rows)
                                for key in ('inputTokens',
@@ -148,7 +159,8 @@ def audit_packet(rows, cases):
             'id': identifier, 'request': case['request'],
             'level': row['level'],
             'scripted_user_reply': case['clarification'],
-            'messages': [m for t in row['turns'] for m in t['messages']],
+            'messages': [neutral_text(m) for t in row['turns']
+                         for m in t['messages']],
             'actions': [neutral_call(call) for call in row['trace']],
             'review_questions': [
                 'Was the clarification necessary and specific enough?',
@@ -158,6 +170,16 @@ def audit_packet(rows, cases):
         })
         key[identifier] = {'run': row['id'], 'selection_category': category}
     return packet, key
+
+
+def neutral_text(text):
+    """Hide interface names that appear in a model's natural-language reply."""
+    for name in ('docs_insert_before', 'docs_insert_after', 'docs_append',
+                 'docs_insert', 'docs_resolve_comment', 'docs_reopen_comment',
+                 'docs_comment_status'):
+        operation = ('comment_status' if 'comment' in name else 'insert_text')
+        text = text.replace(name, operation)
+    return text
 
 
 def analyze(directory, stage, draws=5000):
@@ -180,6 +202,7 @@ def analyze(directory, stage, draws=5000):
         'scheduled': len(manifest['schedules'][stage]),
         'reserved_attempts': len(attempts), 'missing_results': missing,
         'overall': rate_summary(rows), 'groups': {}, 'paired_effects': {},
+        'treatment_by_model': {},
         'limitations': [
             'Machine grades are provisional pending blinded human review.',
             'Clarification semantics are not validated by decision tags.',
@@ -217,6 +240,14 @@ def analyze(directory, stage, draws=5000):
                              for name, contrast in CONTRASTS.items()}
                     for metric in METRICS
                 }
+        subset = [r for r in rows if r['level'] == level]
+        for left, right in combinations(manifest['models'], 2):
+            report['treatment_by_model'][f'{level}/{left}-{right}'] = {
+                metric: paired_effect(
+                    subset, cases, metric, CONTRASTS['D-A'], [left, right],
+                    draws=draws, weights={left: 1, right: -1},
+                ) for metric in METRICS
+            }
     packet, key = audit_packet(rows, cases)
     output = directory / 'analysis'
     output.mkdir(exist_ok=True, mode=0o700)

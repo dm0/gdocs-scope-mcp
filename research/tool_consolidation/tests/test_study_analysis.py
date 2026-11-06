@@ -28,6 +28,12 @@ def test_pairing_excludes_incomplete_blocks_and_weights_models_equally():
     assert result['complete_four_arm_blocks'] == 3  # noqa: PLR2004
     assert result['ci95'] == [1, 1]
     assert result['degenerate_interval']
+    interaction = analysis.paired_effect(
+        rows, {'c1': {'family': 'f1'}, 'c2': {'family': 'f2'}},
+        'first_action_correct', analysis.CONTRASTS['D-A'],
+        ['small', 'large'], draws=50, weights={'small': 1, 'large': -1},
+    )
+    assert interaction['estimate'] == 0
 
 
 def test_infrastructure_is_not_a_model_failure():
@@ -51,3 +57,5 @@ def test_semantic_calls_hide_treatment_names():
         'arguments': {'doc_id': 'd', 'text': 'x',
                       'target': {'position': 'before', 'anchor': 'a'}},
     })
+    assert analysis.neutral_text('Used docs_insert_before safely') == (
+        'Used insert_text safely')
