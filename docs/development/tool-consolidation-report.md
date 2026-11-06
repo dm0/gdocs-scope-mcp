@@ -286,3 +286,14 @@ so an identical protected paragraph elsewhere cannot be normalized. A paragraph
 period must retain the preceding text's style; other literal characters,
 formatting, scope, status and post counts remain strict. Replacement strings
 are outside this rule. The model prompts, execution and raw traces are unchanged.
+
+The completed pilot's broader sensitivity has the same six unsuccessful
+outcomes as the frozen grades. After adding adjudication checks, the isolated
+research suite passed **89 passed, 5 deselected** in 59.82 seconds
+(`/tmp/gdocs-59-research-post-adjudication.log`). The 28 corpus checks execute
+all four production catalogs and validate every allowed insertion position;
+negative checks preserve duplicate protected paragraphs, literal characters,
+style boundaries, action/status and post counts. Read-only validation against
+all five saved native-reference trajectories also passed. Global Ruff and
+explicit research-test lint passed. No new model sessions were used for these
+analysis checks.
