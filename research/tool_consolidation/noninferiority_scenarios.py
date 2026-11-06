@@ -62,6 +62,9 @@ def corpus():
                 if call['tool'].startswith(('docs_insert', 'docs_append')):
                     if 'rich' not in call['arguments']:
                         call['arguments']['rich'] = bool(rng.getrandbits(1))
+                    # Keep the RNG stream stable, but honor explicit bold text.
+                    if template['id'] == 'm04':
+                        call['arguments']['rich'] = True
                     if template['id'] in {'m05', 'm16'} and instance == 0:
                         call['arguments']['rich'] = False
             if case['answer_contains']:

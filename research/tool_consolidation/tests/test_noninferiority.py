@@ -4,11 +4,17 @@ import asyncio
 import json
 import sys
 from collections import Counter
+from copy import deepcopy
 
 import pytest
 
 from .test_reduced_study_runner import runner  # noqa: F401
-from .test_study_corpus import execution, load_research, scenarios
+from .test_study_corpus import (
+    adjudication,
+    execution,
+    load_research,
+    scenarios,
+)
 
 
 @pytest.fixture
@@ -56,6 +62,40 @@ def test_corpus_and_matched_schedule(modules):
         if case['answer_contains']:
             assert case['answer_contains'] in json.dumps(case['fixture'])
             assert case['answer_heading_id']
+
+
+def test_bold_request_gold_and_regrade(modules, tmp_path):
+    """Every bold request renders bold; literal stars remain a wrong result."""
+    generator, _controller, _analysis = modules
+
+    async def check():
+        for case in generator.corpus():
+            if case['template'] != 'm04':
+                continue
+            assert case['oracle'][0]['arguments']['rich'] is True
+            reference = await execution.reference_states(
+                case, 'baseline', tmp_path / case['id'],
+            )
+            states = reference['states']
+            target = case['oracle'][0]['arguments']['tab_id']
+            paragraph = next(t for t in states[-1]['tabs']
+                             if t['id'] == target)['paragraphs'][-1]
+            assert '**' not in adjudication.paragraph_text(paragraph)
+            assert all(style.get('bold') for char, style in
+                       paragraph['characters'] if char != '\n')
+            row = {'status': 'completed', 'level': 'end_to_end',
+                   'trace': [], 'final_state': states[-1],
+                   'schema_errors': 0, 'unnecessary_clarification': False}
+            assert adjudication.regrade(row, case, states)['final_success']
+            wrong = deepcopy(case)
+            wrong['oracle'][0]['arguments']['rich'] = False
+            literal = await execution.reference_states(
+                wrong, 'baseline', tmp_path / (case['id'] + '-literal'),
+            )
+            row['final_state'] = literal['states'][-1]
+            assert not adjudication.regrade(row, case, states)['final_success']
+
+    asyncio.run(check())
 
 
 def test_exact_gate_does_not_accept_missing_or_harmful_pairs(modules):
