@@ -19,6 +19,7 @@ def load_research(name):
 
 scenarios = load_research('study_scenarios')
 execution = load_research('study_execution')
+adjudication = load_research('terminal_period_adjudication')
 
 
 def test_reduced_corpus_composition():
@@ -55,6 +56,11 @@ def test_reference_state_parity_in_all_catalogs(case, tmp_path):
         return references[0]['states']
     states = asyncio.run(run())
     assert len(states) == len(case['oracle']) + 1
+    allowed = adjudication.permissions(case, states)
+    assert len(allowed) == len(states)
+    for call in case['oracle']:
+        if call['tool'] in adjudication.INSERT_TOOLS:
+            assert len(allowed[-1][0]) == 1
     if not case['oracle']:
         assert states[0] == states[-1]
 

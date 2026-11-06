@@ -267,7 +267,8 @@ def m09_sensitivity(row, reference):
     return row
 
 
-def analyze(directory, stage, draws=5000, *, human_sensitivity=False):
+def analyze(directory, stage, draws=5000, *, human_sensitivity=False,
+            terminal_periods=False):
     """Analyze a complete or partial stage without imputing missing trials."""
     manifest = json.loads((directory / 'manifest.json').read_text())
     ledger = json.loads((directory / 'ledger.json').read_text())
@@ -282,7 +283,34 @@ def analyze(directory, stage, draws=5000, *, human_sensitivity=False):
         else:
             missing.append(attempt['id'])
     adjudication = None
+    sensitivity_source = None
     label = stage
+    if human_sensitivity and terminal_periods:
+        raise ValueError('Select only one sensitivity analysis')
+    if terminal_periods:
+        import terminal_period_adjudication as periods  # noqa: PLC0415
+        adjudication = json.loads((
+            Path(__file__).parent / 'adjudications'
+            / 'unquoted-terminal-periods.json'
+        ).read_text())
+        if (adjudication['reviewer'] != 'user'
+                or adjudication['dataset_hashes']
+                != manifest['dataset_hashes']):
+            raise ValueError('Adjudication belongs to another corpus')
+        reviewed = []
+        for row in rows:
+            reference = manifest['references'][row['case']]['states']
+            if row['backend'] == 'live':
+                reference = json.loads((directory / 'live-references'
+                                        / (row['case'] + '.json'))
+                                       .read_text())['states']
+            reviewed.append(periods.regrade(
+                row, cases[row['case']], reference,
+            ))
+        rows = reviewed
+        sensitivity_source = hashlib.sha256(
+            Path(periods.__file__).read_bytes()).hexdigest()
+        label += '-terminal-period-sensitivity'
     if human_sensitivity:
         if stage != 'main':
             raise ValueError('The m09 adjudication applies only to main')
@@ -312,6 +340,7 @@ def analyze(directory, stage, draws=5000, *, human_sensitivity=False):
         'overall': rate_summary(rows), 'groups': {}, 'paired_effects': {},
         'treatment_by_model': {},
         'human_adjudication': adjudication,
+        'sensitivity_source_sha256': sensitivity_source,
         'error_taxonomy': {
             'omitted_required_tool': sum(
                 r['status'] == 'completed' and not r.get('trace')
@@ -385,9 +414,12 @@ def main():
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--stage', choices=['pilot', 'main'], required=True)
     parser.add_argument('--m09-human-sensitivity', action='store_true')
+    parser.add_argument('--terminal-period-human-sensitivity',
+                        action='store_true')
     args = parser.parse_args()
     report = analyze(args.output, args.stage,
-                     human_sensitivity=args.m09_human_sensitivity)
+                     human_sensitivity=args.m09_human_sensitivity,
+                     terminal_periods=args.terminal_period_human_sensitivity)
     print(json.dumps({key: report[key] for key in (
         'stage', 'scheduled', 'reserved_attempts', 'missing_results',
         'overall',

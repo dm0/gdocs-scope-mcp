@@ -276,3 +276,13 @@ primary results and report a separately labeled post-hoc sensitivity using
 hash and relaxes only that action-post text; every other target, status,
 post-count, content and style invariant remains enforced. This single intent
 adjudication does not replace the pending blinded trace audit.
+
+After the same unquoted-punctuation ambiguity appeared in m03, the user
+extended the rule to every unquoted inserted paragraph and comment action text
+in this corpus. The broader `--terminal-period-human-sensitivity` output is
+reported separately from the frozen grades and bound to both corpus hashes.
+Permissions attach to the gold insertion position or new action-post index,
+so an identical protected paragraph elsewhere cannot be normalized. A paragraph
+period must retain the preceding text's style; other literal characters,
+formatting, scope, status and post counts remain strict. Replacement strings
+are outside this rule. The model prompts, execution and raw traces are unchanged.

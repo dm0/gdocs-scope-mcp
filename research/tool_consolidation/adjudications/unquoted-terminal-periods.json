@@ -1,0 +1,13 @@
+{
+  "id": "unquoted-terminal-periods-2026-11-06",
+  "reviewer": "user",
+  "decision": "Accept an optional terminal period for every unquoted inserted paragraph or comment action text",
+  "dataset_hashes": {
+    "pilot": "cbe0607760752a28defd0d033500ba1090af05e9daf5a2642960fcd45b7fbee6",
+    "main": "50b509596af9632ef54c5c907dafbf0ccebe152eced31471de55654a42392afb"
+  },
+  "scope": "Only newly inserted paragraphs and comment action posts; preserve all other characters, styles, targets, positions, statuses and post counts. Replacement strings remain exact.",
+  "period_style": "An optional paragraph period must have the same style as the preceding text",
+  "analysis_role": "Post-hoc human-adjudicated sensitivity; preserve frozen primary grades and raw traces",
+  "review_limit": "This intent rule does not constitute a complete blinded trace audit"
+}

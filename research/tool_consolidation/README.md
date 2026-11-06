@@ -88,3 +88,17 @@ uv run --locked python research/tool_consolidation/analyze_reduced_study.py --st
 This changes no model prompt, execution, raw trace or frozen primary grade.
 It does not relax status, target, post count or any other state invariant, and
 does not constitute a complete human audit.
+
+The user subsequently extended the rule to all unquoted inserted paragraphs
+and comment action text in this corpus. The corpus-bound decision is recorded
+in `adjudications/unquoted-terminal-periods.json`. Report that broader
+sensitivity separately for either stage:
+
+```bash
+uv run --locked python research/tool_consolidation/analyze_reduced_study.py --stage main --output ARTIFACTS --terminal-period-human-sensitivity
+```
+
+Only the newly inserted paragraph at its gold target, or the new action post,
+can differ by one final period. Its style must match the preceding text.
+Protected paragraphs, literal markup, action/status, post count and replacement
+strings remain exact. This is a post-hoc sensitivity, not a new primary endpoint.
