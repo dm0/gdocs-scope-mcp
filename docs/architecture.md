@@ -217,7 +217,10 @@ fingerprinting and setuptools package discovery must include every subpackage.
 Run affected tests after each extraction and the complete offline suite before
 delivery. Run global Ruff and `git diff --check`. Verify isolated STDIO
 discovery and worktree identity, then existing opt-in live regressions only
-against the explicitly authorized development document. Respect each fixture's
+in the explicitly authorized test folder, using a unique document per test.
+`tests/live_document_state.py` owns test document creation, folder placement,
+verified trashing and optional failure retention; `tests/conftest.py` owns
+pytest lifecycle integration and the mandatory folder opt-in. Respect fixtures'
 retention/restoration contract, disable optional manual UI waits, inspect stderr
 and verify upload/subprocess cleanup. Keep logs outside tracked source. Build
 wheel and sdist, inspect package inclusion and verify both installed entry

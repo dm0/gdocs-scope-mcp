@@ -378,4 +378,9 @@ Set `GDOCS_SCOPE_MCP_LOG_LEVEL` to `DEBUG`, `INFO` (default), `WARNING`, `ERROR`
 
 ## Live-test target
 
-`GDOCS_SCOPE_MCP_LIVE_TEST_DOC` enables live tests and selects their Google Doc ID. It is a test-run setting, not an MCP tool argument or ordinary server setting. See [live verification](development.md#live-verification).
+`GDOCS_SCOPE_MCP_LIVE_TEST_FOLDER` enables live tests and selects the folder for
+uniquely named, per-test disposable documents. Without it, live tests skip.
+`GDOCS_SCOPE_MCP_LIVE_KEEP_ON_FAILURE=1` retains documents after test failures;
+otherwise the fixture moves them to trash. These are test-run settings, not
+MCP tool arguments or ordinary server settings.
+See [live verification](development.md#live-verification).
