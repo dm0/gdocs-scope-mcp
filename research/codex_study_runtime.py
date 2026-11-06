@@ -18,12 +18,17 @@ import tomllib
 
 MODELS = ('gpt-6-luna', 'gpt-6.1-sol', 'gpt-6-astra')
 MAX_EVENTS = 10000
+MAX_OUTPUT_TOKENS = 4096
 DISABLED_FEATURES = (
     'shell_tool', 'apps', 'plugins', 'multi_agent', 'browser_use',
     'computer_use', 'in_app_browser', 'image_generation', 'memories',
     'view_image', 'sleep_tool', 'code_mode', 'code_mode_only',
     'hooks', 'shell_snapshot',
 )
+
+
+class StudyAgentError(RuntimeError):
+    """Distinguish model errors and budgets from infrastructure failures."""
 
 
 def isolated_command():
@@ -56,6 +61,7 @@ class StudyClient:
         self.sequence = 0
         self.events = []
         self.process_reaped = False
+        self.current_calls = []
 
     async def send(self, message):
         """Write one JSON-RPC message without shell interpolation."""
@@ -130,7 +136,7 @@ class StudyClient:
         if output_schema is not None:
             params['outputSchema'] = output_schema
         await self.request('turn/start', params)
-        calls = []
+        calls = self.current_calls = []
         messages = []
         # A wall-clock deadline complements each infrastructure read timeout.
         async with asyncio.timeout(self.timeout):
@@ -142,7 +148,9 @@ class StudyClient:
                     calls.append({'tool': params['tool'],
                                   'arguments': params['arguments']})
                     if len(calls) > action_limit:
-                        raise RuntimeError('Semantic-action budget exhausted')
+                        raise StudyAgentError(
+                            'Semantic-action budget exhausted',
+                        )
                     result = await handler(calls[-1])
                     calls[-1]['result'] = result
                     await self.send({'id': event['id'], 'result': {
@@ -156,7 +164,13 @@ class StudyClient:
                         'code': -32601,
                         'message': 'Only study dynamic-tool calls are enabled',
                     }})
-                    raise RuntimeError('Unexpected study request: ' + method)
+                    raise StudyAgentError(
+                        'Unexpected study request: ' + method,
+                    )
+                elif method == 'thread/tokenUsage/updated':
+                    usage = params['tokenUsage']['total']
+                    if usage.get('outputTokens', 0) > MAX_OUTPUT_TOKENS:
+                        raise StudyAgentError('Output-token budget exhausted')
                 elif method == 'item/completed':
                     item = params.get('item', {})
                     if item.get('type') == 'agentMessage':

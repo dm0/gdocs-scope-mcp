@@ -5,6 +5,41 @@ evaluation results have been collected. See the
 [implementation and validation report](tool-consolidation-report.md).
 Date: 2026-11-05.
 
+## Active resource-bounded Study 1 profile (approved 2026-11-06)
+
+The user explicitly replaced Study 1's initial sample-size plan below with a
+maximum of **1080 new model sessions**: five pilot scenarios x three approved
+models x four variants x one repeat x two levels = 120; twenty held-out
+scenarios x three models x four variants x two repeats x two levels = 960.
+No increase beyond this cap is authorized by the original larger plan.
+
+The five pilot cases cover one scenario per stratum. Main-stage counts are six
+insertion, four comment status, four multi-step, three ambiguity/absent-target
+and three unchanged controls, with ten Russian and ten English requests.
+The corpus is `research/study_scenarios.py`; its pilot and main family labels
+and templates are disjoint. It does not cover every edge case in the larger
+design: tables/cells, uploads, chips and complex list insertion are outside
+this reduced corpus and cannot be generalized from these results.
+
+All other controls below remain applicable. Freeze corpus, runtime, catalog,
+execution budgets and grading hashes before pilot model trials. Count failed
+model-session attempts against the cap; preserve them and do not silently
+replace them. Earlier access checks and the twelve-chat infrastructure preflight
+are separate, already-completed engineering checks and must be reported as such.
+Any live model confirmation sessions must be selected within the 960-session
+main schedule, not added on top. The predeclared live subset is main scenarios
+m01, m08, m11, m15 and m20, end-to-end level, second repeat, all models/variants:
+60 native confirmation sessions, serialized under the development-Doc lock.
+
+Five pilot cases are an execution/feasibility check, not a reliable power
+estimate. Twenty independent main scenarios provide preliminary evidence.
+Preserve the original effect and safety decision criteria, report paired
+intervals and their small-sample limits, and keep baseline when evidence is
+insufficient. More repeats cannot substitute for independent scenarios. Do
+not increase the scenario count after observing outcomes. Retain a blinded
+audit packet for ambiguous intent and sampled successes/failures; do not claim
+human review before a human has actually reviewed it.
+
 [Development](../development.md) · [Implementation notes](implementation-notes.md)
 
 ## Purpose and required deliverables

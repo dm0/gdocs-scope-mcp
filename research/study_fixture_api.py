@@ -60,17 +60,32 @@ class FixtureAPI:
             self.tabs.append({'id': tab['id'], 'title': tab['title'],
                               'index': number, 'chars': chars})
         self.comments = []
+        self.anchor_specs = {}
         for number, thread in enumerate(specification.get('comments', [])):
+            anchor_tab = specification['tabs'][0]
+            anchor_paragraph = next((p for p in anchor_tab['paragraphs']
+                                     if not p.get('heading_id')),
+                                    anchor_tab['paragraphs'][0])
+            quote = thread.get('quote') or anchor_paragraph['text']
+            anchor_id = 'a' + str(number)
+            self.anchor_specs[anchor_id] = (anchor_tab['id'], quote)
+            initial_replies = []
+            if thread.get('resolved'):
+                initial_replies.append({
+                    'postId': 'initial-resolve-' + str(number),
+                    'commentAction': 'RESOLVE',
+                    'author': {'displayName': 'Study author', 'me': True},
+                })
             self.comments.append({
-                'commentId': thread['id'], 'anchorId': 'a' + str(number),
-                'plainTextQuote': thread.get('quote', ''),
+                'commentId': thread['id'], 'anchorId': anchor_id,
+                'plainTextQuote': quote,
                 'status': 'RESOLVED' if thread.get('resolved') else 'OPEN',
                 'headPost': {'postId': 'head-' + str(number),
                              'content': thread['text'],
                              'author': {'displayName': 'Study author',
                                         'me': True},
                              'createTime': '2026-11-06T00:00:00Z'},
-                'replies': [],
+                'replies': initial_replies,
             })
 
     def documents(self):
@@ -114,6 +129,18 @@ class FixtureAPI:
                 'documentTab': {'body': {'content': content},
                                 'lists': {}, 'inlineObjects': {}},
             })
+            anchors = {}
+            text = ''.join(char['char'] for char in chars)
+            for anchor_id, (tab_id, quote) in self.anchor_specs.items():
+                offset = text.find(quote)
+                if tab_id == tab['id'] and offset >= 0:
+                    start_index = 1 + utf16_length(text[:offset])
+                    anchors[anchor_id] = {'ranges': [{
+                        'startIndex': start_index,
+                        'endIndex': start_index + utf16_length(quote),
+                    }]}
+            if anchors:
+                tabs[-1]['documentTab']['commentAnchors'] = anchors
         return {'documentId': self.document_id, 'title': self.title,
                 'revisionId': 'r' + str(self.revision), 'tabs': tabs,
                 'comments': deepcopy(self.comments)}
