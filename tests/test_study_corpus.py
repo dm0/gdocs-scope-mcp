@@ -73,3 +73,25 @@ def test_projection_keeps_protected_styles_and_comment_actions():
     snapshot = api.snapshot()
     snapshot['tabs'][0]['documentTab']['body']['content'].append({'table': {}})
     assert execution.canonical(snapshot) != before
+
+
+def test_equivalent_subtree_boundary_trajectory(tmp_path):
+    """Accept an equivalent safe anchor rather than requiring one tool name."""
+    case = next(case for case in scenarios.MAIN if case['id'] == 'm05')
+
+    async def run():
+        expected = await execution.reference_states(
+            case, 'baseline', tmp_path / 'reference',
+        )
+        async with execution.fixture_backend(
+            case, 'baseline', tmp_path / 'alternative',
+        ) as (backend, _info):
+            receipt = await backend.call({
+                'tool': 'docs_insert_after', 'arguments': {
+                    'doc_id': 'study_fixture', 'heading_id': 'h.exercises',
+                    'anchor': 'Solution', 'text': 'Practice complete',
+                },
+            })
+            assert receipt.get('ok') is not False
+            assert await backend.state() == expected['states'][-1]
+    asyncio.run(run())

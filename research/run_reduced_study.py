@@ -36,6 +36,7 @@ EXECUTION_SOURCES = (
     'codex_study_runtime.py', 'tool_consolidation_preflight.py',
     'study_scenarios.py', 'study_fixture_api.py', 'study_fixture_server.py',
     'study_execution.py', 'study_live.py', 'run_reduced_study.py',
+    '../tests/probes/table_server.py', '../tests/live_document_state.py',
 )
 READ_TOOLS = {
     'docs_get_tree', 'docs_read', 'docs_read_comments', 'docs_tabs_list',

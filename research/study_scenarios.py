@@ -218,14 +218,15 @@ MAIN = [
              [operation('docs_insert_before', heading_id='h.beta',
                         anchor='Status pending', text='Approved')],
              clarification='Use the Beta section.', decision='clarify'),
-    scenario('m16', 'ambiguity', 'duplicate-tab-titles', 'ru',
-             'Добавь абзац Review complete в конец вкладки Review. Если '
-             'название не определяет вкладку однозначно, сначала уточни.',
-             [tab('t.first', 'Review', 'First review'),
-              tab('t.second', 'Review', 'Second review')],
-             [operation('docs_append', tab_id='t.second',
-                        text='Review complete')],
-             clarification='Нужна вторая вкладка Review, t.second.',
+    scenario('m16', 'ambiguity', 'heading-versus-body-boundary', 'ru',
+             'Добавь абзац Review complete после Reviews. Если неочевидно, '
+             'имеется в виду раздел или обычный абзац, сначала уточни.',
+             [tab('t.main', 'Review notes', heading('Reviews', 'h.reviews'),
+                  'Primary findings', heading('Details', 'h.details', 'HEADING_2'),
+                  'Supplement', heading('Notes', 'h.notes'), 'Reviews')],
+             [operation('docs_insert_at_heading', heading_id='h.reviews',
+                        position='after_subtree', text='Review complete')],
+             clarification='После всего раздела Reviews вместе с вложенным Details.',
              decision='clarify'),
     scenario('m17', 'ambiguity', 'absent-optional-archive-target', 'en',
              'If there is an Archived heading, insert Archive verified after '

@@ -45,6 +45,10 @@ class FixtureAPI:
         self.document_id = specification.get('document_id', 'study_fixture')
         self.title = specification.get('title', 'Study fixture')
         self.revision = 0
+        if len({tab['title'] for tab in specification['tabs']}) != len(
+            specification['tabs']
+        ):
+            raise ValueError('Google Docs requires unique tab titles')
         self.tabs = []
         for number, tab in enumerate(specification['tabs']):
             chars = []

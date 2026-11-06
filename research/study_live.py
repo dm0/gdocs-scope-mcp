@@ -8,6 +8,7 @@ import importlib.util
 import json
 import os
 import sys
+import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -61,7 +62,8 @@ class LiveBackend(FixtureBackend):
             },
         })
         if not result['accepted']:
-            raise RuntimeError('Native fixture setup batch was rejected')
+            raise RuntimeError('Native fixture setup batch was rejected: '
+                               + json.dumps(result))
         return result['response']
 
     def actual_call(self, call, variant):
@@ -85,16 +87,24 @@ class LiveBackend(FixtureBackend):
     async def seed(self, fixture):
         """Create synthetic tabs, headings and comments without direct APIs."""
         original = (await self.snapshot())['tabs'][0]['tabProperties']['tabId']
-        created = await self.batch([{'addDocumentTab': {'tabProperties': {
-            'title': tab['title'],
-        }}} for tab in fixture['tabs']])
-        native_tabs = [reply['addDocumentTab']['tabProperties']['tabId']
-                       for reply in created['replies']]
+        temporary = await self.batch([{'addDocumentTab': {'tabProperties': {
+            'title': 'Study setup ' + uuid.uuid4().hex, 'index': 1,
+        }}}])
+        temporary_id = temporary['replies'][0]['addDocumentTab'][
+            'tabProperties']['tabId']
+        await self.batch([{'deleteTab': {'tabId': original}}])
+        native_tabs = []
+        for index, tab in enumerate(fixture['tabs'], start=1):
+            created = await self.batch([{'addDocumentTab': {'tabProperties': {
+                'title': tab['title'], 'index': index,
+            }}}])
+            native_tabs.append(created['replies'][0]['addDocumentTab'][
+                'tabProperties']['tabId'])
+        await self.batch([{'deleteTab': {'tabId': temporary_id}}])
         self.aliases['tabs'] = {
             native: tab['id'] for native, tab
             in zip(native_tabs, fixture['tabs'], strict=True)
         }
-        await self.batch([{'deleteTab': {'tabId': original}}])
         for native_id, tab in zip(native_tabs, fixture['tabs'], strict=True):
             markup = []
             for paragraph in tab['paragraphs']:

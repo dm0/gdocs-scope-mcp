@@ -77,6 +77,8 @@ def canonical(native, *, aliases=None, semantic=False, strip_seed_blank=False):
                 continue
             paragraph = item['paragraph']
             style = deepcopy(paragraph.get('paragraphStyle', {}))
+            if style.get('namedStyleType', 'NORMAL_TEXT') == 'NORMAL_TEXT':
+                style.pop('headingId', None)
             if 'headingId' in style:
                 style['headingId'] = aliases.get('headings', {}).get(
                     style['headingId'], style['headingId'],

@@ -60,6 +60,14 @@ def test_utf16_atomicity_and_revision(fixture_specification):
                    'writeControl': {'requiredRevisionId': 'stale'}})
 
 
+def test_duplicate_tab_titles_are_rejected(fixture_specification):
+    """Match the title uniqueness enforced by actual native tab creation."""
+    fixture_specification['tabs'][1]['title'] = (
+        fixture_specification['tabs'][0]['title'])
+    with pytest.raises(ValueError, match='unique tab titles'):
+        fixture_api.FixtureAPI(fixture_specification)
+
+
 @pytest.mark.parametrize('variant', ['baseline', 'both'])
 def test_production_reads_writes_and_comment_status(
     fixture_specification, monkeypatch, variant,
