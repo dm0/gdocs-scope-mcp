@@ -1,7 +1,8 @@
 # Tool consolidation study (#59)
 
 All experiment scripts, synthetic fixtures and research-only tests for this
-study live here. Reports remain under `docs/development/`. Run commands from
+study live here, including the [study report](REPORT.md). Product implementation
+documentation remains under `docs/development/`. Run commands from
 the repository root using its Python project and worktree environment.
 
 Run the research checks separately from the default product suite:

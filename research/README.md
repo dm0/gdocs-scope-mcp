@@ -8,8 +8,8 @@ Run study commands explicitly from the repository root using the root Python
 project and this checkout's environment. The default pytest run discovers only
 the root `tests/` directory. Research model inference is an explicit command,
 never an automatic test side effect. Keep generated logs, traces and datasets
-outside tracked source. Reports and implementation documentation belong under
-`docs/`.
+outside tracked source. Keep study-specific reports with their study; product
+implementation documentation and shared design references belong under `docs/`.
 
 | Study | Scope |
 | --- | --- |
