@@ -59,7 +59,7 @@ server defaults. Theme/background nulls inherit their server defaults.
 
 `docs_search_replace`, `docs_batch_replace`, `docs_delete_paragraph`,
 `docs_append`, `docs_insert_before`, `docs_insert_after` and
-`docs_insert_at_heading` accept optional
+`docs_insert_at_heading`, `docs_format_text` and `docs_format_paragraph` accept optional
 `expected_revision_id`. Omitting it uses the configured write policy;
 providing it requires that exact revision and disables rebasing. Native
 single-tool replace-all (`occurrence=0`) rejects this parameter.

@@ -157,6 +157,7 @@ and edit positions.
 | [Comment tools](docs/tools/comments.md) | Native anchored comments, replies, editing and resolution |
 | [Suggestions](docs/tools/suggestions.md) | Accepted-content views, proposal creation, inspection and decisions |
 | [Rich content](docs/rich-content.md) | Markdown/HTML, lists, images, code and smart chips |
+| [Colors and highlights](docs/colors.md) | Google palette, text colors, paragraph fills and resets |
 | [MCP result contracts](docs/protocol.md) | Structured results, errors, annotations, receipts and pagination |
 | [Development](docs/development.md) | Local setup, testing, FastMCP CLI, diagnostics and logging |
 | [Implementation notes](docs/development/implementation-notes.md) | Internal design, concurrency, table references and API research |

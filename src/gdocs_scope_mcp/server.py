@@ -109,8 +109,9 @@ SUGGESTIONS:
     editing tools still perform direct edits from native inline coordinates.
     Preview coordinates must never drive a write. Pending structural changes
     may prevent safe table references; inspect suggestions.warnings when an
-    HTML table lacks data-mcp-table-ref. Proposal-writing tools are separate
-    future work; this reading tool performs no mutations.
+    HTML table lacks data-mcp-table-ref. Use docs_suggest to create supported
+    text/formatting proposals and docs_suggestions_manage to accept, reject
+    or delete explicit proposal IDs. Suggestion reads perform no mutations.
 
 CONCURRENT EDITS:
     Server setting write_revision_mode selects required (default) or target.
@@ -186,7 +187,7 @@ EDITING TOOLS:
     Smart chips are inline HTML spans in docs_read:
     <span data-mcp-entity="person" data-mcp-id="..."
     data-mcp-email="alice@example.com">Alice</span>.
-    All three rich insertion tools recreate native chips from these spans;
+    All four rich insertion tools recreate native chips from these spans;
     data-mcp-id is not reused. Supported kinds/properties are person/email,
     richLink/URI, dateElement/timestamp and dropdown/definition+option IDs.
     The HTML attributes are data-mcp-email, data-mcp-uri, data-mcp-timestamp,
@@ -227,8 +228,8 @@ EDITING TOOLS:
     Alt/title are not native metadata. Receipts expose
     inserted_image_count and U+FFFC image placeholders in text/counts.
     Local images require upload_local_images=True. This explicitly permits
-    temporary My Drive root files and anyone-with-link reader access; sources
-    are deleted after insertion. Check temporary_image_cleanup_pending for
+    temporary My Drive root files and anyone-with-link reader access; source
+    deletion is attempted afterward. Check temporary_image_cleanup_pending for
     failed deletions. Do not repeat a successful insertion to clean them up.
     Inline code and fenced/indented code blocks, including HTML code/pre, use
     Roboto Mono by default; inline code defaults to green #188038. The server
@@ -236,7 +237,7 @@ EDITING TOOLS:
     breaks, blank lines and indentation;
     declared languages use Pygments highlighting with the configurable default
     theme. Unknown/absent languages stay plain monospace. Blocks default to
-    line spacing 1.0 with theme backgrounds off; both are configurable.
+    line spacing 1.15 with theme backgrounds off; both are configurable.
     Inline code is unaffected by block layout settings and works in list items;
     code blocks inside list items fail before writes.
     Optional code_block_style and code_block_theme_background override code

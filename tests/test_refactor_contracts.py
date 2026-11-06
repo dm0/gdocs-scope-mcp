@@ -36,9 +36,10 @@ def test_complete_mcp_contract():
 
     data = asyncio.run(capture())
     encoded = json.dumps(data, sort_keys=True, ensure_ascii=False).encode()
-    # #55 adds palette discovery, anchored formatting and color guidance.
+    # #55 adds color tools; 0.8.0 corrects stale caller-facing guidance for
+    # existing suggestions, insertion tools, code spacing and image cleanup.
     assert hashlib.sha256(encoded).hexdigest() == (
-        'e6f03a5e7f95767885db0f6886814d4360cf93016ef7bca859a184c891992c10'
+        '613dceb5bba5e10fe1f12d9b45875f2f6bb6ff8c8e47a494735b0109f3e070b1'
     )
 
 
