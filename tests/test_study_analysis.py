@@ -1,0 +1,53 @@
+"""Check pairing, missing-data handling and treatment blinding."""
+
+from .test_study_corpus import load_research
+
+analysis = load_research('analyze_reduced_study')
+
+
+def row(case, model, repeat, arm, success):
+    """Build an outcome with an explicit paired-block identity."""
+    return {'case': case, 'model': model, 'repeat': repeat,
+            'variant': arm, 'status': 'completed',
+            'first_action_correct': success}
+
+
+def test_pairing_excludes_incomplete_blocks_and_weights_models_equally():
+    """Extra repeats and a missing arm cannot distort paired contrasts."""
+    rows = [row('c1', model, repeat, arm, arm == 'both')
+            for model, repeats in [('small', 2), ('large', 1)]
+            for repeat in range(repeats) for arm in analysis.VARIANTS]
+    rows += [row('c2', 'small', 0, 'baseline', True)]
+    result = analysis.paired_effect(
+        rows, {'c1': {'family': 'f1'}, 'c2': {'family': 'f2'}},
+        'first_action_correct', analysis.CONTRASTS['D-A'],
+        ['small', 'large'], draws=50,
+    )
+    assert result['estimate'] == 1
+    assert result['families'] == 1
+    assert result['complete_four_arm_blocks'] == 3  # noqa: PLR2004
+    assert result['ci95'] == [1, 1]
+    assert result['degenerate_interval']
+
+
+def test_infrastructure_is_not_a_model_failure():
+    """Count model failures while reporting infrastructure separately."""
+    report = analysis.rate_summary([
+        {'id': 'ok', 'status': 'completed', 'final_success': True},
+        {'id': 'budget', 'status': 'agent_failure'},
+        {'id': 'auth', 'status': 'infrastructure_failure'},
+    ])
+    assert report['graded'] == 2  # noqa: PLR2004
+    assert report['rates']['final_success'] == 0.5  # noqa: PLR2004
+
+
+def test_semantic_calls_hide_treatment_names():
+    """Present the same operation to a reviewer for both interfaces."""
+    assert analysis.neutral_call({
+        'tool': 'docs_insert_before',
+        'arguments': {'doc_id': 'd', 'anchor': 'a', 'text': 'x'},
+    }) == analysis.neutral_call({
+        'tool': 'docs_insert',
+        'arguments': {'doc_id': 'd', 'text': 'x',
+                      'target': {'position': 'before', 'anchor': 'a'}},
+    })
