@@ -1,14 +1,12 @@
-"""Serialize live confirmations on the authorized development document."""
+"""Run independent native confirmations in test-owned disposable documents."""
 
 import asyncio
-import fcntl
-import hashlib
 import html
 import importlib.util
 import json
 import os
 import sys
-import uuid
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -16,13 +14,12 @@ from fastmcp import Client
 from fastmcp.client.transports import StdioTransport
 from study_execution import ROOT, FixtureBackend, translated
 
-AUTHORIZED_DOC = '1jG0MECReTHJMH5HdsiZnsGjjRDLcoHvDyomuYdsiJZk'
-LIVE_SERIAL = asyncio.Lock()
-RESET_SPEC = importlib.util.spec_from_file_location(
-    'study_document_reset', ROOT / 'tests/live_document_state.py',
+AUTHORIZED_FOLDER = '1j5SqJ2Iu95te9-u_9y_A0DyLcPbOheWt'
+DOCUMENTS_SPEC = importlib.util.spec_from_file_location(
+    'study_document_factory', ROOT / 'tests/live_document_state.py',
 )
-RESET = importlib.util.module_from_spec(RESET_SPEC)
-RESET_SPEC.loader.exec_module(RESET)
+DOCUMENTS = importlib.util.module_from_spec(DOCUMENTS_SPEC)
+DOCUMENTS_SPEC.loader.exec_module(DOCUMENTS)
 
 
 def body_headings(outline):
@@ -33,11 +30,11 @@ def body_headings(outline):
 class LiveBackend(FixtureBackend):
     """Keep the same model-facing operations and native-state grading seam."""
 
-    def __init__(self, client, control):
-        """Restrict all model operations to the already-authorized document."""
+    def __init__(self, client, control, document_id):
+        """Restrict all model operations to this job's confirmed creation."""
         super().__init__(client)
         self.control = control
-        self.document_id = AUTHORIZED_DOC
+        self.document_id = document_id
         self.aliases = {'tabs': {}, 'headings': {}, 'comments': {}}
         self.strip_seed_blank = True
         self.references = []
@@ -86,21 +83,18 @@ class LiveBackend(FixtureBackend):
 
     async def seed(self, fixture):
         """Create synthetic tabs, headings and comments without direct APIs."""
-        original = (await self.snapshot())['tabs'][0]['tabProperties']['tabId']
-        temporary = await self.batch([{'addDocumentTab': {'tabProperties': {
-            'title': 'Study setup ' + uuid.uuid4().hex, 'index': 1,
-        }}}])
-        temporary_id = temporary['replies'][0]['addDocumentTab'][
-            'tabProperties']['tabId']
-        await self.batch([{'deleteTab': {'tabId': original}}])
-        native_tabs = []
-        for index, tab in enumerate(fixture['tabs'], start=1):
-            created = await self.batch([{'addDocumentTab': {'tabProperties': {
+        original = (await self.snapshot())['tabs'][0]['tabProperties']
+        if original['title'] in {tab['title'] for tab in fixture['tabs']}:
+            raise RuntimeError('Fresh default tab collides with fixture title')
+        created = await self.batch([
+            *[{'addDocumentTab': {'tabProperties': {
                 'title': tab['title'], 'index': index,
-            }}}])
-            native_tabs.append(created['replies'][0]['addDocumentTab'][
-                'tabProperties']['tabId'])
-        await self.batch([{'deleteTab': {'tabId': temporary_id}}])
+            }}} for index, tab in enumerate(fixture['tabs'], start=1)],
+            {'deleteTab': {'tabId': original['tabId']}},
+        ])
+        native_tabs = [reply['addDocumentTab']['tabProperties']['tabId']
+                       for reply in created['replies']
+                       if 'addDocumentTab' in reply]
         self.aliases['tabs'] = {
             native: tab['id'] for native, tab
             in zip(native_tabs, fixture['tabs'], strict=True)
@@ -113,11 +107,11 @@ class LiveBackend(FixtureBackend):
                        if level.startswith('HEADING_') else 'p')
                 markup.append(f'<{tag}>{html.escape(paragraph["text"])}</{tag}>')
             await self.control_call('docs_append', {
-                'doc_id': AUTHORIZED_DOC, 'tab_id': native_id,
+                'doc_id': self.document_id, 'tab_id': native_id,
                 'text': '\n'.join(markup),
             })
             outline = await self.control_call('docs_get_tree', {
-                'doc_id': AUTHORIZED_DOC, 'tab_id': native_id,
+                'doc_id': self.document_id, 'tab_id': native_id,
             })
             expected = [p for p in tab['paragraphs'] if p.get('heading_id')]
             sections = body_headings(outline)
@@ -135,7 +129,7 @@ class LiveBackend(FixtureBackend):
                       anchor_tab['paragraphs'][0])
         for thread in fixture.get('comments', []):
             receipt = await self.control_call('docs_add_comment', {
-                'doc_id': AUTHORIZED_DOC, 'tab_id': native_tabs[0],
+                'doc_id': self.document_id, 'tab_id': native_tabs[0],
                 'anchor_text': thread.get('quote') or anchor['text'],
                 'comment': thread['text'],
             })
@@ -143,77 +137,83 @@ class LiveBackend(FixtureBackend):
             self.aliases['comments'][comment_id] = thread['id']
             if thread.get('resolved'):
                 await self.control_call('docs_resolve_comment', {
-                    'doc_id': AUTHORIZED_DOC, 'comment_id': comment_id,
+                    'doc_id': self.document_id, 'comment_id': comment_id,
                 })
 
 
 @asynccontextmanager
 async def live_backend(case, variant, output, *, reference_mode=False):
-    """Lock, reset, seed and restore the single explicitly authorized Doc."""
+    """Create, seed and verify trashing one independent document per job."""
     output.mkdir(parents=True, exist_ok=True, mode=0o700)
-    key = hashlib.sha256(AUTHORIZED_DOC.encode()).hexdigest()
-    lock_path = Path('/tmp/gdocs-scope-mcp-live-' + key + '.lock')
-    async with LIVE_SERIAL:
-        with lock_path.open('a') as lock:
-            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            env = {**os.environ,
-                   'GDOCS_SCOPE_MCP_LIVE_TEST_DOC': AUTHORIZED_DOC,
-                   'GDOCS_SCOPE_MCP_DOCUMENT_CACHE_ENABLED': 'false',
-                   'GDOCS_SCOPE_MCP_WRITE_REVISION_MODE': 'required',
-                   'GDOCS_SCOPE_MCP_COMMENT_UI_WAIT': '0'}
-            control_transport = StdioTransport(
-                command=str(Path(sys.executable).parent / 'fastmcp'),
-                args=['run', str(ROOT / 'tests/probes/table_server.py'),
-                      '--transport', 'stdio'], cwd=str(ROOT),
-                env={
-                    **env,
-                    'GDOCS_SCOPE_MCP_TOOL_INTERFACE_VARIANT': 'baseline',
-                },
-                log_file=output / 'control.stderr', keep_alive=False,
-            )
-            transport = StdioTransport(
-                command=str(Path(sys.executable).parent / 'gdocs-scope-mcp'),
-                args=[], cwd=str(ROOT), env={
-                    **env, 'GDOCS_SCOPE_MCP_TOOL_INTERFACE_VARIANT': variant,
-                }, log_file=output / 'native.stderr', keep_alive=False,
-            )
-            identities = []
-            report = {'case': case['id'], 'variant': variant}
-            try:
-                async with Client(control_transport) as control, Client(
-                    transport,
-                ) as client:
-                    for connected in (control, client):
-                        info = (await connected.call_tool('server_info', {})
-                                ).structured_content
-                        identities.append(info)
-                        assert info['package_path'] == str(
-                            ROOT / 'src/gdocs_scope_mcp',
-                        )
-                    report['before_reset'] = await RESET.reset_document(
-                        control, AUTHORIZED_DOC,
-                    )
-                    try:
-                        backend = LiveBackend(client, control)
-                        await backend.seed(case['fixture'])
-                        if not reference_mode:
-                            reference = json.loads((output.parents[1]
-                                                    / 'live-references'
-                                                    / (case['id'] + '.json'))
-                                                   .read_text())
-                            backend.references = reference['states']
-                        yield backend, identities[-1]
-                    finally:
-                        report['after_reset'] = await RESET.reset_document(
-                            control, AUTHORIZED_DOC,
-                        )
-            finally:
-                for info in identities:
-                    assert not Path(f'/proc/{info["pid"]}').exists()
-                report.update(identities=identities, processes_reaped=True)
-                (output / 'live-cleanup.json').write_text(
-                    json.dumps(report, indent=2),
+    folder = os.environ.get('GDOCS_SCOPE_MCP_LIVE_TEST_FOLDER')
+    if folder != AUTHORIZED_FOLDER:
+        raise ValueError('Explicitly opt in with the authorized test folder')
+    keep = os.environ.get('GDOCS_SCOPE_MCP_LIVE_KEEP_ON_FAILURE', '0')
+    if keep not in {'0', '1'}:
+        raise ValueError('LIVE_KEEP_ON_FAILURE must be 0 or 1')
+    documents = await asyncio.to_thread(
+        DOCUMENTS.LiveDocuments, folder, output, None,
+        keep_on_failure=keep == '1',
+    )
+    identities = []
+    report = {'case': case['id'], 'variant': variant, 'folder_id': folder,
+              'started_at': time.time()}
+    failed = True
+    try:
+        created = await asyncio.to_thread(documents.create)
+        report['document_id'] = created['id']
+        report['created_at'] = time.time()
+        env = {**os.environ,
+               'GDOCS_SCOPE_MCP_LIVE_TEST_DOC': created['id'],
+               'GDOCS_SCOPE_MCP_ACCESS_MODE': 'full_drive',
+               'GDOCS_SCOPE_MCP_DOCUMENT_CACHE_ENABLED': 'false',
+               'GDOCS_SCOPE_MCP_WRITE_REVISION_MODE': 'required',
+               'GDOCS_SCOPE_MCP_COMMENT_UI_WAIT': '0'}
+        control_transport = StdioTransport(
+            command=str(Path(sys.executable).parent / 'fastmcp'),
+            args=['run', str(ROOT / 'tests/probes/table_server.py'),
+                  '--transport', 'stdio'], cwd=str(ROOT),
+            env={**env, 'GDOCS_SCOPE_MCP_TOOL_INTERFACE_VARIANT': 'baseline'},
+            log_file=output / 'control.stderr', keep_alive=False,
+        )
+        transport = StdioTransport(
+            command=str(Path(sys.executable).parent / 'gdocs-scope-mcp'),
+            args=[], cwd=str(ROOT), env={
+                **env, 'GDOCS_SCOPE_MCP_TOOL_INTERFACE_VARIANT': variant,
+            }, log_file=output / 'native.stderr', keep_alive=False,
+        )
+        async with Client(control_transport) as control, Client(
+            transport,
+        ) as client:
+            for connected in (control, client):
+                info = (await connected.call_tool('server_info', {})
+                        ).structured_content
+                identities.append(info)
+                assert info['package_path'] == str(
+                    ROOT / 'src/gdocs_scope_mcp',
                 )
+            backend = LiveBackend(client, control, created['id'])
+            await backend.seed(case['fixture'])
+            if not reference_mode:
+                reference = json.loads((output.parents[1] / 'live-references'
+                                        / (case['id'] + '.json')).read_text())
+                backend.references = reference['states']
+            yield backend, identities[-1]
+            failed = False
+    finally:
+        try:
+            await asyncio.to_thread(documents.finish, failed=failed)
+        finally:
+            report.update(
+                documents=documents.documents, identities=identities,
+                completed_at=time.time(),
+                processes_reaped=all(not Path(f'/proc/{i["pid"]}').exists()
+                                     for i in identities),
+            )
+            (output / 'live-cleanup.json').write_text(
+                json.dumps(report, indent=2),
+            )
+        assert report['processes_reaped']
 
 
 async def native_reference(case, output):
