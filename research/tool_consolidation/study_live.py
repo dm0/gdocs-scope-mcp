@@ -5,6 +5,7 @@ import html
 import importlib.util
 import json
 import os
+import re
 import sys
 import time
 from contextlib import asynccontextmanager
@@ -14,7 +15,6 @@ from fastmcp import Client
 from fastmcp.client.transports import StdioTransport
 from study_execution import ROOT, FixtureBackend, translated
 
-AUTHORIZED_FOLDER = '1j5SqJ2Iu95te9-u_9y_A0DyLcPbOheWt'
 DOCUMENTS_SPEC = importlib.util.spec_from_file_location(
     'study_document_factory', ROOT / 'tests/live_document_state.py',
 )
@@ -156,8 +156,11 @@ async def live_backend(case, variant, output, *, reference_mode=False):
     """Create, seed and verify trashing one independent document per job."""
     output.mkdir(parents=True, exist_ok=True, mode=0o700)
     folder = os.environ.get('GDOCS_SCOPE_MCP_LIVE_TEST_FOLDER')
-    if folder != AUTHORIZED_FOLDER:
-        raise ValueError('Explicitly opt in with the authorized test folder')
+    if folder is None or not re.fullmatch(r'[A-Za-z0-9_-]+', folder):
+        raise ValueError(
+            'Set GDOCS_SCOPE_MCP_LIVE_TEST_FOLDER explicitly to an authorized '
+            'test folder ID, not an empty value, URL or whitespace.',
+        )
     keep = os.environ.get('GDOCS_SCOPE_MCP_LIVE_KEEP_ON_FAILURE', '0')
     if keep not in {'0', '1'}:
         raise ValueError('LIVE_KEEP_ON_FAILURE must be 0 or 1')

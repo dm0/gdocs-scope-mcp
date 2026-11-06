@@ -11,3 +11,7 @@ default product test suite; run them explicitly from the repository root using
 the root Python project. Keep production behavior/contract tests in `tests/`.
 Document each study's commands and scope in its own README, link it from
 `research/README.md`, and keep generated logs and study artifacts untracked.
+
+Never store real Google folder or document IDs in repository files. Supply
+live IDs through environment variables or private artifacts outside the
+checkout. Use clearly synthetic placeholders in documentation and fixtures.

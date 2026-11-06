@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import json
+import subprocess
 from collections import Counter
 from copy import deepcopy
 from html import unescape
@@ -22,6 +23,23 @@ from run_reduced_study import (
 )
 
 MANIFEST = 'e6c15741378738c86ddf71fa3840ea6529d15e5f3b278ef550f1ba82d2e80b82'
+
+
+def execution_sources_match(manifest):
+    """Verify archived execution bytes without restoring live identifiers."""
+    if manifest['sources'] == source_hashes():
+        return True
+    commit = manifest['commit']
+    root = Path(__file__).resolve().parents[2]
+    for name, expected in manifest['sources'].items():
+        path = (Path(__file__).parent / name).resolve().relative_to(root)
+        result = subprocess.run(
+            ['git', 'show', f'{commit}:{path.as_posix()}'], cwd=root,
+            capture_output=True, check=True,
+        )
+        if hashlib.sha256(result.stdout).hexdigest() != expected:
+            return False
+    return True
 
 
 def messages(row):
@@ -151,7 +169,7 @@ def audit(directory):
     approval = json.loads(approval_path.read_text())
     if (digest(manifest) != MANIFEST
             or (directory / 'manifest.sha256').read_text().strip() != MANIFEST
-            or manifest['sources'] != source_hashes()
+            or not execution_sources_match(manifest)
             or prior_checkpoint(Path(manifest['prior_run']['directory']))
             != manifest['prior_run']
             or any(digest(v) != manifest['dataset_hashes'][k]

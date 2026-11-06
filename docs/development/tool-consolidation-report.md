@@ -166,7 +166,7 @@ For current opt-in adapter lifecycle tests, use the authorized folder and keep
 optional UI waits disabled:
 
 ```bash
-GDOCS_SCOPE_MCP_LIVE_TEST_FOLDER=1j5SqJ2Iu95te9-u_9y_A0DyLcPbOheWt uv run --locked pytest tests/test_tool_consolidation_stdio.py -m live -q
+GDOCS_SCOPE_MCP_LIVE_TEST_FOLDER='<authorized-test-folder-id>' uv run --locked pytest tests/test_tool_consolidation_stdio.py -m live -q
 ```
 
 This uses per-test disposable documents and isolated STDIO fixtures. Historical

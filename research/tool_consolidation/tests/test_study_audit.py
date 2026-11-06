@@ -1,11 +1,13 @@
 """Protect audit exclusions and reproduce a synthetic heading-read defect."""
 
 import asyncio
+import hashlib
 import json
 import os
 import sys
 from collections import Counter
 from copy import deepcopy
+from types import SimpleNamespace
 
 import pytest
 
@@ -35,6 +37,28 @@ def test_reference_question_requires_observed_anchor(audit_module):
     assert audit_module.reference_question(row)
     row['clarifications'] = 0
     assert not audit_module.reference_question(row)
+
+
+def test_archived_source_verification_requires_exact_bytes(
+    audit_module, monkeypatch,
+):
+    """Keep audit provenance valid after removing live configuration IDs."""
+    monkeypatch.setattr(audit_module, 'source_hashes', dict)
+    manifest = {'commit': 'f' * 40, 'sources': {
+        'study_live.py': hashlib.sha256(b'archived source').hexdigest(),
+    }}
+
+    def show(args, **kwargs):
+        assert args[:2] == ['git', 'show']
+        assert args[2].endswith(':research/tool_consolidation/study_live.py')
+        assert kwargs['capture_output'] and kwargs['check']
+        return SimpleNamespace(stdout=b'archived source')
+
+    monkeypatch.setattr(audit_module.subprocess, 'run', show)
+    assert audit_module.execution_sources_match(manifest)
+    manifest['sources']['study_live.py'] = (
+        hashlib.sha256(b'changed').hexdigest())
+    assert not audit_module.execution_sources_match(manifest)
 
 
 def test_verbal_action_does_not_become_a_success(audit_module):
@@ -168,9 +192,7 @@ def test_native_plain_insert_retains_readable_heading_selection(
     """Check the failing synthetic continuation on owned native documents."""
     monkeypatch.setitem(sys.modules, 'study_execution', execution)
     live = load_research('study_live')
-    if os.environ.get('GDOCS_SCOPE_MCP_LIVE_TEST_FOLDER') != (
-        live.AUTHORIZED_FOLDER
-    ):
+    if os.environ.get('GDOCS_SCOPE_MCP_LIVE_TEST_FOLDER') is None:
         pytest.skip('Explicit authorized test-folder opt-in is required.')
     case = next(c for c in scenarios.MAIN if c['id'] == case_id)
 

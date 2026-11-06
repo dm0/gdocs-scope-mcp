@@ -1,5 +1,6 @@
-`google_document.json` is an unchanged copy of the Google Docs API response
-provided in the workspace's `data/doc.json`. It covers headings, lists, inline
+`google_document.json` is a copy of the Google Docs API response provided in
+the workspace's `data/doc.json`, with its document ID replaced by a synthetic
+placeholder. It covers headings, lists, inline
 styles, paragraph alignment, images, and a table. Keeping the snapshot here
 makes the offline tests independent of the parent workspace and Google access.
 

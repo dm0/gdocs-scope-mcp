@@ -9,6 +9,10 @@ The [retrospective audit](AUDIT.md) preserves the frozen grades and adds
 separate user-adjudicated and scenario/fixture sensitivity estimates.
 `audit_reduced_study.py --output ARTIFACTS/restart-001` verifies the completed
 restart and writes private audit evidence without starting any model sessions.
+After execution-source changes, this read-only audit checks the exact frozen
+source bytes directly in the recorded Git commit, without restoring historical
+configuration values to checkout files. Actor runs retain their stricter
+current-source guard and cannot resume an old manifest after source changes.
 
 Run the research checks separately from the default product suite:
 
@@ -67,9 +71,9 @@ but does
 not start model sessions. Run commands from this linked worktree:
 
 ```bash
-GDOCS_SCOPE_MCP_LIVE_TEST_FOLDER=1j5SqJ2Iu95te9-u_9y_A0DyLcPbOheWt uv run --locked python research/tool_consolidation/run_reduced_study.py prepare --output ARTIFACTS --previous-campaign PRIOR_ARTIFACTS
+GDOCS_SCOPE_MCP_LIVE_TEST_FOLDER='<authorized-test-folder-id>' uv run --locked python research/tool_consolidation/run_reduced_study.py prepare --output ARTIFACTS --previous-campaign PRIOR_ARTIFACTS
 uv run --locked python research/tool_consolidation/run_reduced_study.py pilot --output ARTIFACTS
-GDOCS_SCOPE_MCP_LIVE_TEST_FOLDER=1j5SqJ2Iu95te9-u_9y_A0DyLcPbOheWt uv run --locked python research/tool_consolidation/run_reduced_study.py main --output ARTIFACTS
+GDOCS_SCOPE_MCP_LIVE_TEST_FOLDER='<authorized-test-folder-id>' uv run --locked python research/tool_consolidation/run_reduced_study.py main --output ARTIFACTS
 uv run --locked python research/tool_consolidation/analyze_reduced_study.py --stage main --output ARTIFACTS
 ```
 

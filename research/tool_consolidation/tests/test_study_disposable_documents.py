@@ -30,7 +30,7 @@ def test_parallel_document_ownership_and_failure_cleanup(
         """Record independent factory ownership and verified disposal."""
 
         def __init__(self, folder, output, _connect, **_kwargs):
-            assert folder == native.AUTHORIZED_FOLDER
+            assert folder == 'study-test-folder'
             self.identifier = output.name
             self.documents = []
 
@@ -74,7 +74,7 @@ def test_parallel_document_ownership_and_failure_cleanup(
         await asyncio.sleep(0)
 
     monkeypatch.setenv('GDOCS_SCOPE_MCP_LIVE_TEST_FOLDER',
-                       native.AUTHORIZED_FOLDER)
+                       'study-test-folder')
     monkeypatch.setattr(native.DOCUMENTS, 'LiveDocuments', Documents)
     monkeypatch.setattr(native, 'StdioTransport', Transport)
     monkeypatch.setattr(native, 'Client', Client)
@@ -101,9 +101,12 @@ def test_parallel_document_ownership_and_failure_cleanup(
     assert sorted(records) == [(str(i), failed) for i in range(3)]
 
 
-def test_no_permanent_document_fallback(native, monkeypatch, tmp_path):
+@pytest.mark.parametrize('folder', [None, '', ' ', 'https://example.invalid/'])
+def test_no_permanent_document_fallback(native, monkeypatch, tmp_path, folder):
     """A legacy Doc ID alone must never permit creation or live execution."""
     monkeypatch.delenv('GDOCS_SCOPE_MCP_LIVE_TEST_FOLDER', raising=False)
+    if folder is not None:
+        monkeypatch.setenv('GDOCS_SCOPE_MCP_LIVE_TEST_FOLDER', folder)
     monkeypatch.setenv('GDOCS_SCOPE_MCP_LIVE_TEST_DOC', 'legacy-doc')
 
     async def run():
@@ -140,7 +143,7 @@ def test_cancelled_creation_waits_for_owned_id_before_disposal(
             self.documents[0]['status'] = 'trashed'
 
     monkeypatch.setenv('GDOCS_SCOPE_MCP_LIVE_TEST_FOLDER',
-                       native.AUTHORIZED_FOLDER)
+                       'study-test-folder')
     monkeypatch.setattr(native.DOCUMENTS, 'LiveDocuments', Documents)
 
     async def job():

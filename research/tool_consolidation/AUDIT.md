@@ -166,7 +166,7 @@ Run from the root Python project:
 ```bash
 uv run --locked python research/tool_consolidation/audit_reduced_study.py --output ARTIFACTS/restart-001
 uv run --locked pytest research/tool_consolidation/tests/test_study_audit.py research/tool_consolidation/tests/test_study_analysis.py -m 'not live' -q
-GDOCS_SCOPE_MCP_LIVE_TEST_FOLDER=1j5SqJ2Iu95te9-u_9y_A0DyLcPbOheWt uv run --locked pytest research/tool_consolidation/tests/test_study_audit.py -m live -q
+GDOCS_SCOPE_MCP_LIVE_TEST_FOLDER='<authorized-test-folder-id>' uv run --locked pytest research/tool_consolidation/tests/test_study_audit.py -m live -q
 ```
 
 Private evidence is in the existing restart directory under
