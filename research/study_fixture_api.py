@@ -7,6 +7,7 @@ Unsupported native requests fail atomically before any fixture mutation.
 """
 
 import json
+import re
 from copy import deepcopy
 from itertools import groupby
 
@@ -199,6 +200,27 @@ class FixtureAPI:
     def apply_request(self, request):
         """Handle only the predeclared native operations needed by fixtures."""
         name, payload = next(iter(request.items()))
+        if name == 'replaceAllText':
+            selected = payload.get('tabsCriteria', {}).get(
+                'tabIds', [tab['id'] for tab in self.tabs],
+            )
+            needle = payload['containsText']['text']
+            flags = 0 if payload['containsText'].get('matchCase') else re.I
+            count = 0
+            for tab in self.tabs:
+                if tab['id'] not in selected:
+                    continue
+                chars = tab['chars']
+                text = ''.join(char['char'] for char in chars)
+                matches = list(re.finditer(re.escape(needle), text, flags))
+                for match in reversed(matches):
+                    inherited = chars[match.start()]
+                    chars[match.start():match.end()] = [
+                        {**deepcopy(inherited), 'char': char}
+                        for char in payload['replaceText']
+                    ]
+                count += len(matches)
+            return {'replaceAllText': {'occurrencesChanged': count}}
         if name == 'addCommentReply':
             thread = next((thread for thread in self.comments
                            if thread['commentId'] == payload['commentId']),

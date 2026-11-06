@@ -7,13 +7,20 @@ from contextlib import asynccontextmanager
 from copy import deepcopy
 from pathlib import Path
 
+from bs4 import BeautifulSoup
 from fastmcp import Client
 from fastmcp.client.transports import StdioTransport
+
+from gdocs_scope_mcp.rich_text.parsing import markdown_to_html
 
 ROOT = Path(__file__).resolve().parents[1]
 BLOCKED_TOOLS = {
     'docs_list', 'docs_create', 'docs_authorize', 'docs_select_files',
     'docs_authorization_complete', 'docs_authorization_status',
+    'docs_suggest', 'docs_suggestions_manage',
+    'docs_create_dropdown_definition', 'docs_select_dropdown',
+    'docs_add_comment', 'docs_reply_to_comment', 'docs_edit_comment',
+    'docs_delete_comment', 'docs_delete_comment_reply',
 }
 
 
@@ -65,6 +72,8 @@ def canonical(native, *, aliases=None, semantic=False, strip_seed_blank=False):
         paragraphs = []
         for item in tab['documentTab']['body']['content']:
             if 'paragraph' not in item:
+                if 'table' in item:
+                    paragraphs.append({'native_block': 'table'})
                 continue
             paragraph = item['paragraph']
             style = deepcopy(paragraph.get('paragraphStyle', {}))
@@ -77,6 +86,12 @@ def canonical(native, *, aliases=None, semantic=False, strip_seed_blank=False):
                          if key in {'namedStyleType', 'headingId'}}
             characters = []
             for element in paragraph.get('elements', []):
+                if 'textRun' not in element:
+                    characters.append(['\ufffc', {'native_element': {
+                        key: value for key, value in element.items()
+                        if key not in {'startIndex', 'endIndex'}
+                    }}])
+                    continue
                 run = element.get('textRun', {})
                 text_style = style_value(run.get('textStyle', {}))
                 if semantic:
@@ -90,14 +105,19 @@ def canonical(native, *, aliases=None, semantic=False, strip_seed_blank=False):
                                   for char in run.get('content', ''))
             paragraphs.append({'style': style_value(style),
                                'characters': characters})
-        first_text = (''.join(c[0] for c in paragraphs[0]['characters'])
-                      if paragraphs else '')
+        first_chars = paragraphs[0].get('characters', []) if paragraphs else []
+        first_text = ''.join(c[0] for c in first_chars)
         if strip_seed_blank and first_text == '\n':
             paragraphs.pop(0)
         tabs.append({
             'id': aliases.get('tabs', {}).get(properties['tabId'],
                                             properties['tabId']),
             'title': properties['title'], 'paragraphs': paragraphs,
+            'metadata': {
+                key: value for key, value in tab['documentTab'].items()
+                if key in {'namedRanges', 'dropdownDefinitions',
+                           'inlineObjects', 'positionedObjects'} and value
+            },
         })
     comments = [{
         'id': aliases.get('comments', {}).get(t['commentId'], t['commentId']),
@@ -149,6 +169,13 @@ class FixtureBackend:
         if args.get('doc_id', self.document_id) != self.document_id:
             return failure('PERMISSION_DENIED',
                            'The study permits only its fixture document.')
+        if isinstance(args.get('text'), str) and args.get('rich', True):
+            markup = BeautifulSoup(markdown_to_html(args['text']),
+                                   'html.parser')
+            if (markup.find(['img', 'table'])
+                    or markup.find(attrs={'data-mcp-entity': True})):
+                return failure('PERMISSION_DENIED',
+                               'Images, tables and chips are outside scope.')
         result = await self.client.call_tool(name, args, raise_on_error=False)
         payload = result.structured_content
         if payload is None:
@@ -170,6 +197,7 @@ async def fixture_backend(case, variant, output):
             'GDOCS_SCOPE_MCP_TOOL_INTERFACE_VARIANT': variant,
             'GDOCS_SCOPE_MCP_ACCESS_MODE': 'full_drive',
             'GDOCS_SCOPE_MCP_DOCUMENT_CACHE_ENABLED': 'false',
+            'GDOCS_SCOPE_MCP_WRITE_REVISION_MODE': 'required',
         }, log_file=output / 'fixture.stderr', keep_alive=False,
     )
     info = None

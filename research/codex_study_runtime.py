@@ -110,7 +110,8 @@ class StudyClient:
         })
         await self.send({'method': 'initialized', 'params': {}})
         started = await self.request('thread/start', {
-            'model': model, 'allowProviderModelFallback': False,
+            'model': model, 'modelProvider': 'openai',
+            'allowProviderModelFallback': False,
             'ephemeral': True, 'cwd': str(cwd), 'sandbox': 'read-only',
             'baseInstructions': 'You are a document editing assistant. '
                                 'Use only the supplied study tools.',
@@ -119,7 +120,8 @@ class StudyClient:
             'config': {'model_reasoning_effort': 'medium'},
         })
         if (started.get('model') != model
-                or started.get('reasoningEffort') != 'medium'):
+                or started.get('reasoningEffort') != 'medium'
+                or started.get('modelProvider') != 'openai'):
             raise RuntimeError('Effective model/settings differ from request')
         return started
 
@@ -192,6 +194,7 @@ async def isolated_client(log_path, *, timeout=120):
         process = await asyncio.create_subprocess_exec(
             *isolated_command(), stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE, stderr=stderr,
+            env={**os.environ, 'RUST_LOG': 'error'},
             start_new_session=True, limit=4 * 1024 * 1024,
         )
         try:

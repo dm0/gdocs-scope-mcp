@@ -69,3 +69,7 @@ def test_projection_keeps_protected_styles_and_comment_actions():
     api.tabs[0]['chars'][0]['textStyle'].clear()
     api.comments[0]['replies'].append({'commentAction': 'RESOLVE'})
     assert execution.canonical(api.snapshot()) != before
+    api.comments[0]['replies'].clear()
+    snapshot = api.snapshot()
+    snapshot['tabs'][0]['documentTab']['body']['content'].append({'table': {}})
+    assert execution.canonical(snapshot) != before
