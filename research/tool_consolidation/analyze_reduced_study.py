@@ -14,6 +14,7 @@ VARIANTS = ('baseline', 'insertion', 'status', 'both')
 METRICS = ('first_action_correct', 'final_success', 'recovery_free',
            'unintended_changes')
 AUDIT_EXAMPLES_PER_GROUP = 2
+RESTART_MANIFEST_VERSION = 2
 CONTRASTS = {
     'D-A': {'both': 1, 'baseline': -1},
     'B-A': {'insertion': 1, 'baseline': -1},
@@ -95,6 +96,9 @@ def rate_summary(rows):
         'content_read_calls': sum(c['tool'] in {'docs_read',
                                                'docs_read_comments'}
                                   for r in rows for c in r.get('trace', [])),
+        'accepted_optional_period_outcomes': sum(
+            r.get('final_state_has_optional_period_difference', False)
+            for r in graded),
         'usage': dict(Counter({key: sum(r.get('usage', {}).get(key, 0)
                                        for r in rows)
                                for key in ('inputTokens',
@@ -271,6 +275,15 @@ def analyze(directory, stage, draws=5000, *, human_sensitivity=False,
             terminal_periods=False):
     """Analyze a complete or partial stage without imputing missing trials."""
     manifest = json.loads((directory / 'manifest.json').read_text())
+    manifest_hash = hashlib.sha256(json.dumps(
+        manifest, sort_keys=True, ensure_ascii=False,
+    ).encode()).hexdigest()
+    if manifest_hash != (directory / 'manifest.sha256').read_text().strip():
+        raise ValueError('Frozen study manifest changed')
+    if manifest.get('version', 1) >= RESTART_MANIFEST_VERSION and (
+        human_sensitivity or terminal_periods
+    ):
+        raise ValueError('The restart already uses the period rule as primary')
     ledger = json.loads((directory / 'ledger.json').read_text())
     cases = {case['id']: case for case in manifest['datasets'][stage]}
     attempts = [a for a in ledger['attempts'] if a['stage'] == stage]
@@ -279,7 +292,10 @@ def analyze(directory, stage, draws=5000, *, human_sensitivity=False,
     for attempt in attempts:
         path = directory / 'runs' / attempt['id'] / 'result.json'
         if path.exists():
-            rows.append(json.loads(path.read_text()))
+            row = json.loads(path.read_text())
+            if row['manifest_sha256'] != manifest_hash:
+                raise ValueError('A result belongs to another manifest')
+            rows.append(row)
         else:
             missing.append(attempt['id'])
     adjudication = None
@@ -339,6 +355,9 @@ def analyze(directory, stage, draws=5000, *, human_sensitivity=False,
         'reserved_attempts': len(attempts), 'missing_results': missing,
         'overall': rate_summary(rows), 'groups': {}, 'paired_effects': {},
         'treatment_by_model': {},
+        'primary_grading': manifest.get('grading', {
+            'primary': 'frozen exact native-state comparison',
+        }),
         'human_adjudication': adjudication,
         'sensitivity_source_sha256': sensitivity_source,
         'error_taxonomy': {
@@ -397,6 +416,27 @@ def analyze(directory, stage, draws=5000, *, human_sensitivity=False,
                     draws=draws, weights={left: 1, right: -1},
                 ) for metric in METRICS
             }
+    report['by_backend'] = {
+        backend: rate_summary([r for r in rows if r['backend'] == backend])
+        for backend in ('fixture', 'live')
+    }
+    native = [r for r in rows if r['backend'] == 'live']
+    report['native_confirmations'] = {}
+    for model in ['equal_model_summary', *manifest['models']]:
+        models = (manifest['models'] if model == 'equal_model_summary'
+                  else [model])
+        subset = [r for r in native if r['model'] in models]
+        report['native_confirmations'][model] = {
+            'rates_by_arm': {
+                arm: rate_summary([r for r in subset if r['variant'] == arm])
+                for arm in VARIANTS
+            },
+            'primary_D-A': {
+                metric: paired_effect(subset, cases, metric, CONTRASTS['D-A'],
+                                      models, draws=draws)
+                for metric in METRICS
+            },
+        }
     packet, key = audit_packet(rows, cases)
     output = directory / 'analysis'
     output.mkdir(exist_ok=True, mode=0o700)

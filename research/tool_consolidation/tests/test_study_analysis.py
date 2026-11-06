@@ -1,5 +1,7 @@
 """Check pairing, missing-data handling and treatment blinding."""
 
+import hashlib
+import json
 from copy import deepcopy
 
 import pytest
@@ -114,3 +116,19 @@ def test_human_punctuation_adjudication_preserves_every_other_invariant(
     assert reviewed['first_action_correct'] == (defect is None)
     assert reviewed['unintended_changes'] == (defect is not None)
     assert row == before
+
+
+def test_analysis_checks_manifest_and_does_not_reapply_restart_sensitivity(
+    tmp_path,
+):
+    """Reject changed provenance and a misleading post-hoc restart label."""
+    manifest = {'version': analysis.RESTART_MANIFEST_VERSION}
+    text = json.dumps(manifest, sort_keys=True, ensure_ascii=False)
+    (tmp_path / 'manifest.json').write_text(text)
+    (tmp_path / 'manifest.sha256').write_text('wrong')
+    with pytest.raises(ValueError, match='manifest changed'):
+        analysis.analyze(tmp_path, 'pilot')
+    (tmp_path / 'manifest.sha256').write_text(
+        hashlib.sha256(text.encode()).hexdigest())
+    with pytest.raises(ValueError, match='already uses the period rule'):
+        analysis.analyze(tmp_path, 'pilot', human_sensitivity=True)
