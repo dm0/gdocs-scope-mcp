@@ -9,8 +9,18 @@ fresh task instances from 25 declared templates; each is paired across the two
 arms and three models. Only full-task completion is tested. Of 1500 attempts,
 150 use disposable native Docs and 1350 use the repaired API seam.
 Progress and final evidence are recorded in the [stage-one report](NI_STAGE1_REPORT.md).
+The authorized 1500 attempts are complete; no model met the strict first-stage
+gate. The report preserves frozen grades and a separate explicit-bold oracle
+correction. Reproduce that local, model-free sensitivity with:
 
-Run from this worktree's root project with a new private artifact directory:
+```bash
+uv run --locked python research/tool_consolidation/audit_noninferiority_bold.py --output ARTIFACTS
+```
+
+The historical campaign commands below require the frozen execution revision
+`3ba7208`; current generator code includes the post-run m04 repair. These
+commands document the completed campaign and do not authorize another run.
+Run project commands from this worktree's root with private artifact directories:
 
 ```bash
 GDOCS_SCOPE_MCP_LIVE_TEST_FOLDER='<authorized-test-folder-id>' uv run --locked python research/tool_consolidation/run_noninferiority.py prepare --output ARTIFACTS --previous-restart PREVIOUS_RESTART
