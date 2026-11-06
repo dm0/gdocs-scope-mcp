@@ -37,8 +37,8 @@ changes are performed.
 The Ubuntu 24.04 matrix covers every stable minor version from Python 3.10
 (the declared minimum) through 3.14: 3.10, 3.11, 3.12, 3.13, and 3.14.
 Each job installs runtime and development dependencies from
-`uv.lock`, run the complete offline suite including architecture/MCP contract
-checks, build wheel and sdist, and verify isolated installations of both.
+`uv.lock`, runs the complete offline suite including architecture/MCP contract
+checks, builds wheel and sdist, and verifies isolated installations of both.
 Checkout fetches full history and tags for setuptools-scm version discovery.
 Third-party actions are pinned to full commit SHAs, uv to 0.12.18, and Ruff
 to 0.17.3. Update pins deliberately and repeat the commands below.

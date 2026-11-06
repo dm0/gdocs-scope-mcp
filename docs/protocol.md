@@ -305,14 +305,17 @@ revision race, unchanged unambiguous targets are validated and positions
 recalculated; overlapping, deleted or ambiguous targets fail. Concurrent
 appends use the current end. Unknown write outcomes and completed table stages
 are never automatically replayed. Batch replacement remains atomic; table
-insertion and Docs-anchor/Drive-comment creation span separate writes.
+insertion spans several writes. Native comment writes separately require
+confirmed persistence; HTTP success alone is insufficient.
 With `write_revision_mode="target"`, Google merges the original plan with
 concurrent changes, including overlaps; local conflict validation/retries do
 not apply. Google determines concurrent append order. A rejected target
 revision requires a fresh read and an explicit new edit. Diagnostic indices
 in target-mode receipts refer to the original planning snapshot, not positions
 after Google's transformation. Multi-stage table insertion, cell patching,
-table formatting and structural operations remain strict.
+table formatting, structural operations and heading-boundary insertion remain
+strict. Heading insertion recomputes the same heading ID's current boundary
+after confirmed revision races, allowing changes to its subtree.
 
 By default this protects the backend read-to-write window. Optionally pass
 `expected_revision_id` from an earlier document read for a strict precondition
