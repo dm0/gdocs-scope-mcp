@@ -15,9 +15,9 @@ Or set `GDOCS_SCOPE_MCP_WRITE_REVISION_MODE=target` in the MCP server's
 environment. Environment overrides JSON; the default is `required`. Invalid
 values fail settings validation. Restart the MCP process to apply changes.
 This is a server policy, not a per-call agent argument. It applies to the
-seven indexed edit tools described below. Native replace-all keeps its
-execution-time matching; dedicated dropdown tools retain their own required
-revision guards.
+indexed text edits and anchored color formatting described below. Native
+replace-all keeps its execution-time matching; dedicated dropdown tools retain
+their own required revision guards.
 
 In `required` mode, the executor below validates the original target and
 replans after confirmed revision rejection. In `target` mode, it sends the
@@ -35,10 +35,14 @@ can differ from required mode's current-end replanning. Receipt indices are
 diagnostic coordinates from the original planning snapshot, not transformed
 positions. Target mode does not bypass native smart-entity validation.
 
-Two strict exceptions apply in either configured mode:
+Strict exceptions apply in either configured mode:
 
 - An explicit `expected_revision_id` always requires an exact revision match
   and disables automatic replanning. It is never weakened into a merge.
+- `docs_insert_at_heading` always uses required revisions and recomputes the
+  same heading ID's current subtree boundary after a confirmed revision race.
+  Dedicated table edits also retain required revisions and their selected-state
+  checks; see [table tools](tools/tables.md).
 - Multi-stage table insertion always uses required revisions, including body
   paragraph stages belonging to a table-containing plan. A transformed stage
   can move the cursor or newly created table; later stages cannot safely use
@@ -53,12 +57,13 @@ Two strict exceptions apply in either configured mode:
 executor. `remember_snapshot` retains the native first read of each attempt;
 `depend_on` declares the operation's selected source ranges; `submit` chooses
 the required or target revision field. Context variables isolate calls without
-locks or coordination between production MCP processes. Future table planners
-can reuse `submit` and supply narrower table-specific identity/dependencies.
+locks or coordination between production MCP processes. Dedicated table tools
+use table references and selective expectations to validate their own targets.
 
 In required mode, indexed search/replace, batch replacement, paragraph deletion,
-before/after insertion and comment-anchor creation declare their original
-targets before writing. Dependencies retain the affected native paragraph's text,
+before/after insertion, anchored color formatting and comment-anchor creation
+declare their original targets before writing. Dependencies retain the affected
+native paragraph's text,
 text-run styles, paragraph styles, bullets, non-text elements and heading-ID
 ancestry, plus metadata for referenced lists, objects and dropdown definitions.
 Effective named styles and document style must also remain unchanged. Native
@@ -75,12 +80,12 @@ of a batch/delete-all target set cause a conflict instead of expanding or
 shrinking the operation silently. All UTF-16 indices come from the fresh
 snapshot; requests from the rejected attempt are not submitted unchanged.
 
-This first implementation deliberately uses paragraph-level dependencies,
+Ordinary text and color operations use paragraph-level dependencies,
 not substring-level merging: concurrent changes to different parts of one
 paragraph conflict. A paragraph inside a table depends conservatively on its
 entire containing top-level table. Independent ordinary paragraphs can rebase;
-independent cells await the table-specific references and expected-state
-contracts in later tasks. Duplicate identical paragraphs/tables are ambiguous
+independent cells use the separate [table tools](tools/tables.md) and their
+selected-state contracts. Duplicate identical paragraphs/tables are ambiguous
 on retry, even if a human could infer their identity from surrounding text.
 
 These are snapshot/expected-state checks, not access to edit history. A
@@ -93,6 +98,13 @@ After a rejected append, it replans at the newly read end, preserving both
 appends. It does not preserve an old absolute insertion index or old end style.
 The resulting order follows the successful guarded commits, not call start
 order.
+
+Heading-boundary insertion has its own dependency: **the current subtree of
+the same native heading ID in the pinned tab**. A retry may include concurrent
+changes to heading text, hierarchy and subtree contents. It does not require
+the original subtree to remain unchanged. A deleted heading fails explicitly;
+its title never selects a replacement. See
+[docs_insert_at_heading](tools/documents.md#docs_insert_at_heading).
 
 ## Retries and write outcomes
 
@@ -132,7 +144,8 @@ targets must validate before it is submitted. Native `replaceAllText`
 (`docs_search_replace(occurrence=0)`) keeps execution-time matching, with no
 preceding read/rebase; uncertain responses are still never replayed.
 
-Rich/literal ordinary insertions now always carry a required revision.
+Rich/literal ordinary insertions carry the configured revision precondition,
+subject to the strict exceptions above.
 Temporary local-image uploads/sharing are prepared once per tool call, reused
 across rejected attempts and cleaned up after the entire executor exits.
 Rebased requests use the same temporary URIs at fresh positions. Cleanup
@@ -159,7 +172,7 @@ See [comment tools](tools/comments.md#persistence-and-concurrency).
 The default protection covers the backend read-to-write window for this call.
 It does **not** establish that content is unchanged since an agent's earlier
 `docs_read` call. Pass `expected_revision_id` from that earlier read when a
-strict document-wide precondition is required. All seven indexed edit tools
+strict document-wide precondition is required. Indexed text and color edit tools
 accept it; a mismatch fails before writing, and any write-time revision race
 fails instead of rebasing. This intentionally rejects independent intervening
 changes too. Native replace-all rejects this parameter rather than ignoring
