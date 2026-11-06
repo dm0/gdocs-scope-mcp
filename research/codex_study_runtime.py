@@ -70,7 +70,9 @@ class StudyClient:
         if not line:
             raise RuntimeError('Codex app-server closed before completion')
         event = json.loads(line)
-        self.events.append(event)
+        # Startup account and quota notifications are unrelated personal data.
+        if not event.get('method', '').startswith('account/'):
+            self.events.append(event)
         if len(self.events) > MAX_EVENTS:
             raise RuntimeError('Study event budget exhausted')
         return event
@@ -115,13 +117,19 @@ class StudyClient:
             raise RuntimeError('Effective model/settings differ from request')
         return started
 
-    async def turn(self, thread_id, prompt, handler, *, action_limit=16):
+    async def turn(
+        self, thread_id, prompt, handler, *, action_limit=16,
+        output_schema=None,
+    ):
         """Execute a single bounded turn; only the supplied handler can act."""
         started = time.monotonic()
-        await self.request('turn/start', {
+        params = {
             'threadId': thread_id, 'effort': 'medium',
             'input': [{'type': 'text', 'text': prompt, 'text_elements': []}],
-        })
+        }
+        if output_schema is not None:
+            params['outputSchema'] = output_schema
+        await self.request('turn/start', params)
         calls = []
         messages = []
         # A wall-clock deadline complements each infrastructure read timeout.
@@ -191,7 +199,7 @@ async def isolated_client(log_path, *, timeout=120):
 
 async def probe(model, output):
     """Verify actual dynamic-tool dispatch without accessing Google Docs."""
-    output.mkdir(parents=True, exist_ok=True)
+    output.mkdir(parents=True, exist_ok=True, mode=0o700)
     report = {'model': model, 'effort': 'medium', 'status': 'running'}
 
     async def echo(call):

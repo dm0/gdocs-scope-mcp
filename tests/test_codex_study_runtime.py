@@ -92,6 +92,19 @@ def test_rpc_retains_notifications_and_handles_errors():
     asyncio.run(run())
 
 
+def test_account_notifications_are_not_retained():
+    """Exclude account identifiers from synthetic study traces."""
+    async def run():
+        client = client_for([
+            {'method': 'account/updated', 'params': {'private': 'synthetic'}},
+            {'method': 'account/rateLimits/updated', 'params': {}},
+            {'id': 1, 'result': {}},
+        ])
+        await client.request('first', {})
+        assert client.events == [{'id': 1, 'result': {}}]
+    asyncio.run(run())
+
+
 def test_action_budget_blocks_the_next_operation():
     """An over-budget attempted action never reaches the execution handler."""
     async def run():
