@@ -24,6 +24,12 @@ process cleanup. It is not a pilot or evidence of improved tool correctness.
 The ordinary Codex state directory must be writable during app-server startup;
 the restricted parent sandbox may therefore require native tool approval.
 
+`tool_consolidation_preflight.py` captures all four actual STDIO catalogs and
+runs one non-mutating decision scenario in twelve fresh chats. See the
+[preflight report](../docs/development/tool-consolidation-preflight.md) for
+actual usage, infrastructure failures, limitations and reproduction. It is
+not the 960-session formal pilot and does not support a default-adoption claim.
+
 ## List token measurements
 
 From the repository root:

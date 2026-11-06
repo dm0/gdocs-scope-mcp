@@ -1,7 +1,8 @@
 # Study 1: implementation and validation report
 
 Date: 2026-11-06.
-Status: implementation validated; model study pending roster approval.
+Status: implementation validated; model roster approved and runtime preflight
+passed; formal pilot usage budget pending.
 Issue: [#59](https://github.com/dm0/gdocs-scope-mcp/issues/59).
 
 ## Decision and scope
@@ -144,21 +145,22 @@ artifacts are diagnostic evidence, not durable published evaluation data.
 
 ## Model-study readiness and limitations
 
-The user requested new Codex chats as the execution route and a roster preview
-before starting. Current chat turn metadata records `gpt-6.1-sol`, reasoning
-`medium`. The host's thread-creation catalog lists `gpt-6-luna`, `gpt-6.1-sol`
-and `gpt-6-astra`; these are proposed weaker/current/stronger choices, all with
-`medium` reasoning, pending explicit approval. Host availability is not a
-completed inference/access check. This proposal mixes minor versions 6 and 6.1
-within GPT-6 and requires that limitation to be agreed and recorded. No tested
-capability ordering or exact backend snapshot is inferred from host labels.
+The user approved `gpt-6-luna`, `gpt-6.1-sol` and `gpt-6-astra`, all at `medium`,
+including the disclosed mixture of GPT-6 minor versions 6 and 6.1. Current-chat
+turn metadata identifies `gpt-6.1-sol`. Fresh desktop chats confirmed actual
+access to each model, and isolated app-server chats confirmed tool callbacks
+and exact requested model/settings without provider-model fallback. These are
+model identifiers, not a claim to know an immutable backend snapshot.
 
-No model-evaluation chats have been launched, no model trajectories collected,
-and no pilot/held-out dataset, run manifest, budgets, stopping rule or adoption
-thresholds frozen. The mandated paired model effects, confidence intervals,
-human audit, usage and error taxonomy are therefore unavailable. The protocol
-starts with 480 pilot runs per level (960 across both levels), followed by
-3600 held-out runs per level (7200 total); a small smoke test cannot replace it.
+A [12-chat complete-catalog preflight](tool-consolidation-preflight.md) passed
+on one synthetic decision-only scenario. It does not establish an interface
+effect or replace the formal study. No pilot or held-out dataset, usage budget,
+stopping rule or adoption threshold has been frozen. The mandated paired
+effects, confidence intervals, human audit and full error taxonomy are still
+unavailable. The protocol starts with 480 pilot runs per level (960 across both
+levels), followed by 3600 held-out runs per level (7200 total). After measuring
+the preflight's actual usage, the user was asked to choose a full-pilot budget
+or an initial bounded exploratory run; that answer remains pending.
 
 Before a chat-based study, verify that catalog exposure, fresh-session
 independence, unrelated-tool restrictions, agent-loop settings and trace capture
