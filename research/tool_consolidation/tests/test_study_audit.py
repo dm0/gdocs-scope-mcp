@@ -1,7 +1,10 @@
 """Protect audit exclusions and reproduce a synthetic heading-read defect."""
 
+import asyncio
 import json
+import os
 import sys
+from collections import Counter
 from copy import deepcopy
 
 import pytest
@@ -9,7 +12,7 @@ import pytest
 from gdocs_scope_mcp.suggestions.index import scope_ranges
 
 from .test_reduced_study_runner import runner  # noqa: F401
-from .test_study_corpus import load_research
+from .test_study_corpus import execution, load_research, scenarios
 
 
 @pytest.fixture
@@ -91,3 +94,85 @@ def test_fixture_copies_heading_identity_to_normal_paragraph():
     repaired = json.loads(json.dumps(tab))
     repaired['body']['content'][0]['paragraph']['paragraphStyle'].pop('headingId')
     assert scope_ranges(repaired, ['h']) is not None
+
+
+@pytest.mark.parametrize('case_id,headings', [
+    ('m05', ['h.exercises', 'h.reading']),
+    ('m16', ['h.reviews', 'h.notes']),
+])
+def test_plain_gold_equivalent_write_causes_synthetic_scoped_read_error(
+    tmp_path, case_id, headings,
+):
+    """Reproduce failures for gold-equivalent rich=False actor trajectories."""
+    case = next(c for c in scenarios.MAIN if c['id'] == case_id)
+
+    async def run():
+        async with execution.fixture_backend(
+            case, 'baseline', tmp_path / case_id,
+        ) as (backend, _identity):
+            for original in case['oracle']:
+                call = deepcopy(original)
+                call['arguments']['rich'] = False
+                assert (await backend.call(call)).get('ok') is not False
+            native = await backend.snapshot()
+            body = native['tabs'][0]['documentTab']['body']['content']
+            styles = [x['paragraph']['paragraphStyle'] for x in body]
+            counts = Counter(s.get('headingId') for s in styles)
+            assert any(s.get('namedStyleType') == 'NORMAL_TEXT'
+                       and s.get('headingId') in headings
+                       and counts[s['headingId']] > 1 for s in styles)
+            result = await backend.call({
+                'tool': 'docs_read', 'arguments': {
+                    'doc_id': backend.document_id, 'heading_ids': headings,
+                },
+            })
+            assert result['code'] == 'TARGET_CHANGED'
+            whole = await backend.call({
+                'tool': 'docs_read',
+                'arguments': {'doc_id': backend.document_id},
+            })
+            assert whole.get('ok') is not False
+
+    asyncio.run(run())
+
+
+@pytest.mark.live
+@pytest.mark.parametrize('case_id,headings', [
+    ('m05', ['h.exercises', 'h.reading']),
+    ('m16', ['h.reviews', 'h.notes']),
+])
+def test_native_plain_insert_retains_readable_heading_selection(
+    tmp_path, monkeypatch, case_id, headings,
+):
+    """Check the failing synthetic continuation on owned native documents."""
+    monkeypatch.setitem(sys.modules, 'study_execution', execution)
+    live = load_research('study_live')
+    if os.environ.get('GDOCS_SCOPE_MCP_LIVE_TEST_FOLDER') != (
+        live.AUTHORIZED_FOLDER
+    ):
+        pytest.skip('Explicit authorized test-folder opt-in is required.')
+    case = next(c for c in scenarios.MAIN if c['id'] == case_id)
+
+    async def run():
+        async with live.live_backend(
+            case, 'baseline', tmp_path / case_id, reference_mode=True,
+        ) as (backend, _identity):
+            for original in case['oracle']:
+                call = deepcopy(original)
+                call['arguments']['rich'] = False
+                receipt = await backend.call(backend.actual_call(
+                    call, 'baseline',
+                ))
+                assert receipt.get('ok') is not False
+            inverse = {alias: native for native, alias
+                       in backend.aliases['headings'].items()}
+            response = await backend.call({
+                'tool': 'docs_read', 'arguments': {
+                    'doc_id': backend.document_id,
+                    'heading_ids': [inverse[h] for h in headings],
+                },
+            })
+            assert response.get('ok') is not False
+            assert len(response['sections']) == len(headings)
+
+    asyncio.run(run())
