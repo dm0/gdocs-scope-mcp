@@ -36,7 +36,8 @@ def paired_effect(rows, cases, metric, contrast, models, *, draws=5000,
     """Bootstrap whole scenario families with models and repeats paired."""
     blocks = defaultdict(dict)
     for row in rows:
-        if row['status'] in {'completed', 'agent_failure'}:
+        if (row['status'] in {'completed', 'agent_failure'}
+                and row['model'] in models):
             blocks[(row['case'], row['model'], row['repeat'])][
                 row['variant']] = row
     by_case_model = defaultdict(list)
@@ -200,10 +201,23 @@ def analyze(directory, stage, draws=5000):
     report = {
         'stage': stage, 'manifest_sha256': (
             directory / 'manifest.sha256').read_text().strip(),
+        'analysis_source_sha256': hashlib.sha256(
+            Path(__file__).read_bytes()).hexdigest(),
         'scheduled': len(manifest['schedules'][stage]),
         'reserved_attempts': len(attempts), 'missing_results': missing,
         'overall': rate_summary(rows), 'groups': {}, 'paired_effects': {},
         'treatment_by_model': {},
+        'error_taxonomy': {
+            'omitted_required_tool': sum(
+                r['status'] == 'completed' and not r.get('trace')
+                and bool(cases[r['case']]['oracle'])
+                and cases[r['case']]['expected_decision'] != 'clarify'
+                for r in rows),
+            'agent_budget_or_protocol_failures': sum(
+                r['status'] == 'agent_failure' for r in rows),
+            'infrastructure_failures': sum(
+                r['status'] == 'infrastructure_failure' for r in rows),
+        },
         'limitations': [
             'Machine grades are provisional pending blinded human review.',
             'Clarification semantics are not validated by decision tags.',
