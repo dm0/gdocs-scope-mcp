@@ -1,15 +1,18 @@
 # Study 1: implementation and validation report
 
 Date: 2026-11-06.
-Status: restart pilot complete; the 960-attempt main stage is running with
-parallel disposable Docs. Machine grades await the full blinded trace audit.
+Status: all 1080 restarted attempts finished. The
+[study report](../../research/tool_consolidation/REPORT.md) contains final
+machine estimates, the native seeding limitation and the decision to retain
+baseline. Machine grades await the full blinded trace audit.
 Issue: [#59](https://github.com/dm0/gdocs-scope-mcp/issues/59).
 
 ## Decision and scope
 
 Keep **baseline** as the default and retain all four executable static variants.
 There is insufficient evidence that consolidation improves correctness. Issue
-#59 remains open: regression checks do not satisfy its required model study.
+#59 remains open pending blinded review and publication/linking of the report.
+The approved model schedule is complete; its adoption criteria were not met.
 No push, release, publication or deployment was performed.
 
 The approved restart contains 120 new pilot sessions (5 scenarios) and 960 new
