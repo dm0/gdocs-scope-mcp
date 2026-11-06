@@ -1,8 +1,8 @@
 # Study 1: implementation and validation report
 
 Date: 2026-11-06.
-Status: first campaign stopped at the user's request; parallel disposable-Doc
-restart preparation is in progress. Machine grades await human audit.
+Status: restart pilot complete; the 960-attempt main stage is running with
+parallel disposable Docs. Machine grades await the full blinded trace audit.
 Issue: [#59](https://github.com/dm0/gdocs-scope-mcp/issues/59).
 
 ## Decision and scope
@@ -362,3 +362,47 @@ The manifest records Codex CLI `0.166.0-alpha.6`, commit `fa01992`, 1080 new
 sessions, 241 prior attempts and the cumulative cap of 1321. The version probe
 emitted a read-only PATH-alias warning but returned successfully; actor runs
 use the approved ordinary Codex state access.
+
+## Restart pilot: 120 attempts
+
+The fresh pilot reserved all 120 planned attempts: 119 completed and one
+infrastructure failure. Each requested model/settings pair was confirmed 40
+times; all actor processes were reaped. The failure was a provider-stream TLS
+handshake EOF after two fixture tool calls. It was preserved, excluded from
+model-error denominators and never retried. The runner drained the other active
+jobs, then resumed only unstarted trials. No further pilot infrastructure
+failure occurred. Cumulative consumption including the first cohort is 361.
+
+Provisional machine grades were **114/119 final successes**, **113/119 correct
+first actions** and **113/119 recovery-free completions**. There were no schema
+errors or actual unintended state changes. Five luna decision-only responses
+described the intended action without calling a tool. One luna end-to-end
+`both` run guessed `comment_id="terminology review"`, received
+`RESOURCE_NOT_FOUND`, read the actual comments and correctly resolved `c.term`.
+That recovery is a final success but an incorrect first action and a
+non-recovery-free completion. The optional-period rule changed no pilot grade.
+
+| Model | Decision first action A/B/C/D | End-to-end final success A/B/C/D |
+| --- | --- | --- |
+| `gpt-6-luna` | 4/5, 4/5, 3/5, 4/5 | 5/5, 4/4, 5/5, 5/5 |
+| `gpt-6.1-sol` | 5/5, 5/5, 5/5, 5/5 | 5/5, 5/5, 5/5, 5/5 |
+| `gpt-6-astra` | 5/5, 5/5, 5/5, 5/5 | 5/5, 5/5, 5/5, 5/5 |
+
+Primary D-A first-action differences are 0 pp in decision-only tasks (all
+paired differences are zero, a degenerate bootstrap). In end-to-end tasks,
+luna is -25 pp [95% CI -75, 0] on four complete scenario families; sol and
+astra have degenerate 0 pp intervals on five families each. The equally
+weighted model summary is -8.3 pp [-25, 0] on four complete families. The
+incomplete four-arm block is excluded from paired effects, not imputed as a
+failure. These pilot intervals support no improvement or equivalence claim.
+Keep baseline while the fixed main stage runs.
+
+Actual recorded pilot usage was 9,994,767 input tokens, including 8,139,648
+cached tokens, and 15,304 output tokens. There were 272 domain calls and 1270.8
+summed completed-turn seconds. Recorded usage includes the failed attempt when
+available; its unfinished turn has no completed-turn duration. No monetary cost
+is inferred. The private `restart-001/analysis/pilot.json` contains per-model,
+stratum, contrast and interaction results, explicit weighting and paired
+denominators. A separate 25-item blinded audit packet is ready; the full human
+audit has not occurred. The main stage starts from the frozen schedule without
+changing prompts, cases or interface variants after these outcomes.
