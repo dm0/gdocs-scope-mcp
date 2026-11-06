@@ -385,8 +385,11 @@ async def run_job(job, case, manifest, output):
                                    and (first['tool'] in READ_TOOLS
                                         or first['advances']))
                     if not trace and not case['oracle']:
-                        correct = answer_ok and final_state == initial
+                        correct = (answer_ok and final_state == initial
+                                   and final.get('decision') != 'clarify')
                     success = final_state == reference[-1] and answer_ok
+                    if not case['oracle']:
+                        success &= final.get('decision') != 'clarify'
                 unnecessary_question = (result['clarifications'] > 0
                                         and case['clarification'] is None)
                 result.update(
