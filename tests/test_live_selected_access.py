@@ -10,7 +10,6 @@ from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
-from gdocs_scope_mcp.google_api import clients
 from gdocs_scope_mcp.google_api.access import DRIVE_FULL
 from gdocs_scope_mcp.google_api.authorization import token_path
 
@@ -180,7 +179,9 @@ def test_live_picker_selection_and_restart(isolated_mcp, live_test_doc):
     os.environ.get('GDOCS_SCOPE_MCP_LIVE_ADDITIONAL_SELECTION') != '1',
     reason='Requires permission to create, select and trash one test Doc.',
 )
-def test_live_additional_selection(isolated_mcp, live_test_doc):
+def test_live_additional_selection(
+    isolated_mcp, live_test_doc, live_document_factory,
+):
     """Select a second document and retain both reads after a restart."""
     target = os.environ.get('GDOCS_SCOPE_MCP_LIVE_SELECTED_TOKEN')
     if not target:
@@ -195,9 +196,9 @@ def test_live_additional_selection(isolated_mcp, live_test_doc):
         'GDOCS_SCOPE_MCP_TOKEN': str(token),
     }
     marker = 'PICKER40' + uuid.uuid4().hex
-    title = 'gdocs-scope-mcp disposable ' + marker
-    report = {'cleanup_passed': False}
-    created = None
+    created = live_document_factory(initial_text=marker, via_mcp=True)
+    title = created['title']
+    report = {'created_document': created}
 
     async def verify_reads(client):
         for doc_id in (live_test_doc, created['id']):
@@ -207,20 +208,7 @@ def test_live_additional_selection(isolated_mcp, live_test_doc):
                 assert marker in json.dumps(result.structured_content)
 
     async def run():
-        nonlocal created
         try:
-            async with isolated_mcp(root / 'creation.stderr') as connected:
-                client, info = connected
-                report['creation_server'] = info
-                result = await client.call_tool('docs_create', {
-                    'title': title, 'initial_text': marker,
-                }, raise_on_error=False)
-                data = result.structured_content
-                created = (data.get('created_document')
-                           if result.is_error else data)
-                report['created_document'] = created
-                assert not result.is_error
-            report['creation_process_reaped'] = True
             print('SELECT_DOCUMENT=' + title, flush=True)
             async with isolated_mcp(root / 'selection.stderr',
                                     environment=environment) as (client, info):
@@ -258,26 +246,7 @@ def test_live_additional_selection(isolated_mcp, live_test_doc):
                 report['restart_both_reads'] = 'passed'
             report['restart_process_reaped'] = True
         finally:
-            if created is not None:
-                drive = clients.get_service('drive', 'v3', cached=False)
-                try:
-                    metadata = drive.files().get(
-                        fileId=created['id'], fields='id,name,mimeType',
-                    ).execute()
-                    assert metadata == {
-                        'id': created['id'], 'name': title,
-                        'mimeType': 'application/vnd.google-apps.document',
-                    }
-                    drive.files().update(
-                        fileId=created['id'], body={'trashed': True},
-                    ).execute()
-                    cleaned = drive.files().get(
-                        fileId=created['id'], fields='trashed',
-                    ).execute()
-                    assert cleaned['trashed'] is True
-                    report['cleanup_passed'] = True
-                finally:
-                    drive.close()
+            evidence.write_text(json.dumps(report, indent=2))
 
     try:
         asyncio.run(run())

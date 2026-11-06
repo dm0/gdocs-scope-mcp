@@ -1,6 +1,5 @@
 """Provide captured API data and an isolated Docs service for offline tests."""
 
-import asyncio
 import json
 import os
 import re
@@ -20,7 +19,11 @@ from fastmcp.client.transports import StdioTransport
 from gdocs_scope_mcp.diagnostics import capture_server_info
 from gdocs_scope_mcp.google_api import clients, credentials
 
-from .live_document_state import document_session, reset_document
+from .live_document_state import LiveDocuments
+
+_live_documents = pytest.StashKey()
+_live_failed = pytest.StashKey()
+_pending_documents = set()
 
 
 @pytest.fixture(scope='session')
@@ -57,68 +60,97 @@ def isolated_mcp():
     return connect
 
 
-@pytest.fixture(scope='session')
-def live_document_reset(isolated_mcp, record_testsuite_property):
-    """Retain the selected environment and external cleanup evidence."""
-    environment = dict(os.environ)
-    root = Path(tempfile.mkdtemp(prefix='gdocs-scope-mcp-live-session-',
-                                 dir='/tmp'))
-    report_path = root / 'report.json'
-    record_testsuite_property('live_document_session_report', str(report_path))
-    report = {}
-
-    async def run(phase):
-        report[phase] = {'status': 'running'}
-        try:
-            async with isolated_mcp(root / f'{phase}.stderr', probe=True,
-                                    environment=environment) as (client, info):
-                report[phase]['server'] = info
-                report[phase]['state'] = await reset_document(
-                    client, environment['GDOCS_SCOPE_MCP_LIVE_TEST_DOC'],
-                )
-            report[phase].update(status='passed', processes_reaped=True)
-        except BaseException:
-            report[phase]['status'] = 'failed'
-            raise
-        finally:
-            report_path.write_text(json.dumps(report, indent=2))
-
-    return lambda phase: asyncio.run(run(phase))
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    """Remember setup and call failures before document finalization."""
+    outcome = yield
+    report = outcome.get_result()
+    if report.failed:
+        item.stash[_live_failed] = True
 
 
-@pytest.fixture(scope='session')
-def live_document_session(live_document_reset):
-    """Hold the document lock through final cleanup of failed sessions."""
-    doc_id = os.environ['GDOCS_SCOPE_MCP_LIVE_TEST_DOC']
-    with document_session(doc_id, live_document_reset):
-        yield doc_id
+@pytest.hookimpl(hookwrapper=True, tryfirst=True)
+def pytest_runtest_call(item):
+    """Remember interruptions that bypass normal report generation."""
+    outcome = yield
+    if outcome.excinfo is not None:
+        item.stash[_live_failed] = True
+
+
+@pytest.hookimpl(hookwrapper=True, tryfirst=True)
+def pytest_runtest_teardown(item, nextitem):
+    """Clean up after all fixtures, including failed dependent teardowns."""
+    outcome = yield
+    try:
+        _finish_documents(item, failed=(
+            item.stash.get(_live_failed, False) or outcome.excinfo is not None
+        ))
+    except BaseException as error:
+        outcome.force_exception(error)
+
+
+def _finish_documents(item, *, failed):
+    """Finalize once, including session shutdown after KeyboardInterrupt."""
+    documents = item.stash.get(_live_documents, None)
+    if documents is not None:
+        del item.stash[_live_documents]
+        _pending_documents.discard(item)
+        documents.finish(failed=failed)
+
+
+@pytest.hookimpl(trylast=True)
+def pytest_sessionfinish(session, exitstatus):
+    """Finalize documents when interruption bypasses runtest teardown."""
+    for item in list(_pending_documents):
+        _finish_documents(item, failed=True)
 
 
 @pytest.fixture(autouse=True)
 def live_document_guard(request):
-    """Start cleanup only for opted-in, document-based live tests."""
-    if (request.node.get_closest_marker('live') is not None
-            and 'live_test_doc' in request.fixturenames):
-        doc_id = request.getfixturevalue('live_test_doc')
-        protected = request.getfixturevalue('live_document_session')
-        assert doc_id == protected, (
-            'The live target changed during the session.'
-        )
+    """Skip every live scenario when the required folder is absent."""
+    if request.node.get_closest_marker('live') is not None:
+        request.getfixturevalue('live_test_folder')
 
 
 @pytest.fixture
-def live_test_doc():
-    """Require an explicit target document before running a live test."""
-    doc_id = os.environ.get('GDOCS_SCOPE_MCP_LIVE_TEST_DOC')
-    if doc_id is None:
-        pytest.skip('Set GDOCS_SCOPE_MCP_LIVE_TEST_DOC to a test document ID.')
-    if not re.fullmatch(r'[A-Za-z0-9_-]+', doc_id):
+def live_test_folder():
+    """Require an explicit folder before constructing any Google clients."""
+    folder = os.environ.get('GDOCS_SCOPE_MCP_LIVE_TEST_FOLDER')
+    if folder is None:
+        pytest.skip('Set GDOCS_SCOPE_MCP_LIVE_TEST_FOLDER to a folder ID.')
+    if not re.fullmatch(r'[A-Za-z0-9_-]+', folder):
         pytest.fail(
-            'GDOCS_SCOPE_MCP_LIVE_TEST_DOC must contain a Google Doc ID, '
-            'not an empty value, URL or whitespace.',
+            'GDOCS_SCOPE_MCP_LIVE_TEST_FOLDER must contain a Google folder ID'
+            ', not an empty value, URL or whitespace.',
             pytrace=False,
         )
-    return doc_id
+    return folder
+
+
+@pytest.fixture
+def live_document_factory(request, live_test_folder, isolated_mcp):
+    """Create test-owned documents and retain evidence outside the checkout."""
+    keep = os.environ.get('GDOCS_SCOPE_MCP_LIVE_KEEP_ON_FAILURE', '0')
+    if keep not in {'0', '1'}:
+        pytest.fail('GDOCS_SCOPE_MCP_LIVE_KEEP_ON_FAILURE must be 0 or 1.')
+    root = Path(tempfile.mkdtemp(prefix='gdocs-scope-mcp-live-test-',
+                                 dir='/tmp'))
+    request.node.user_properties.append(('live_document_report',
+                                         str(root / 'report.json')))
+    documents = LiveDocuments(live_test_folder, root, isolated_mcp,
+                              keep_on_failure=keep == '1')
+    request.node.stash[_live_documents] = documents
+    _pending_documents.add(request.node)
+    documents.save()
+    return documents.create
+
+
+@pytest.fixture
+def live_test_doc(live_document_factory, monkeypatch):
+    """Provide a fresh per-test ID to tests and isolated probe servers."""
+    created = live_document_factory()
+    monkeypatch.setenv('GDOCS_SCOPE_MCP_LIVE_TEST_DOC', created['id'])
+    return created['id']
 
 
 @pytest.fixture
