@@ -9,6 +9,7 @@ import random
 import signal
 import subprocess
 import time
+from html import unescape
 from pathlib import Path
 
 from codex_study_runtime import MODELS, StudyAgentError, isolated_client
@@ -296,6 +297,17 @@ def require_operational_backend(payload):
         raise RuntimeError('Backend infrastructure: ' + payload['code'])
 
 
+def rendered_answer_matches(case, final, trace, aliases):
+    """Require an exact displayed answer and an actual scoped read."""
+    reads = [c for c in trace if c['tool'] == 'docs_read']
+    headings = aliases.get('headings', {})
+    return (unescape(final.get('message', '')) == case['answer_contains']
+            and bool(reads)
+            and all([headings.get(h, h)
+                     for h in call['arguments'].get('heading_ids', [])]
+                    == [case['answer_heading_id']] for call in reads))
+
+
 async def run_job(job, case, manifest, output):
     """Run a fresh chat and grade MCP state, retaining failed attempts."""
     directory = output / 'runs' / job['id']
@@ -384,7 +396,8 @@ async def run_job(job, case, manifest, output):
             result['tool_order'] = [tool['name'] for tool in tools]
             metadata = {tool['name']: tool.get('annotations', {})
                         for tool in catalog['tools']}
-            instructions = (catalog['instructions'] + '\n\n' + POLICY
+            instructions = (catalog['instructions'] + '\n\n'
+                            + manifest.get('policy', POLICY)
                             + '\nTool policy metadata: '
                             + json.dumps(metadata, sort_keys=True))
             prompt = ('Document ID: ' + backend.document_id + '\n'
@@ -434,6 +447,13 @@ async def run_job(job, case, manifest, output):
                                  for m in t['messages'])
                 answer_ok = (case['answer_contains'] is None
                              or case['answer_contains'] in text)
+                if (case['answer_contains'] is not None
+                        and manifest.get('grading', {}).get(
+                            'rendered_exact_answers', False,
+                        )):
+                    answer_ok = rendered_answer_matches(
+                        case, final, result['trace'], backend.aliases,
+                    )
                 trace = result['trace']
                 first = trace[0] if trace else None
                 if job['level'] == 'decision':

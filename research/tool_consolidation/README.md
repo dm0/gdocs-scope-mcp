@@ -1,5 +1,28 @@
 # Tool consolidation study (#59)
 
+## Prospective noninferiority stage
+
+The user authorized 1500 additional reservations comparing only baseline and
+both treatments, with no continuation beyond that budget. See the frozen
+[stage-one protocol](NONINFERIORITY_PROTOCOL.md). The generator produces 250
+fresh task instances from 25 declared templates; each is paired across the two
+arms and three models. Only full-task completion is tested. Of 1500 attempts,
+150 use disposable native Docs and 1350 use the repaired API seam.
+
+Run from this worktree's root project with a new private artifact directory:
+
+```bash
+GDOCS_SCOPE_MCP_LIVE_TEST_FOLDER='<authorized-test-folder-id>' uv run --locked python research/tool_consolidation/run_noninferiority.py prepare --output ARTIFACTS --previous-restart PREVIOUS_RESTART
+GDOCS_SCOPE_MCP_LIVE_TEST_FOLDER='<authorized-test-folder-id>' uv run --locked python research/tool_consolidation/run_noninferiority.py run --output ARTIFACTS
+uv run --locked python research/tool_consolidation/analyze_noninferiority.py --output ARTIFACTS
+```
+
+Preparation calibrates every fixture reference and all 25 native representative
+prefix states plus task-visible reads/anchors before creating the manifest.
+The exact 99% zero-loss gate is prospective and separate from descriptive
+template-cluster bootstrap intervals. Missing pairs block the strict gate.
+The CLI has no stage-two action. Earlier campaigns remain immutable and separate.
+
 All experiment scripts, synthetic fixtures and research-only tests for this
 study live here, including the [study report](REPORT.md). Product implementation
 documentation remains under `docs/development/`. Run commands from
