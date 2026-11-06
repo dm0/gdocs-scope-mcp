@@ -195,43 +195,59 @@ module also keeps its two pure helper tests in the offline selection.
 
 The Drive-to-Docs mechanism and retained embedded copy after source deletion
 were verified on the designated development document. Optional live regressions
-upload only a generated fixture image, temporarily share it, edit the explicitly
-selected test document and remove the source files:
+upload only a generated fixture image, temporarily share it, edit a per-test
+disposable document and remove the source files:
 
 ```bash
-GDOCS_SCOPE_MCP_LIVE_TEST_DOC='your-test-document-id' \
+GDOCS_SCOPE_MCP_LIVE_TEST_FOLDER='your-test-folder-id' \
   uv run --locked pytest -q -m live --strict-markers
 ```
 
-`GDOCS_SCOPE_MCP_LIVE_TEST_DOC` both enables live tests and selects their target.
-Pass the raw Google Doc ID, not a URL. There is no hard-coded target or fallback.
-When the variable is unset, live tests are skipped; an empty value, URL or
-whitespace fails before accessing Google. The former
-`GDOCS_SCOPE_MCP_LIVE_DRIVE_IMAGES` flag is no longer used.
+`GDOCS_SCOPE_MCP_LIVE_TEST_FOLDER` is required for all live tests. Pass a raw
+folder ID, not a URL. When unset, live tests skip; an empty value, URL or
+whitespace fails before accessing Google. The folder must be accessible to the
+test credentials and allow adding children. With selected-file access, the
+folder must also be available to the app. No folder is selected implicitly.
+The old `GDOCS_SCOPE_MCP_LIVE_TEST_DOC` and `GDOCS_SCOPE_MCP_LIVE_CREATE`
+settings no longer enable tests. The document ID variable is now populated
+internally for each test's isolated probe servers. Older examples elsewhere
+that set only a document ID must instead set the folder variable above.
 
 The bounded search smoke additionally requires `GDOCS_SCOPE_MCP_LIVE_SEARCH=1`.
-Creating and trashing a disposable document requires separate authorization
-and `GDOCS_SCOPE_MCP_LIVE_CREATE=1`. Optional manual UI waits remain disabled
+The folder opt-in authorizes fixture-owned document creation and trashing.
+Optional manual UI waits remain disabled
 unless explicitly enabled. Release verification runs both the complete offline
 suite and every authorized automated live scenario; use unfiltered `pytest`
 with the corresponding opt-ins for the final combined release run.
 
-Choose a disposable document that you are authorized to erase. Document-based
-live tests acquire a session lock for that document, then clear it before the
-first test and again at session teardown. Cleanup rejects pending proposals,
-deletes comments and named ranges, removes additional root and child tabs, and
-leaves one empty tab with normal text formatting. The document ID, title and
-first root tab identity are retained. A second local test session targeting the
-same document fails before cleanup. Ordinary unit tests never start this fixture.
+Each document-based test receives a fresh Google Doc with a UTC timestamp and
+UUID in its name. The fixture creates it directly in the configured folder
+through Drive API and records the confirmed ID before validating metadata.
+The dedicated creation and interactive additional-selection scenarios use
+`docs_create` over isolated STDIO MCP instead, then move their confirmed IDs
+into the folder. Folder support is test infrastructure only;
+`docs_create` has no new arguments. Concurrent runs use independent documents.
+The interactive additional-selection scenario needs two documents and obtains
+both through the same factory. Read-only listing tests do not need a document.
 
-Session cleanup runs after test failures and handled interruption as well as
-successful runs. A killed process or host failure cannot execute teardown; the
-next live session clears any residue before testing. The JUnit suite property
-`live_document_session_report` points to an external JSON report containing
-before/after results and isolated server identities; separate stderr files are
-in the same temporary directory. Follow workspace authorization rules before
-opting in. Temporary source images and separately created documents retain
-their own fixture cleanup.
+After each test and its dependent fixture teardowns, cleanup verifies the
+created ID, name and MIME type, moves the document to trash and reads back
+`trashed=true`. Setup failures and handled interruption also trigger cleanup.
+Set `GDOCS_SCOPE_MCP_LIVE_KEEP_ON_FAILURE=1` to retain documents when setup,
+the test or fixture teardown fails; successful tests still trash their documents.
+The default is `0`; other values fail before Google access. Existing per-test
+content restoration still runs, so retention does not promise an exact snapshot
+of the failure. A killed process or host failure cannot execute cleanup.
+
+The JUnit test property `live_document_report` points to
+`/tmp/gdocs-scope-mcp-live-test-*/report.json`. Reports include confirmed IDs,
+unique titles and cleanup/retention status. MCP-based creation also records
+server identity and process reaping, with stderr in the same directory.
+IDs are recorded even if
+initial insertion or folder placement fails. If creation times out without
+returning an ID, inspect the folder and My Drive by the unique name; creation
+is never replayed. Follow workspace authorization rules before opting in.
+Temporary source images retain their own fixture cleanup.
 
 For linked-worktree verification, run from that worktree using its environment.
 Launch an isolated STDIO process; do not reconfigure or restart a user's normal
