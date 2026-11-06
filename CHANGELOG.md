@@ -6,6 +6,76 @@ provenance; it is not a release of this independent project.
 
 ## Unreleased
 
+## [v0.8.0] - 2026-11-06
+
+### Added
+
+- Selected-file access through Desktop Google Picker with only `drive.file`.
+  Connect more documents later and retain grants across server restarts.
+  `docs_select_files` is available only in `selected_files` mode; application-
+  created files are also accessible. A pasted document URL grants no access.
+- MCP authorization and recovery with `docs_authorize`,
+  `docs_authorization_status` and `docs_authorization_complete`. Browser
+  consent can run on another computer without an SSH tunnel. Upgrading a
+  narrow grant to full Drive access verifies the same account and client
+  before replacing credentials; failed or denied consent retains the token.
+- `docs_insert_at_heading` inserts before a heading or after its complete
+  subtree, including nested sections and tables. It uses native heading IDs
+  and the selected tab, with bounded boundary recomputation after confirmed
+  revision races. An explicit revision disables automatic replanning.
+- Text colors, highlighting and paragraph fills, with 80 Google editor palette
+  names and custom `#RRGGBB` values. `docs_get_color_palette` requires no Google
+  access; `docs_format_text` and `docs_format_paragraph` apply anchored,
+  revision-guarded changes or reset individual direct color properties.
+  Supported rich reads and writes share explicit HTML color attributes.
+- Public project website with setup links, capability and limitation summaries,
+  privacy policy and terms. GitHub Pages publication runs on version tags or
+  manual workflow dispatch; preparing this release does not publish the site.
+- MIT license file.
+
+### Changed
+
+- New full-drive authorizations request only `drive`, omitting overlapping
+  Docs and Drive scopes. Existing broad tokens remain usable. Changing access
+  mode or updating the application does not revoke earlier Google grants;
+  see [access modes and migration](docs/configuration.md#document-access-modes).
+- Rich insertion resets inherited direct paragraph/text formatting to the
+  document's named-style baseline before applying explicit input styles.
+  Input lists receive their own nesting, and automatic image sizing follows
+  the destination style and requested list depth. `rich=False` retains native
+  Google insertion inheritance.
+- Code block line spacing now defaults to 1.15 for insertion and heuristic
+  reading, previously 1.0. Existing explicit configuration values still apply.
+  Paragraph spacing is retained only at the outer code block boundaries.
+
+### Fixed
+
+- New table-cell paragraphs, including empty cells and rich paragraphs inserted
+  at existing cell anchors, use zero space above and below. Existing paragraphs
+  and cell patches retain their paragraph formatting.
+- Apply rich paragraph styles after named-style resets so Google does not
+  normalize away explicit alignment, spacing and fills. New lists no longer
+  inherit the preceding list's nesting, and cell resets use table-safe fields.
+- Format the paragraph terminator of empty code blocks and avoid inter-line
+  paragraph gaps in nonempty blocks.
+- Align MCP initialization guidance with existing suggestion-writing tools,
+  all four rich insertion tools, code spacing and best-effort image cleanup.
+
+### Limitations
+
+- The bundled OAuth application is still limited to configured test users;
+  this release does not establish unrestricted public OAuth approval. Custom
+  OAuth clients remain supported. Selected-file mode rejects tokens with
+  additional or unknown scopes; configuring it does not narrow an older grant.
+- Color markup supports a defined subset, not a lossless formatting copy.
+  Recognized code keeps its semantic rendering rather than arbitrary colors.
+  New table cells support one paragraph wrapper with inline content; multiple
+  paragraphs, lists and code blocks inside new cells remain unsupported.
+- Table insertion still uses several API batches and can leave partial content
+  on a later failure. Unknown write outcomes are never automatically replayed.
+
+[v0.8.0]: https://github.com/dm0/gdocs-scope-mcp/compare/v0.7.0...v0.8.0
+
 ## [v0.7.0] - 2026-10-31
 
 ### Added
