@@ -159,15 +159,15 @@ uv run --locked pytest -m 'not live' -q
 uv run --locked pytest tests/test_tool_consolidation_stdio.py -m 'not live' -q
 ```
 
-For the opt-in adapter lifecycle tests, set `GDOCS_SCOPE_MCP_LIVE_TEST_DOC` to
-the authorized development Doc ID and keep optional UI waits disabled, then run:
+For current opt-in adapter lifecycle tests, use the authorized folder and keep
+optional UI waits disabled:
 
 ```bash
-uv run --locked pytest tests/test_tool_consolidation_stdio.py -m live -q
+GDOCS_SCOPE_MCP_LIVE_TEST_FOLDER=1j5SqJ2Iu95te9-u_9y_A0DyLcPbOheWt uv run --locked pytest tests/test_tool_consolidation_stdio.py -m live -q
 ```
 
-This uses the existing document-session lock and isolated STDIO fixtures.
-Do not run concurrent sessions against the shared test document. Local `/tmp`
+This uses per-test disposable documents and isolated STDIO fixtures. Historical
+shared-document evidence above used the earlier fixture contract. Local `/tmp`
 artifacts are diagnostic evidence, not durable published evaluation data.
 
 ## Model-study readiness and limitations
@@ -340,3 +340,25 @@ SIGINT/SIGTERM stop new reservations and drain active jobs. Budget lineage,
 protocol text/hash, native references and executable hashes are frozen before
 new model trials; the previously evaluated scenarios are not described as a
 fresh unseen confirmatory dataset.
+
+After restart integration, the full default product suite passed **2408 passed,
+1 skipped, 138 deselected** in 122.36 seconds, while the separate research
+suite passed **99 passed, 25 deselected** in 93.47 seconds. Logs are
+`/tmp/gdocs-59-restart-product-checks.log` and
+`/tmp/gdocs-59-restart-research-checks.log`. Global Ruff and explicit research
+and fixture lint passed. These checks do not invoke actor models.
+
+Restart preparation passed native/fixture semantic parity on **all 25 cases**.
+It created 25 distinct documents, observed three overlapping live contexts,
+verified every document trashed and every MCP process reaped. Calibration
+covers text, hierarchy, explicit styles/colors and comment state/actions in
+the declared corpus; it does not establish complete Google API emulation.
+No actor sessions were used for preparation. Evidence is under the separate
+`restart-001/live-references/` directory. The frozen restart manifest is
+`e6c15741378738c86ddf71fa3840ea6529d15e5f3b278ef550f1ba82d2e80b82`;
+its protocol hash is
+`afebd91f6075724711c46964825497d156dd9aad4a1a97b7c7c3c4d533d8f13b`.
+The manifest records Codex CLI `0.166.0-alpha.6`, commit `fa01992`, 1080 new
+sessions, 241 prior attempts and the cumulative cap of 1321. The version probe
+emitted a read-only PATH-alias warning but returned successfully; actor runs
+use the approved ordinary Codex state access.
