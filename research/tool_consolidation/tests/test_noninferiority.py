@@ -184,3 +184,58 @@ def test_exact_answer_grading_handles_native_aliases(runner):  # noqa: F811
     assert not runner.rendered_answer_matches(case, final, trace, {})
     final['message'] += ' extra'
     assert not runner.rendered_answer_matches(case, final, trace, aliases)
+
+
+def test_followup_selects_only_failures_and_never_retries_reservations(
+    modules, monkeypatch, tmp_path,
+):
+    """Allow eleven infrastructure retries and the adjudicated timeout."""
+    _generator, _controller, analysis = modules
+    monkeypatch.setitem(sys.modules, 'analyze_noninferiority', analysis)
+    retry = load_research('retry_noninferiority')
+    monkeypatch.setattr(retry, 'sources', dict)
+    parent, output = tmp_path / 'parent', tmp_path / 'followup'
+    parent.mkdir()
+    output.mkdir()
+    jobs = [{'id': str(i), 'case': 'case', 'backend': 'fixture'}
+            for i in range(13)]
+    manifest = {'schedules': {'stage1': jobs},
+                'datasets': {'stage1': [{'id': 'case'}]}}
+    retry.write_json(parent / 'manifest.json', manifest)
+    (parent / 'manifest.sha256').write_text(retry.digest(manifest))
+    for i, job in enumerate(jobs):
+        directory = parent / 'runs' / job['id']
+        directory.mkdir(parents=True)
+        retry.write_json(directory / 'result.json', {
+            **job, 'manifest_sha256': retry.digest(manifest),
+            'status': ('infrastructure_failure' if i < 11  # noqa: PLR2004
+                       else 'agent_failure' if i == 11  # noqa: PLR2004
+                       else 'completed'),
+        })
+    retry.prepare(output, parent)
+    frozen = retry.load_manifest(output)
+    assert len(frozen['schedules']['stage1']) == retry.CAP == 12  # noqa: PLR2004
+    assert '12' not in frozen['parent_result_hashes']
+    with pytest.raises(ValueError, match='already prepared'):
+        retry.prepare(output, parent)
+    started = []
+
+    async def actor(job, *_args):
+        ledger = json.loads((output / 'ledger.json').read_text())
+        assert job['id'] in {r['id'] for r in ledger['attempts']}
+        assert job['id'] not in started
+        started.append(job['id'])
+        return {'status': ('infrastructure_failure' if len(started) == 1
+                           else 'completed')}
+
+    monkeypatch.setattr(retry, 'run_job', actor)
+    asyncio.run(retry.run(output))
+    assert len(started) == 1
+    asyncio.run(retry.run(output))
+    asyncio.run(retry.run(output))
+    assert len(started) == retry.CAP
+    ledger = json.loads((output / 'ledger.json').read_text())
+    ledger['attempts'].append({'id': 'outside-the-approved-list'})
+    retry.write_json(output / 'ledger.json', ledger)
+    with pytest.raises(ValueError, match='Invalid follow-up ledger'):
+        asyncio.run(retry.run(output))
