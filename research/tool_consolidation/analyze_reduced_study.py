@@ -77,15 +77,20 @@ def paired_effect(rows, cases, metric, contrast, models, *, draws=5000,
     }
 
 
-def rate_summary(rows):
+def rate_summary(rows, *, equal_models=None):
     """Report observed denominators explicitly, excluding infrastructure."""
     graded = [r for r in rows
               if r['status'] in {'completed', 'agent_failure'}]
+    groups = ([[r for r in graded if r['model'] == model]
+               for model in equal_models] if equal_models else [graded])
     return {
         'attempts': len(rows), 'statuses': dict(Counter(
             r['status'] for r in rows)), 'graded': len(graded),
-        'rates': {metric: mean(float(r.get(metric, False)) for r in graded)
-                  if graded else None for metric in METRICS},
+        'rate_weighting': ('equal models' if equal_models
+                           else 'observed trials'),
+        'rates': {metric: mean(mean(float(r.get(metric, False)) for r in group)
+                              for group in groups)
+                  if all(groups) else None for metric in METRICS},
         'schema_errors': sum(r.get('schema_errors', 0) for r in graded),
         'semantic_errors': sum(r.get('semantic_errors', 0) for r in graded),
         'unnecessary_clarifications': sum(
@@ -398,8 +403,11 @@ def analyze(directory, stage, draws=5000, *, human_sensitivity=False,
                                or cases[r['case']]['stratum'] == stratum)]
                 group = '/'.join([level, model, stratum])
                 report['groups'][group] = {
-                    arm: rate_summary([r for r in subset
-                                       if r['variant'] == arm])
+                    arm: rate_summary(
+                        [r for r in subset if r['variant'] == arm],
+                        equal_models=(models if model == 'equal_model_summary'
+                                      else None),
+                    )
                     for arm in VARIANTS
                 }
                 report['paired_effects'][group] = {
@@ -428,7 +436,11 @@ def analyze(directory, stage, draws=5000, *, human_sensitivity=False,
         subset = [r for r in native if r['model'] in models]
         report['native_confirmations'][model] = {
             'rates_by_arm': {
-                arm: rate_summary([r for r in subset if r['variant'] == arm])
+                arm: rate_summary(
+                    [r for r in subset if r['variant'] == arm],
+                    equal_models=(models if model == 'equal_model_summary'
+                                  else None),
+                )
                 for arm in VARIANTS
             },
             'primary_D-A': {

@@ -53,6 +53,16 @@ def test_infrastructure_is_not_a_model_failure():
     assert report['rates']['final_success'] == 0.5  # noqa: PLR2004
 
 
+def test_missing_trials_do_not_reweight_the_equal_model_summary():
+    """Retain equal model weight when completed-trial counts differ."""
+    rows = [{'model': 'small', 'status': 'completed', 'final_success': True}
+            for _ in range(10)]
+    rows.append({'model': 'large', 'status': 'completed',
+                 'final_success': False})
+    report = analysis.rate_summary(rows, equal_models=['small', 'large'])
+    assert report['rates']['final_success'] == 0.5  # noqa: PLR2004
+
+
 def test_semantic_calls_hide_treatment_names():
     """Present the same operation to a reviewer for both interfaces."""
     assert analysis.neutral_call({
