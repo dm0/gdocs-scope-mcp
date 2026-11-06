@@ -3,6 +3,10 @@
 Date: 2026-11-06. Issue: [#59](https://github.com/dm0/gdocs-scope-mcp/issues/59).
 Status: all 1080 restarted attempts finished; machine analysis complete.
 Full blinded human review and external publication remain pending.
+The [retrospective audit](AUDIT.md) corrects the m11 interpretation and reports
+separate user-adjudicated displayed-text and fixture-error sensitivities.
+With the displayed-text adjudication, end-to-end A and D both reach 95.83%;
+paired D-A is 0.00 pp [−2.50, +2.50]. The frozen tables below remain unchanged.
 
 ## Result and adoption decision
 
@@ -107,18 +111,19 @@ blocks (13 complete blocks available; all models required per family).
 Luna alone has five native families: first action +40 [0, 80] pp and final
 success 0 [-60, 60]. This subset cannot establish native noninferiority.
 
-Inspection identified a concrete fidelity problem in m11. Native seeding
-anchors every seeded comment to the first tab's first body paragraph. Here
-that is **Reference**, which the request says to leave unchanged; the synthetic
-fixture does not expose an equivalent comment anchor. Sol and Astra often
+Inspection identified a scenario ambiguity in m11. Both native and synthetic
+seeding anchor every seeded comment to the first tab's first body paragraph.
+Here that is **Reference**, which the request says to leave unchanged.
+Synthetic reads also expose this anchor; the earlier native-only explanation
+was incorrect and is corrected by the [audit](AUDIT.md). Sol and Astra often
 inserted the requested Operations paragraph and then asked whether reopening
 the Reference-anchored thread was allowed. That is a reasonable ambiguity
 introduced by the harness. Two Luna traces searched without
 `include_resolved=true`, received no visible threads and stopped to clarify.
 Thus the large m11 backend gap cannot be attributed to the interface or model
-alone. Gold state calibration did not detect this observation-level mismatch.
-Keep all frozen grades, disclose the mismatch, and require matched comment
-anchors and full observation/trajectory calibration before a future campaign.
+alone. Gold state calibration did not detect the common request ambiguity.
+Keep all frozen grades, disclose the ambiguity, and require unambiguous comment
+targets/protection plus full observation/trajectory calibration in future work.
 No new campaign is authorized by this report.
 
 ### Operations, failures and trace review

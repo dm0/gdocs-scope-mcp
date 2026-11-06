@@ -5,6 +5,11 @@ study live here, including the [study report](REPORT.md). Product implementation
 documentation remains under `docs/development/`. Run commands from
 the repository root using its Python project and worktree environment.
 
+The [retrospective audit](AUDIT.md) preserves the frozen grades and adds
+separate user-adjudicated and scenario/fixture sensitivity estimates.
+`audit_reduced_study.py --output ARTIFACTS/restart-001` verifies the completed
+restart and writes private audit evidence without starting any model sessions.
+
 Run the research checks separately from the default product suite:
 
 ```bash
