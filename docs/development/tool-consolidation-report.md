@@ -58,6 +58,17 @@ and JUnit report are `/tmp/gdocs-59-offline-final.log` and
 environment-variable test inventory omitted the new setting; that inventory
 was updated before the successful complete rerun.
 
+After isolating research in commit `b8834a2`, the default product suite again
+passed **2398 passed, 1 skipped, 138 deselected** in 85.42 seconds
+(`/tmp/gdocs-59-product-after-isolation.log`). The separate
+`research/tool_consolidation/tests/` suite passed **68 passed, 5 deselected**
+in 64.70 seconds (`/tmp/gdocs-59-isolated-research-tests.log`). Default
+collection contains no research tests. Global Ruff, explicit research-test
+lint, the relocated runner's CLI help and `git diff --check` passed. Wheel and
+sdist built successfully; the sdist contains both named study directories,
+their READMEs and the relocated research tests. Every study now owns a named
+subdirectory, as required by `AGENTS.md` and `research/README.md`.
+
 Focused contract checks cover all four static catalogs, unchanged tools and
 annotations, literal/rich native insertion requests and receipts, formatting
 overrides, expected revisions, missing/repeated anchors, target validation,
@@ -168,13 +179,14 @@ model identifiers, not a claim to know an immutable backend snapshot.
 
 A [12-chat complete-catalog preflight](tool-consolidation-preflight.md) passed
 on one synthetic decision-only scenario. It does not establish an interface
-effect or replace the formal study. No pilot or held-out dataset, usage budget,
-stopping rule or adoption threshold has been frozen. The mandated paired
-effects, confidence intervals, human audit and full error taxonomy are still
-unavailable. The protocol starts with 480 pilot runs per level (960 across both
-levels), followed by 3600 held-out runs per level (7200 total). After measuring
-the preflight's actual usage, the user was asked to choose a full-pilot budget
-or an initial bounded exploratory run; that answer remains pending.
+effect or replace the formal study. The user subsequently approved the reduced
+120-session pilot and 960-session main stage described above. The larger
+original 960/7200 design is superseded for this campaign. The reduced corpus,
+paired schedules, state oracles, stopping rules and adoption criteria are
+defined in the runner and protocol; the manifest is being regenerated after
+the requested directory relocation, before any formal model inference.
+Paired effects, confidence intervals, human audit and the observed error
+taxonomy remain unavailable until trials finish.
 
 Before a chat-based study, verify that catalog exposure, fresh-session
 independence, unrelated-tool restrictions, agent-loop settings and trace capture

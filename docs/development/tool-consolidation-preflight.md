@@ -112,14 +112,14 @@ captures, but the preflight does not verify equivalent native host confirmation
 behavior. The formal end-to-end design must preserve the relevant distinctions
 before any default-adoption claim.
 
-The user was asked to choose either the full 960-session pilot or an initial
-60-session exploratory cap after seeing actual preflight usage. The user then
-asked about the main-stage count: 7200 sessions, or 8160 including the initial
-pilot. The budget selection remains pending. The fixed usage budget,
-dataset hashes, paired randomization, stopping rules, clarification policy,
-grading audit and native end-to-end controls must be recorded before the pilot.
-The 7200-session initial held-out plan remains a later phase, subject to pilot
-power and feasibility. A 60-session exploration cannot satisfy that plan.
+After seeing preflight usage and the original 960/7200-session design, the user
+approved a reduced campaign: five pilot scenarios (120 sessions), twenty main
+scenarios (960 sessions), and a strict total cap of 1080 attempts. The active
+profile is documented in [the protocol](tool-interface-evaluation.md). The
+runner freezes dataset hashes, paired randomization, stopping rules,
+clarification policy and native controls before inference. This smaller
+campaign supports preliminary conclusions; the original larger design is not
+authorized by this approval.
 
 Keep the baseline default. Issue #59 remains open.
 
