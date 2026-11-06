@@ -371,8 +371,12 @@ async def run_job(job, case, manifest, output):
                                        and first['advances'])
                     else:
                         correct = (final_state == initial and answer_ok
+                                   and final.get('decision') != 'clarify'
                                    and (not trace or (
                                        case['answer_contains']
+                                       and first['schema_valid']
+                                       and first['result'].get('ok')
+                                       is not False
                                        and first['tool'] == 'docs_read')))
                     success = correct
                 else:

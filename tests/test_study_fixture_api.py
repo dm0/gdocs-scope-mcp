@@ -68,6 +68,18 @@ def test_duplicate_tab_titles_are_rejected(fixture_specification):
         fixture_api.FixtureAPI(fixture_specification)
 
 
+def test_whole_paragraph_style_includes_newline(fixture_specification):
+    """Match native formatting without expanding a partial-text selection."""
+    api = fixture_api.FixtureAPI(fixture_specification)
+    for end, expected in [(10, False), (15, True)]:
+        api.apply({'requests': [{'updateTextStyle': {
+            'range': {'tabId': 't.main', 'startIndex': 1, 'endIndex': end},
+            'textStyle': {'bold': True}, 'fields': 'bold',
+        }}]})
+        actual = bool(api.tabs[0]['chars'][-1]['textStyle'].get('bold'))
+        assert actual == expected
+
+
 @pytest.mark.parametrize('variant', ['baseline', 'both'])
 def test_production_reads_writes_and_comment_status(
     fixture_specification, monkeypatch, variant,

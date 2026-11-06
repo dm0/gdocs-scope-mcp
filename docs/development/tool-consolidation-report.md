@@ -1,8 +1,8 @@
 # Study 1: implementation and validation report
 
 Date: 2026-11-06.
-Status: implementation validated; model roster approved and runtime preflight
-passed; formal pilot usage budget pending.
+Status: implementation validated; model roster and the reduced 1080-session
+budget approved; native fixture calibration in progress before model trials.
 Issue: [#59](https://github.com/dm0/gdocs-scope-mcp/issues/59).
 
 ## Decision and scope
@@ -11,6 +11,20 @@ Keep **baseline** as the default and retain all four executable static variants.
 There is no evidence yet that consolidation improves agent correctness. Issue
 #59 remains open: regression checks do not satisfy its required model study.
 No push, release, publication or deployment was performed.
+
+The approved reduced profile contains 120 pilot sessions (5 scenarios) and
+960 main sessions (20 scenarios). The 60 native-document confirmations are
+included in the main schedule. Failed attempts consume the same cap; no
+automatic replacement model sessions are permitted.
+
+Pre-inference native calibration exposed setup constraints: tab titles must be
+unique; ordinary-text preambles are not headings; whole-paragraph text styling
+can include the adjacent newline. The synthetic API and setup now follow these
+observations. The original m16 duplicate-tab-title ambiguity was replaced,
+before any formal inference, by heading-versus-body ambiguity with a scripted
+clarification. A failed native tab-renaming request was retained and cleaned
+up without replaying an unknown write. Preparation artifacts preserve failures
+separately from model outcomes. These checks consumed no formal model sessions.
 
 The pre-treatment repository revision was
 `6f7d48ce0f5db0b03fbdde2a099306dc7982a25f`. The implementation commit is

@@ -269,6 +269,11 @@ class FixtureAPI:
                     reject('The mandatory final newline cannot be deleted.')
                 del chars[start:end]
             elif name == 'updateTextStyle':
+                # Native Docs extends whole-paragraph formatting over its
+                # adjacent newline (calibrated with the m20 color control).
+                if (end < len(chars) and chars[end]['char'] == '\n'
+                        and (start == 0 or chars[start - 1]['char'] == '\n')):
+                    end += 1
                 for char in chars[start:end]:
                     self.update_style(char['textStyle'], payload['textStyle'],
                                       payload['fields'])
