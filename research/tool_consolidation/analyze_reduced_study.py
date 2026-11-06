@@ -43,27 +43,32 @@ def paired_effect(rows, cases, metric, contrast, models, *, draws=5000,
             blocks[(row['case'], row['model'], row['repeat'])][
                 row['variant']] = row
     by_case_model = defaultdict(list)
+    blocks_per_case = Counter()
     complete = 0
     for (case, model, _repeat), arms in blocks.items():
         if set(arms) != set(VARIANTS):
             continue
         complete += 1
+        blocks_per_case[case] += 1
         by_case_model[case, model].append(sum(
             weight * float(arms[arm].get(metric, False))
             for arm, weight in contrast.items()
         ))
     clusters = defaultdict(list)
+    included_cases = []
     weights = (dict.fromkeys(models, 1 / len(models)) if weights is None
                else weights)
     for case in sorted({key[0] for key in by_case_model}):
         if all((case, model) in by_case_model for model in models):
+            included_cases.append(case)
             effect = sum(weights[model] * mean(by_case_model[case, model])
                          for model in models)
             clusters[cases[case]['family']].append(effect)
     values = [mean(clusters[family]) for family in sorted(clusters)]
     if not values:
         return {'estimate': None, 'ci95': None, 'families': 0,
-                'complete_four_arm_blocks': complete}
+                'complete_four_arm_blocks': 0,
+                'available_complete_four_arm_blocks': complete}
     rng = random.Random(20261106)
     bootstrap = ([values[0]] if len(set(values)) == 1 else [
         mean(rng.choices(values, k=len(values))) for _ in range(draws)
@@ -72,7 +77,9 @@ def paired_effect(rows, cases, metric, contrast, models, *, draws=5000,
         'estimate': mean(values),
         'ci95': [percentile(bootstrap, 0.025),
                  percentile(bootstrap, 0.975)],
-        'families': len(values), 'complete_four_arm_blocks': complete,
+        'families': len(values), 'complete_four_arm_blocks': sum(
+            blocks_per_case[case] for case in included_cases),
+        'available_complete_four_arm_blocks': complete,
         'degenerate_interval': len(set(bootstrap)) == 1,
     }
 

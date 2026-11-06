@@ -24,18 +24,23 @@ def test_pairing_excludes_incomplete_blocks_and_weights_models_equally():
             for model, repeats in [('small', 2), ('large', 1)]
             for repeat in range(repeats) for arm in analysis.VARIANTS]
     rows += [row('c2', 'small', 0, 'baseline', True)]
+    rows += [row('c3', 'small', 0, arm, arm == 'baseline')
+             for arm in analysis.VARIANTS]
+    cases = {'c1': {'family': 'f1'}, 'c2': {'family': 'f2'},
+             'c3': {'family': 'f3'}}
     result = analysis.paired_effect(
-        rows, {'c1': {'family': 'f1'}, 'c2': {'family': 'f2'}},
+        rows, cases,
         'first_action_correct', analysis.CONTRASTS['D-A'],
         ['small', 'large'], draws=50,
     )
     assert result['estimate'] == 1
     assert result['families'] == 1
     assert result['complete_four_arm_blocks'] == 3  # noqa: PLR2004
+    assert result['available_complete_four_arm_blocks'] == 4  # noqa: PLR2004
     assert result['ci95'] == [1, 1]
     assert result['degenerate_interval']
     interaction = analysis.paired_effect(
-        rows, {'c1': {'family': 'f1'}, 'c2': {'family': 'f2'}},
+        rows, cases,
         'first_action_correct', analysis.CONTRASTS['D-A'],
         ['small', 'large'], draws=50, weights={'small': 1, 'large': -1},
     )
