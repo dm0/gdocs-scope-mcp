@@ -17,6 +17,11 @@ correction. Reproduce that local, model-free sensitivity with:
 uv run --locked python research/tool_consolidation/audit_noninferiority_bold.py --output ARTIFACTS
 ```
 
+The user subsequently authorized twelve infrastructure follow-ups, including
+the agent timeout. All twelve succeeded; cumulative reservations are 2833.
+See the separate [follow-up protocol and results](INFRA_FOLLOWUP.md), which
+preserve the original ledger and distinguish post-hoc combined estimates.
+
 The historical campaign commands below require the frozen execution revision
 `3ba7208`; current generator code includes the post-run m04 repair. These
 commands document the completed campaign and do not authorize another run.

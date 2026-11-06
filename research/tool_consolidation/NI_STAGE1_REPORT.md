@@ -5,6 +5,11 @@ Status: all 1500 authorized attempts finished. The prospective first-stage
 noninferiority gate was not met for any model. Baseline remains the default.
 No continuation, push, publication or deployment was performed.
 
+Subsequently, the user authorized twelve infrastructure follow-ups, including
+reclassification and repetition of the agent timeout. All twelve succeeded.
+See the separate [follow-up report](INFRA_FOLLOWUP.md) for updated descriptive
+estimates and cumulative consumption of 2833; original grades below are preserved.
+
 ## Result and decision
 
 The ledger contains 1488 completed attempts, one agent timeout and 11
