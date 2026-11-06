@@ -53,12 +53,12 @@ def paired_effect(rows, cases, metric, contrast, models, *, draws=5000,
     clusters = defaultdict(list)
     weights = (dict.fromkeys(models, 1 / len(models)) if weights is None
                else weights)
-    for case in {key[0] for key in by_case_model}:
+    for case in sorted({key[0] for key in by_case_model}):
         if all((case, model) in by_case_model for model in models):
             effect = sum(weights[model] * mean(by_case_model[case, model])
                          for model in models)
             clusters[cases[case]['family']].append(effect)
-    values = [mean(values) for values in clusters.values()]
+    values = [mean(clusters[family]) for family in sorted(clusters)]
     if not values:
         return {'estimate': None, 'ci95': None, 'families': 0,
                 'complete_four_arm_blocks': complete}

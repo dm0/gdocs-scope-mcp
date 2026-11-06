@@ -1,14 +1,14 @@
 # Study 1: implementation and validation report
 
 Date: 2026-11-06.
-Status: implementation validated; model roster and the reduced 1080-session
-budget approved; native fixture calibration in progress before model trials.
+Status: implementation validated; 120-session pilot complete; the approved
+960-session main stage is running. Machine grades await human audit.
 Issue: [#59](https://github.com/dm0/gdocs-scope-mcp/issues/59).
 
 ## Decision and scope
 
 Keep **baseline** as the default and retain all four executable static variants.
-There is no evidence yet that consolidation improves agent correctness. Issue
+There is insufficient evidence that consolidation improves correctness. Issue
 #59 remains open: regression checks do not satisfy its required model study.
 No push, release, publication or deployment was performed.
 
@@ -183,13 +183,87 @@ effect or replace the formal study. The user subsequently approved the reduced
 120-session pilot and 960-session main stage described above. The larger
 original 960/7200 design is superseded for this campaign. The reduced corpus,
 paired schedules, state oracles, stopping rules and adoption criteria are
-defined in the runner and protocol; the manifest is being regenerated after
-the requested directory relocation, before any formal model inference.
-Paired effects, confidence intervals, human audit and the observed error
-taxonomy remain unavailable until trials finish.
+defined in the runner and protocol. The execution manifest was frozen after
+the requested directory relocation, before formal model inference.
+Pilot results are reported below. Main-stage estimates and human review remain
+pending; the pilot does not authorize a default-interface change.
 
 Before a chat-based study, verify that catalog exposure, fresh-session
 independence, unrelated-tool restrictions, agent-loop settings and trace capture
 can meet the [shared protocol](tool-interface-evaluation.md). Any host-imposed
 limitations must be recorded before the pilot, not silently attributed to the
 interface. Keep the baseline until the required evidence supports a decision.
+
+## Reduced pilot: 120 completed sessions
+
+All scheduled pilot attempts completed, with no infrastructure exclusion,
+automatic replacement, budget failure or unreaped actor process. Each exact
+model ran 40 sessions at `medium`, without provider-model fallback. The pilot
+has five independent scenario families, one repeat, both evaluation levels and
+four static variants. Main scenarios and their schedule were frozen before
+pilot inference and were not changed after observing these outcomes.
+
+Frozen execution manifest SHA-256:
+`ba0f1c8908597565c9c96bfebe1292ec49835001388a6bd8381869e5ebed0bc2`.
+Protocol SHA-256 at the pre-inference repository revision `1dc550a`:
+`4145fe398dd77c4f5aad3bb08cf3716631c6c9d3754d544db3dfce7888f0df85`.
+The protocol was copied into the private artifact directory after initial
+pilot sessions; its content matches that committed pre-inference revision.
+Pilot corpus hash:
+`cbe0607760752a28defd0d033500ba1090af05e9daf5a2642960fcd45b7fbee6`.
+Held-out corpus hash:
+`50b509596af9632ef54c5c907dafbf0ccebe152eced31471de55654a42392afb`.
+The manifest retains complete catalogs, schedules, source hashes and state
+oracles. Baseline and treatments share the production source fingerprint
+reported above; only static interface registration differs.
+
+The following are provisional machine grades; every cell has five trials.
+Decision-only success means a correct next operation/clarification, not
+completion of a multi-operation workflow. End-to-end first-action scores
+include valid initial discovery/reading; the decision-only level is the direct
+test of selecting the next operation from supplied state.
+
+| Model | Decision first action A/B/C/D | End-to-end final success A/B/C/D |
+| --- | --- | --- |
+| `gpt-6-luna` | 4/5, 3/5, 4/5, 4/5 | 4/5, 5/5, 5/5, 5/5 |
+| `gpt-6.1-sol` | 5/5, 5/5, 5/5, 5/5 | 5/5, 5/5, 5/5, 5/5 |
+| `gpt-6-astra` | 5/5, 5/5, 5/5, 5/5 | 5/5, 5/5, 5/5, 5/5 |
+
+Recovery-free completion equals these success counts. The six unsuccessful
+outcomes all occurred on luna: five omitted the required tool call, and one
+schema-valid insertion changed literal `**Meeting closed**` into
+`Meeting closed`. The latter is an actual unintended content change in the
+synthetic document, not merely a blocked attempt. There were no invalid-schema
+calls or unnecessary clarification tags. Question relevance itself has not
+been human-graded and cannot be established by a `clarify` tag.
+
+For primary D-A first-action correctness, scenario-family bootstrap intervals
+(5000 draws, fixed seed, equal model weights) are:
+
+| Model | Decision effect, pp [95% CI] | End-to-end effect, pp [95% CI] |
+| --- | --- | --- |
+| Equal-model summary | 0.0 [-20.0, 20.0] | 6.7 [0.0, 20.0] |
+| `gpt-6-luna` | 0.0 [-60.0, 60.0] | 20.0 [0.0, 60.0] |
+| `gpt-6.1-sol` | 0.0 [0.0, 0.0]* | 0.0 [0.0, 0.0]* |
+| `gpt-6-astra` | 0.0 [0.0, 0.0]* | 0.0 [0.0, 0.0]* |
+
+The starred intervals are degenerate ceiling samples, not evidence of
+equivalence or safety. Five families cannot provide reliable power for the
+3 pp improvement and 2 pp noninferiority targets. No pilot contrast establishes
+the required improvement; keep baseline. The machine-readable analysis also
+contains secondary contrasts, strata and paired treatment-by-model differences.
+Those analyses are descriptive, without multiplicity-adjusted claims.
+
+Actual pilot usage was 9,971,540 input tokens, including 7,572,480 cached input
+tokens, and 15,281 output tokens (1,641 reasoning tokens are a subset).
+There were 270 domain calls: 58 discovery and 97 content/comment reads.
+Summed turn time was 1227.8 seconds, including controller callbacks; it is not
+elapsed campaign time and excludes fixture setup. No monetary cost is inferred.
+
+Private campaign artifacts are under
+`/home/lapin/projects/sandboxes/gdocs-scope-mcp/study-artifacts/59-reduced-2026-11-06/`:
+`manifest.json`, `protocol.md`, `ledger.json`, per-run `result.json` and
+`events.json`, `analysis/pilot.json`, and a 26-item blinded audit packet with
+initial fixtures, observed reads, normalized operation names and final states.
+Its model/arm key is separate. Human audit has not occurred. These local traces
+are not published evidence; publication remains a separate action.
