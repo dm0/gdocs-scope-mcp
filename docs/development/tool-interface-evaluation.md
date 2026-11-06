@@ -1,6 +1,8 @@
 # Tool interface evaluation design
 
-Status: planned; no model evaluation results have been collected.
+Status: studies planned; Study 1 has opt-in static adapters, but no model
+evaluation results have been collected. See the
+[implementation and validation report](tool-consolidation-report.md).
 Date: 2026-11-05.
 
 [Development](../development.md) · [Implementation notes](implementation-notes.md)
