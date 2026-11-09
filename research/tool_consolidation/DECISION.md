@@ -77,5 +77,45 @@ Adoption implementation commit: `9964b3d`. Product source fingerprint:
 
 No new model sessions, push, release, remote issue edit or deployment occurred.
 The work is completed and committed locally; publication and integration are
-separate actions. The retained configuration selector is intentional legacy
-compatibility and reproducibility support, not a temporary debugging hook.
+separate actions.
+
+## Final versioned toolsets and documentation cleanup
+
+The user chose `toolset_version: v1 / v2` and requested one development guide,
+with all study reports and protocols under research. Commit `9a525f0` implements
+that decision. The public setting is now `toolset_version`, environment variable
+`GDOCS_SCOPE_MCP_TOOLSET_VERSION`, default v2. V1 preserves the legacy interface.
+Unknown versions and the removed experimental selector fail at startup.
+No compatibility alias silently maps the old experiment values.
+
+Product startup constructs a complete static v1 or v2 server. The four-arm
+research launcher is isolated in `study_catalog_server.py` and uses the server
+factory, not a product experiment switch. Formatting cleanup removed the empty
+scaffolding in server startup. No debugger or temporary product logging remains.
+In `docs/development`, only `tool-consolidation.md` documents this feature;
+implementation validation, preflight and evaluation protocol now live here as
+`IMPLEMENTATION_REPORT.md`, `PREFLIGHT.md` and `EVALUATION_PROTOCOL.md`. Relative
+Markdown links were checked after relocation; historical grades and hashes
+remain in the dated reports and immutable private artifacts.
+
+Final product source fingerprint:
+`73d9b0147cd06eb6126888afd9062882f05ddb5aa583cdf361f1596239805c4a`.
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| Complete offline product suite | 2410 passed, 1 skipped, 136 deselected; 91.53 s | `/tmp/gdocs-59-toolset-product.log`, `/tmp/gdocs-59-toolset-product.xml` |
+| Separate research suite | 119 passed, 27 deselected; 122.71 s | `/tmp/gdocs-59-toolset-research.log` |
+| Focused version/settings/contracts/STDIO | 180 passed, 2 deselected; 12.69 s | `/tmp/gdocs-59-toolset-focused-final.log` |
+| Native v1/v2 lifecycle | 2 passed, 4 deselected; 78.25 s | `/tmp/gdocs-59-toolset-live.log`, `/tmp/gdocs-59-toolset-live.xml` |
+| Global Ruff, explicit changed-test lint, whitespace | Passed | Final checkout checks |
+| Wheel and sdist | Built; isolated wheel discovery and CLI checks passed | `/tmp/gdocs-59-toolset-build.log`, `/tmp/gdocs-59-toolset-wheel-*` |
+
+Both native test documents were verified trashed, with subprocess reaping and
+surrounding-tab cleanup confirmed in
+`/tmp/pytest-of-lapin/pytest-155/test_live_consolidation_lifecy*/report.json`.
+Together with the initial adoption checks, all six completion-test documents
+were cleaned. The installed wheel contains 99 product modules and no research
+or test payload; discovery returns 39 full-drive tools for v1 and 36 for v2.
+The original complete v1 contract digest remains unchanged. The sdist includes
+the relocated reports and research-only launcher. No new model inference,
+publication or deployment was needed for these naming/documentation changes.
