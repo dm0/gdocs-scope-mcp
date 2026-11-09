@@ -119,7 +119,13 @@ active batches; there are no automatic replacements.
 ```bash
 uv run --locked python research/on_demand_catalog/ordinary_loading_study.py --output PRIVATE_VALIDATION --reference PRIVATE_HISTORICAL_RUN --budget-root PRIVATE_BUDGET_ROOT --phase validation --repeats 10 --authorized-sessions 600
 uv run --locked python research/on_demand_catalog/ordinary_loading_study.py --output PRIVATE_MEASUREMENT --reference PRIVATE_HISTORICAL_RUN --budget-root PRIVATE_BUDGET_ROOT --phase measurement --repeats 20 --authorized-sessions 600
+uv run --locked python research/on_demand_catalog/analyze_ordinary_loading.py --output PRIVATE_MEASUREMENT --budget-root PRIVATE_BUDGET_ROOT
 ```
+
+The analyzer regrades saved raw events and reports paired-repeat bootstrap
+intervals, sample variances and complete-turn usage including discovery.
+Retain earlier cohorts separately when correcting a prompt ambiguity or
+changing a routing profile; never pool them with the frozen measurement cohort.
 
 ### Broader evaluation
 
