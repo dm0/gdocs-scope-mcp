@@ -1,7 +1,9 @@
 # Initial client compatibility findings
 
-Date: 2026-11-09. Issue: #60. Status: no-inference preparation passed;
-model-driven discovery and native MCP approval behavior remain unverified.
+Date: 2026-11-09. Issue: #60. No-inference preparation passed. The subsequently
+authorized [six canaries](CANARY_RESULTS.md) all reached the palette tool and
+answered correctly. Explicit search telemetry and native MCP approval behavior
+remain unverified. The original preparation findings below are preserved.
 
 ## Observed local behavior
 
@@ -78,10 +80,10 @@ No on-demand product setting or default change has been implemented yet.
   `/tmp/gdocs-60-client-namespaced-prepare.log`, `/tmp/gdocs-60-features.log`.
   Exported local schemas are under `/tmp/gdocs-60-codex-schema/`.
 
-Prepared proposal: six fresh model canaries, two loading arms on each of
+The subsequently approved proposal was six fresh model canaries, two arms on each of
 gpt-6-luna / gpt-6.1-sol / gpt-6-astra, all medium. The 6/6.1 minor-version mix
 is explicit. Only palette/server-info reads are permitted, with no documents,
 no writes, a six-attempt cap and no automatic replacements. Token usage is
 recorded; monetary cost is not inferred. These six are not a pilot or a main
-correctness campaign. Their execution requires the user's separate approval.
+correctness campaign. All six completed after the user's separate approval.
 The earlier 2833 attempts belong only to #59; its budget is not reused here.

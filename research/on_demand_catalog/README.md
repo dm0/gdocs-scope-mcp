@@ -2,8 +2,10 @@
 
 Issue: [#60](https://github.com/dm0/gdocs-scope-mcp/issues/60).
 Baseline: local main merge `6c42a4e`, toolset v2, full static catalog.
-This study is independent of the completed tool-consolidation study. Its model
-budget has not been authorized; no earlier budget transfers to this effort.
+This study is independent of the completed tool-consolidation study. The user
+authorized six compatibility canaries and all six completed. See
+[canary results](CANARY_RESULTS.md). No pilot/main budget is authorized and no
+earlier budget transfers to this effort.
 
 ## Compatibility first
 
@@ -42,13 +44,14 @@ and two ephemeral app-server thread handshakes (eager/deferred). It sends no
 are preparation metadata, not evidence of backend model availability. It
 reuses only the bounded transport from the previous study, not its results.
 
-Only after explicit user approval, the optional canary command is:
+The following command executed the explicitly approved six canaries. The frozen
+ledger is complete, so resuming it starts no additional sessions:
 
 ```bash
 uv run --locked python research/on_demand_catalog/probe_client.py run --output PRIVATE_ARTIFACTS --authorized-sessions 6
 ```
 
-The proposal is six fresh chats: eager/deferred on each of gpt-6-luna,
+The approved schedule was six fresh chats: eager/deferred on each of gpt-6-luna,
 gpt-6.1-sol and gpt-6-astra, all medium, no provider/model fallback. Only
 `server_info` and `docs_get_color_palette` may execute; document access and
 writes are rejected before dispatch. Reserve before starting each actor;
@@ -57,11 +60,12 @@ Resume skips all reservations. A process lock prevents concurrent invocations.
 Raw events, requested/effective settings, usage and reaping are recorded in
 private artifacts. This is an infrastructure canary, not a correctness study.
 
-Schema acceptance is checked before requesting authorization. Actual discovery
-events, correct palette calls and client behavior must be audited after any
-authorized canary. A deferred function appearing to work without observable
-search does not alone establish the desired exposure mechanism. No adoption
-or default change follows from canaries. Full static v2 remains unchanged.
+Schema acceptance was checked before authorization. All six sessions reached
+the palette and answered correctly, with two redundant reads on astra/deferred. No explicit
+search telemetry was exposed. A deferred function appearing to work without
+observable search does not alone establish the desired exposure mechanism.
+No adoption or default change follows from canaries. Full static v2 remains
+unchanged. Read-only reanalysis uses `analyze_canaries.py --output PRIVATE_ARTIFACTS`.
 
 ## Next stages
 
