@@ -14,7 +14,8 @@ from probe_client import MODELS, digest, write_json
 
 DRAWS = 10000
 SEED = 600
-METRICS = ('input_tokens', 'cached_tokens', 'output_tokens', 'turn_seconds',
+METRICS = ('input_tokens', 'cached_tokens', 'uncached_input_tokens',
+           'output_tokens', 'turn_seconds',
            'palette_calls', 'code_exec_calls', 'metadata_discovery_calls')
 
 
@@ -80,6 +81,10 @@ def analyze(output, budget_root):
         computed = audit(row, events)
         if computed != json.loads((directory / 'analysis.json').read_text()):
             raise ValueError('Saved grade differs from raw trace audit')
+        computed['uncached_input_tokens'] = (
+            computed['input_tokens'] - computed['cached_tokens']
+            if computed['input_tokens'] is not None
+            and computed['cached_tokens'] is not None else None)
         rows.append(computed)
         for name in ('result.json', 'events.json', 'calls.jsonl',
                      'models.json'):
