@@ -3,12 +3,15 @@
 Date: 2026-11-09. Issue: #60. No-inference preparation passed. The subsequently
 authorized [six canaries](CANARY_RESULTS.md) all reached the palette tool and
 answered correctly. Explicit search telemetry and joint native deferred-loading
-approval behavior remain unverified. The preparation findings are preserved.
+approval behavior were not verified by those canaries. The preparation
+findings are preserved.
 
 Subsequent [native MCP baseline approval checks](NATIVE_MCP_APPROVALS.md) passed
 with local deterministic replay. Native annotations and approval enforcement
 are now verified for the tested policy matrix; joint deferred-loading/native
-approval parity remains unverified. The preparation history below is preserved.
+approval parity subsequently passed a separate nine-case native replay matrix,
+including runtime-produced search output. This verifies local protocol plumbing,
+not real-model discovery quality. The preparation history below is preserved.
 
 ## Observed local behavior
 

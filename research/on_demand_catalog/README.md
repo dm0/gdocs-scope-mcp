@@ -10,8 +10,10 @@ earlier budget transfers to this effort.
 [Native MCP approval checks](NATIVE_MCP_APPROVALS.md) subsequently passed nine
 local deterministic scenarios, without more external model inference. The full
 36-tool native catalog matched its source descriptors; read/write/delete
-approvals, denial blocking and one-shot consent were preserved. The replay
-fixture does not replace a combined native deferred-loading approval check.
+approvals, denial blocking and one-shot consent were preserved. A second
+nine-case replay also passed combined native deferred discovery and approval
+handling, including runtime-produced `tool_search_output`. Both are local
+protocol checks, with no additional model inference or Google mutations.
 
 ## Compatibility first
 
@@ -75,8 +77,9 @@ unchanged. Read-only reanalysis uses `analyze_canaries.py --output PRIVATE_ARTIF
 
 ## Next stages
 
-Verify joint deferred discovery and native MCP approval handling, then choose
-the implementation and core before freezing model-study scenarios. Keep all
+Joint native discovery/approval plumbing passed the local replay matrix.
+Choose the implementation and core before freezing model-study scenarios;
+real-model discovery behavior still requires evaluation. Keep all
 domain interfaces identical across arms. Include core-only, deferred,
 cross-group and no-tool tasks, separate cold/warm strata, missing results,
 discovery failures, client isolation, reconnects and all discovery overhead.

@@ -1,7 +1,8 @@
 # Native MCP connection and approval enforcement
 
 Date: 2026-11-09. Issue: #60. Status: native baseline connection and approval
-checks passed. No external model inference or Google document operation.
+checks passed. Joint native deferred-loading checks also passed, as reported
+below. No external model inference or Google document operation.
 
 ## What was exercised
 
@@ -82,8 +83,63 @@ regression fixture for #60. It does not establish approvals for an unimplemented
 on-demand product mode, the earlier dynamic-function adapter, all custom policy
 overrides, desktop UI rendering, or OpenAI Auto-review decisions. The local
 provider controls proposed calls; it measures no model judgment or discovery
-quality. Joint native deferred-loading/approval parity remains a separate gate
-before an on-demand mechanism can be adopted. Static v2 remains the baseline.
+quality. The subsequent joint characterization below closes the local native
+transport gate for this matrix. Static v2 remains the baseline.
+
+## Joint deferred loading and native approvals
+
+A separate nine-case run passed the same table above with actual native MCP
+deferred discovery enabled. It used harness revision `ccfb536`, the installed
+Codex runtime and a process-local `model_catalog_json` copied from the cached
+`gpt-6.1-sol` metadata. The `tool_mode` override was omitted to keep native
+function routing rather than code-mode routing. The effective provider remained
+the loopback fixture, not OpenAI: selecting this model metadata made no model
+inference request and establishes no real-model discovery quality.
+
+Every first provider request lacked all three fixture operation schemas and
+contained a client-executed `tool_search` definition in an `additional_tools`
+input item. The replay proposed a search by operation name. **Codex itself**
+searched its native MCP inventory and returned `tool_search_output`, correlated
+to `search_fixture`, containing the requested namespaced function with
+`defer_loading: true` and its nonce schema. Only then did the replay propose the
+native function call. It did not fabricate the search result or inject a dynamic
+function. Later native approvals still used `mcpServer/elicitation/request`.
+This matches the documented client-executed search lifecycle.
+[OpenAI tool search](https://developers.openai.com/api/docs/guides/tools-tool-search).
+
+Across nine turns there were **28 loopback provider requests**, nine searches,
+ten native MCP operation attempts, eight approval requests and eight executions.
+Reads had no approval; accepted writes/deletes executed after approval; declined
+writes/deletes did not execute. Repeated write used one search and two separately
+approved native calls; prior execution counts remained zero and one. Production
+discovery again matched all 36 SDK descriptors, including annotations. Every
+Codex/MCP process was reaped. No Google mutation, global configuration change,
+external model inference or additional paid canary occurred.
+
+Private evidence is retained under
+`/home/lapin/projects/sandboxes/gdocs-scope-mcp/study-artifacts/60-native-deferred-approvals-2026-11-09/`.
+It includes the local model catalog, native descriptors, raw events, exposed
+provider tool definitions and discovery items, journals and results.
+`verification.json` hashes 47 JSON/JSONL evidence files. Fourteen isolated tests
+passed; explicit Ruff checks and `git diff --check` passed. Product code is
+unchanged. Reproduce with a fresh private output directory:
+
+```bash
+uv run --locked python research/on_demand_catalog/native_mcp_check.py --deferred --output NEW_PRIVATE_ARTIFACTS
+```
+
+Preparation is retained separately under
+`60-native-deferred-smoke-2026-11-09/`. Its first turn failed because the old
+replay expected eagerly exposed functions; no operation executed. The second
+smoke completed native search and read. Both clients were reaped. The verifier
+now rejects failed turns even when the controller reached `turn/completed`.
+
+The combined result covers local native search/execution/approval plumbing,
+including denial and one-shot consent. It does not cover desktop rendering,
+Auto-review, persistent consent choices, code-mode routing, arbitrary policy
+overrides, Google mutation semantics or autonomous discovery by real models.
+The six paid canaries retain their original dynamic-adapter scope; these replay
+results must not be pooled with them as model success rates.
 
 ## Reproduction and retained evidence
 
