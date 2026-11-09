@@ -70,6 +70,9 @@ class NativeClient(RUNTIME.StudyClient):
 
     async def handle_request(self, event):
         """Answer only the expected synthetic tool approval request."""
+        if event['method'] == 'mcpServer/elicitation/request':
+            await self.handle_elicitation(event)
+            return
         if event['method'] != 'tool/requestUserInput':
             raise RuntimeError('Unexpected server request: ' + event['method'])
         params = event['params']
@@ -94,6 +97,32 @@ class NativeClient(RUNTIME.StudyClient):
             answers[question['id']] = {'answers': options}
         self.approvals.append({'request': params, 'decision': self.decision})
         await self.send({'id': event['id'], 'result': {'answers': answers}})
+
+    async def handle_elicitation(self, event):
+        """Answer a host-generated one-shot approval for the fixture only."""
+        params = event['params']
+        metadata = params.get('_meta', {})
+        matches = [e['params']['item'] for e in self.events
+                   if e.get('method') == 'item/started'
+                   and e['params'].get('item', {}).get('type') == 'mcpToolCall'
+                   and e['params']['item'].get('server') == SERVER
+                   and e['params']['item'].get('arguments')
+                   == metadata.get('tool_params')]
+        if (params.get('serverName') != SERVER
+                or metadata.get('codex_approval_kind') != 'mcp_tool_call'
+                or params.get('mode') != 'form'
+                or params.get('requestedSchema') != {
+                    'type': 'object', 'properties': {},
+                } or not matches
+                or matches[-1]['tool'] not in REPRESENTATIVES
+                or '"' + matches[-1]['tool'] + '"' not in params['message']):
+            raise RuntimeError('Unrecognized native approval elicitation')
+        self.approvals.append({'request': params, 'decision': self.decision,
+                               'tool': matches[-1]['tool']})
+        await self.send({'id': event['id'], 'result': {
+            'action': self.decision,
+            'content': {} if self.decision == 'accept' else None,
+        }})
 
     async def request(self, method, params):
         """Keep processing elicited confirmations while waiting for an RPC."""
@@ -190,7 +219,7 @@ async def native_production(output):
     """Compare the complete product catalog through SDK and native Codex."""
     async with Client(transport(output / 'sdk.stderr')) as sdk:
         expected = {
-            t.name: t.model_dump(mode='json', exclude_none=True)
+            t.name: t.model_dump(mode='json', exclude_none=True, by_alias=True)
             for t in await sdk.list_tools()
         }
     cmd = command(
@@ -206,6 +235,10 @@ async def native_production(output):
         started = await start(client)
         thread = started['thread']['id']
         actual = await catalog(client, thread)
+        normalized = {name: {k: v for k, v in tool.items() if v is not None}
+                      for name, tool in actual['tools'].items()}
+        if normalized != expected:
+            raise RuntimeError('Native MCP catalog changed source contracts')
         info = await client.request(
             'mcpServer/tool/call',
             {
@@ -223,6 +256,8 @@ async def native_production(output):
             'model_turns': 0,
         }
     report['codex_reaped'] = client.process_reaped
+    pid = info['structuredContent']['pid']
+    report['mcp_reaped'] = not Path(f'/proc/{pid}').exists()
     write_json(output / 'native-production.json', report)
     return expected
 
@@ -239,8 +274,10 @@ async def fixture_case(output, spec, mode, tool, decision):
         'decision': decision,
         'external_model_turns': 0,
     }
+    client = None
     try:
         with provider(tool, nonce) as (endpoint, requests):
+            report['provider_requests'] = requests
             cmd = command(
                 sys.executable,
                 [str(Path(__file__).with_name('native_fixture_server.py'))],
@@ -283,6 +320,8 @@ async def fixture_case(output, spec, mode, tool, decision):
         report.update(status='failed', error=str(error))
         raise
     finally:
+        if client is not None:
+            report['codex_reaped'] = client.process_reaped
         journal = output / 'executions.jsonl'
         report['executions'] = (
             [json.loads(line) for line in journal.read_text().splitlines()]

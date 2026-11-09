@@ -89,3 +89,36 @@ def test_native_command_only_overrides_child_configuration(modules, monkeypatch)
     assert 'approval_policy="on-request"' in command
     assert 'model_providers.native_fixture.requires_openai_auth=false' in command
     assert not any('danger-full-access' in part for part in command)
+
+
+@pytest.mark.parametrize('decision', ['accept', 'decline'])
+def test_native_mcp_elicitation_is_correlated_and_one_shot(modules, decision):
+    """Only Codex tool-call approval for this fixture may be answered."""
+    _provider, native = modules
+    client = native.NativeClient(None, decision)
+    client.events = [{'method': 'item/started', 'params': {'item': {
+        'id': 'call', 'type': 'mcpToolCall', 'server': native.SERVER,
+        'tool': 'probe_write', 'arguments': {'nonce': 'local'},
+    }}}]
+    replies = []
+
+    async def send(message):
+        replies.append(message)
+
+    client.send = send
+    request = {'id': 0, 'method': 'mcpServer/elicitation/request', 'params': {
+        'serverName': native.SERVER, 'mode': 'form',
+        'message': 'Allow tool "probe_write"?',
+        'requestedSchema': {'type': 'object', 'properties': {}},
+        '_meta': {'codex_approval_kind': 'mcp_tool_call',
+                  'tool_params': {'nonce': 'local'},
+                  'persist': ['session', 'always']},
+    }}
+    asyncio.run(client.handle_request(request))
+    assert replies[0]['result'] == {
+        'action': decision, 'content': {} if decision == 'accept' else None,
+    }
+    request['params']['_meta']['codex_approval_kind'] = 'unrelated'
+    with pytest.raises(RuntimeError, match='Unrecognized'):
+        asyncio.run(client.handle_request(request))
+    assert len(replies) == 1
