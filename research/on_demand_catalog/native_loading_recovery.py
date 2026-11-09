@@ -41,6 +41,11 @@ def native_command(directory, profile, endpoint=None):
          'GDOCS_SCOPE_MCP_ACCESS_MODE': 'full_drive'}, 'writes', endpoint)
     result.extend(override('model_catalog_json',
                            str((directory / 'models.json').resolve())))
+    return route_command(result, profile)
+
+
+def route_command(result, profile):
+    """Keep the model's default routing unless explicitly diagnosing it."""
     if profile.startswith('code-') or profile == 'model-default':
         # The original runtime intentionally disables these features. Remove
         # only those pairs so the model's native code-mode profile can apply.

@@ -61,3 +61,41 @@ def test_replay_preserves_observed_search_shape(recovery):
     canonical = replay.search_item(False)
     assert canonical['type'] == 'tool_search_call'
     assert canonical['arguments'] == json.loads(item['arguments'])
+
+
+def test_ordinary_routing_does_not_force_feature_settings(recovery,
+                                                        monkeypatch, tmp_path):
+    """Restore normal model metadata without enabling experimental features."""
+    monkeypatch.setattr(recovery, 'command', lambda *_: [
+        'codex', '--disable', 'code_mode', '--disable', 'code_mode_only',
+        '--disable', 'shell_tool',
+    ])
+    command = recovery.native_command(tmp_path, 'model-default')
+    assert command[:3] == ['codex', '--disable', 'shell_tool']
+    assert not any('features.' in part for part in command)
+
+
+def test_ordinary_schedule_and_schema_observation(recovery):
+    """Observe full code-mode declarations instead of top-level functions."""
+    del recovery
+    study = importlib.import_module('ordinary_loading_study')
+    jobs = study.schedule(10)
+    expected_sessions = 60
+    assert len(jobs) == expected_sessions
+    assert len({j['id'] for j in jobs}) == expected_sessions
+    for arm in ('eager', 'deferred'):
+        row = {'id': 'case', 'model': 'gpt-6.1-sol', 'arm': arm,
+               'repeat': 0, 'status': 'completed', 'server_calls': []}
+        description = '\n'.join(f'### `mcp__native_probe__tool_{n}`'
+                                 for n in range(36)) if arm == 'eager' else ''
+        events = [{'method': 'rawResponseItem/completed', 'params': {'item': {
+            'type': 'additional_tools', 'id': 'initial', 'tools': [{
+                'type': 'namespace', 'name': 'functions', 'tools': [{
+                    'type': 'custom', 'name': 'exec',
+                    'description': description,
+                }],
+            }],
+        }}}]
+        audit = study.audit(row, events)
+        assert audit['exposure_verified']
+        assert audit['initial_native_schemas'] == (36 if arm == 'eager' else 0)

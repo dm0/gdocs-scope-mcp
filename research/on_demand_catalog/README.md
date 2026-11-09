@@ -98,6 +98,29 @@ consume the cap and cannot be replaced automatically. Repeated runs resume
 only unstarted jobs. Keep generated traces, measurements and execution reports
 outside the source checkout; they are not product documentation or releases.
 
+### Ordinary-profile recovery and comparison
+
+`ordinary_loading_study.py` retains the model's cached `tool_mode` and
+`use_responses_lite`. It removes the historical harness's forced code-mode
+disables and changes only `supports_search_tool` between arms. Schema exposure
+is audited in the code-mode declaration text, and native MCP execution remains
+guarded. The historical function-routing experiment is preserved separately.
+`search_format_replay.py` exercises both documented search items and the
+incompatible function-call representation without normalizing the latter.
+
+Use separate private cohort directories and one shared budget root. Adaptive
+diagnostics and validation share a 600-attempt ledger; measurement has its own
+600-attempt ledger. Measurement requires a completed ordinary-profile
+validation cohort with at least ten repeats per model/arm and reuses those
+exact model profiles. Each cohort freezes its source hashes, paired schedule
+and protocol before inference. Failed attempts consume the cap. Signals drain
+active batches; there are no automatic replacements.
+
+```bash
+uv run --locked python research/on_demand_catalog/ordinary_loading_study.py --output PRIVATE_VALIDATION --reference PRIVATE_HISTORICAL_RUN --budget-root PRIVATE_BUDGET_ROOT --phase validation --repeats 10 --authorized-sessions 600
+uv run --locked python research/on_demand_catalog/ordinary_loading_study.py --output PRIVATE_MEASUREMENT --reference PRIVATE_HISTORICAL_RUN --budget-root PRIVATE_BUDGET_ROOT --phase measurement --repeats 20 --authorized-sessions 600
+```
+
 ### Broader evaluation
 
 Joint native discovery/approval plumbing passed the local replay matrix.
