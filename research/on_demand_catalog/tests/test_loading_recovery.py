@@ -1,8 +1,10 @@
 """Validate isolated profile interventions before real diagnostic calls."""
 
+import asyncio
 import importlib
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -99,3 +101,27 @@ def test_ordinary_schedule_and_schema_observation(recovery):
         audit = study.audit(row, events)
         assert audit['exposure_verified']
         assert audit['initial_native_schemas'] == (36 if arm == 'eager' else 0)
+
+
+def test_code_approval_turn_routes_native_confirmation(recovery):
+    """An MCP elicitation during exec must reach the native approval router."""
+    del recovery
+    replay = importlib.import_module('ordinary_approval_replay')
+    events = [{'id': 1, 'method': 'mcpServer/elicitation/request'},
+              {'method': 'turn/completed',
+               'params': {'turn': {'status': 'completed'}}}]
+    handled = []
+
+    async def request(_method, _params):
+        return {}
+
+    async def receive():
+        return events.pop(0)
+
+    async def handle(event):
+        handled.append(event['method'])
+
+    client = SimpleNamespace(request=request, receive=receive,
+                             handle_request=handle)
+    assert asyncio.run(replay.native_turn(client, 'thread'))['status']
+    assert handled == ['mcpServer/elicitation/request']

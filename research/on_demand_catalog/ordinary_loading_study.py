@@ -15,6 +15,9 @@ from probe_client import MODELS, digest, write_json
 
 PROFILE = 'model-default'
 VALIDATION_REPEATS = 10
+PROMPT = ('Read the color palette using the available tools and report the '
+          'exact hex value of the palette entry whose English name is '
+          'exactly "blue".')
 
 
 def audit(row, events):
@@ -78,6 +81,7 @@ def freeze(args):
     inputs = list(Path(__file__).parent.glob('*.py'))
     manifest = {
         'phase': args.phase, 'repeats': args.repeats, 'validation_gate': gate,
+        'prompt': PROMPT,
         'schedule': schedule(args.repeats), 'profile': PROFILE,
         'expected': reference, 'sources': {
             str(p.resolve()): hashlib.sha256(p.read_bytes()).hexdigest()
@@ -152,7 +156,8 @@ async def run(args):
             write_json(directory / 'models.json',
                        manifest['models'][job['arm']])
         rows = await asyncio.gather(*[
-            execute(args.output / job['id'], job, manifest['expected'])
+            execute(args.output / job['id'], job, manifest['expected'],
+                    prompt=manifest['prompt'])
             for job in batch])
         passed = True
         for row in rows:

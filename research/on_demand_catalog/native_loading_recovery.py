@@ -63,7 +63,7 @@ def route_command(result, profile):
     return result
 
 
-async def execute(directory, job, expected, *, endpoint=None):
+async def execute(directory, job, expected, *, endpoint=None, prompt=PROMPT):
     """Execute one reserved native turn and retain cleanup on every path."""
     row = {**job, 'status': 'reserved'}
     client = None
@@ -82,7 +82,7 @@ async def execute(directory, job, expected, *, endpoint=None):
             })
             row['identity'] = identity['structuredContent']
             verify_snapshot(descriptors, row['identity'], expected)
-            row['result'] = await client.turn(thread, PROMPT, reject_dynamic)
+            row['result'] = await client.turn(thread, prompt, reject_dynamic)
             row['approvals'] = client.approvals
             row['status'] = 'completed'
     except Exception as error:  # noqa: BLE001 - retain failures and cleanup
