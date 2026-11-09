@@ -25,7 +25,8 @@ def test_success_without_search_events_is_not_a_search_trace(monkeypatch):
         }], 'messages': ['Blue is #0000FF.']},
     }
     events = [{'method': 'item/tool/call', 'params': {
-        'namespace': 'gdocs', 'tool': 'docs_get_color_palette', 'arguments': {},
+        'namespace': 'gdocs', 'tool': 'docs_get_color_palette',
+        'arguments': {},
     }}]
     actual = analysis.summarize(row, events)
     assert actual['palette_callback_valid']

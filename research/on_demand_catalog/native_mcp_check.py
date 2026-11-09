@@ -353,6 +353,26 @@ async def fixture_case(output, spec, mode, tool, decision, *, repetitions=1):
     return report
 
 
+def verify_case(result, spec, *, repetitions=1):
+    """Reject lost approvals, premature execution or annotation changes."""
+    read = result['tool'] == 'probe_read'
+    approvals = 0 if read else repetitions
+    executions = repetitions if read or result['decision'] == 'accept' else 0
+    if (result['status'] != 'completed'
+            or result['model_provider'] != 'native_fixture'
+            or not result['codex_reaped'] or not result['mcp_reaped']
+            or len(result['approvals']) != approvals
+            or len(result['executions']) != executions
+            or len(result['provider_requests']) != repetitions + 1):
+        raise RuntimeError('Native approval or cleanup invariant failed')
+    for name, definition in result['native_catalog']['tools'].items():
+        if definition['annotations'] != spec[name]['annotations']:
+            raise RuntimeError('Native fixture annotations changed')
+    if not all(a.get('nonce_not_executed_before_response')
+               for a in result['approvals']):
+        raise RuntimeError('Pre-approval execution was not checked')
+
+
 async def run(output):
     """Characterize native transport and configured approval decisions."""
     output.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -380,6 +400,7 @@ async def run(output):
             tool,
             decision,
         )
+        verify_case(result, spec)
         results.append(result)
         print(
             json.dumps(
@@ -396,6 +417,7 @@ async def run(output):
     repeated = await fixture_case(output / '8-writes-repeat-once', spec,
                                   'writes', 'probe_write', 'accept',
                                   repetitions=2)
+    verify_case(repeated, spec, repetitions=2)
     results.append(repeated)
     write_json(
         output / 'summary.json', {'cases': results, 'external_model_turns': 0}

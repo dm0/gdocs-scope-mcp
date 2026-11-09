@@ -56,7 +56,9 @@ def test_local_provider_emits_native_call_then_terminal_message(
 @pytest.mark.parametrize('decision,label', [
     ('accept', 'Accept'), ('decline', 'Decline'),
 ])
-def test_only_correlated_fixture_approval_is_answered(modules, decision, label):
+def test_only_correlated_fixture_approval_is_answered(
+    modules, decision, label,
+):
     """Accept/decline remains a client decision before server execution."""
     _provider, native = modules
     client = native.NativeClient(None, decision)
@@ -83,16 +85,20 @@ def test_only_correlated_fixture_approval_is_answered(modules, decision, label):
     assert len(replies) == 1
 
 
-def test_native_command_only_overrides_child_configuration(modules, monkeypatch):
+def test_native_command_only_overrides_child_configuration(
+    modules, monkeypatch,
+):
     """No global configuration or approval-bypass mode is introduced."""
     _provider, native = modules
     monkeypatch.setattr(native.RUNTIME, 'isolated_command', lambda: ['codex'])
     command = native.command('python', [], {}, 'writes',
                              'http://127.0.0.1:12345/v1')
-    assert 'mcp_servers.native_probe.default_tools_approval_mode="writes"' in command
+    assert ('mcp_servers.native_probe.default_tools_approval_mode="writes"'
+            in command)
     assert 'approvals_reviewer="user"' in command
     assert 'approval_policy="on-request"' in command
-    assert 'model_providers.native_fixture.requires_openai_auth=false' in command
+    assert ('model_providers.native_fixture.requires_openai_auth=false'
+            in command)
     assert not any('danger-full-access' in part for part in command)
 
 
@@ -135,3 +141,20 @@ def test_native_mcp_elicitation_is_correlated_and_one_shot(
     with pytest.raises(RuntimeError, match='before approval response'):
         asyncio.run(client.handle_request(request))
     assert len(replies) == 1
+
+
+def test_report_rejects_execution_after_decline(modules):
+    """A completed turn is insufficient when a rejected tool actually ran."""
+    _provider, native = modules
+    spec = {'probe_delete': {'annotations': {'destructiveHint': True}}}
+    row = {
+        'tool': 'probe_delete', 'decision': 'decline', 'status': 'completed',
+        'model_provider': 'native_fixture', 'codex_reaped': True,
+        'mcp_reaped': True, 'provider_requests': [{}, {}],
+        'approvals': [{'nonce_not_executed_before_response': True}],
+        'executions': [], 'native_catalog': {'tools': spec},
+    }
+    native.verify_case(row, spec)
+    row['executions'].append({'nonce': 'should-not-run'})
+    with pytest.raises(RuntimeError, match='invariant failed'):
+        native.verify_case(row, spec)
