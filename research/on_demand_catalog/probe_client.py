@@ -19,6 +19,7 @@ RUNTIME_PATH = ROOT / 'research/tool_consolidation/codex_study_runtime.py'
 CORE = ('server_info', 'docs_get_tree', 'docs_read')
 MODELS = ('gpt-6-luna', 'gpt-6.1-sol', 'gpt-6-astra')
 CAP = 6
+NAMESPACE = 'gdocs'
 INSTRUCTIONS = (
     'Compatibility canary: use only server_info or docs_get_color_palette. '
     'Do not access documents, accounts, files, browser or other tools. '
@@ -53,11 +54,14 @@ def model_tools(catalog, arm):
     """Change only loading policy; keep the complete callable interface."""
     if arm not in {'eager', 'deferred'}:
         raise ValueError('Unknown loading arm')
-    return [{
+    tools = [{
         'type': 'function', 'name': tool['name'],
         'description': tool['description'], 'inputSchema': tool['inputSchema'],
         'deferLoading': arm == 'deferred' and tool['name'] not in CORE,
     } for tool in catalog['tools']]
+    return [{'type': 'namespace', 'name': NAMESPACE,
+             'description': 'Google Docs tools from one static MCP catalog.',
+             'tools': tools}]
 
 
 def transport(log):
@@ -84,6 +88,13 @@ def validate_call(call, definitions):
         raise ValueError('Canary permission scope exceeded')
     Draft202012Validator(definitions[name]['inputSchema']).validate(args)
     return name, args
+
+
+def verify_namespace(event):
+    """Keep callback provenance tied to the sole canary namespace."""
+    if (event.get('method') != 'item/tool/call'
+            or event.get('params', {}).get('namespace') != NAMESPACE):
+        raise ValueError('Unexpected canary tool namespace')
 
 
 async def prepare(output):
@@ -182,13 +193,15 @@ async def run(output):
                         ).structured_content
                 verify_identity(info, manifest['identity'])
 
-                async def dispatch(call):
-                    name, args = validate_call(call, definitions)
-                    return (await mcp.call_tool(name, args)).structured_content
-
                 async with runtime().isolated_client(
                     directory / 'codex.stderr', timeout=120,
                 ) as client:
+                    async def dispatch(call, *, actor=client, server=mcp):
+                        verify_namespace(actor.events[-1])
+                        name, args = validate_call(call, definitions)
+                        return (await server.call_tool(name, args)
+                                ).structured_content
+
                     started = await client.start(
                         model=job['model'], cwd=ROOT,
                         instructions=INSTRUCTIONS,

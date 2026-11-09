@@ -18,6 +18,9 @@ that does not establish behavior of this installed Codex client. The local
 app-server schema accepts `deferLoading` on dynamic functions. The installed
 Codex feature report has `mcp_tool_list_changed` disabled. Neither schema
 acceptance nor a smaller advertised list proves successful model discovery.
+Codex rejects deferred dynamic functions without a namespace. Both comparison
+arms therefore use the identical `gdocs` namespace; only child-function loading
+flags vary. The first rejected flat-catalog preparation is retained separately.
 
 MCP 2026-07-28 prohibits request-triggered/per-connection changes to tool lists.
 Do not implement activate-then-relist as a portable mechanism. FastMCP's search

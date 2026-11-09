@@ -25,8 +25,11 @@ def test_loading_policy_keeps_interfaces_identical():
         for name in (*probe.CORE, 'docs_get_color_palette')
     ]}
     untouched = deepcopy(catalog)
-    eager = probe.model_tools(catalog, 'eager')
-    deferred = probe.model_tools(catalog, 'deferred')
+    eager_catalog = probe.model_tools(catalog, 'eager')
+    deferred_catalog = probe.model_tools(catalog, 'deferred')
+    assert eager_catalog[0]['name'] == deferred_catalog[0]['name'] == 'gdocs'
+    eager = eager_catalog[0]['tools']
+    deferred = deferred_catalog[0]['tools']
     assert catalog == untouched
     assert not any(t['deferLoading'] for t in eager)
     assert [t['name'] for t in deferred if t['deferLoading']] == [
@@ -67,6 +70,11 @@ def test_canary_permissions_and_product_identity():
     with pytest.raises(ValueError, match='Product source changed'):
         probe.verify_identity({'source_fingerprint': 'new'},
                               {'source_fingerprint': 'frozen'})
+    probe.verify_namespace({'method': 'item/tool/call',
+                            'params': {'namespace': 'gdocs'}})
+    with pytest.raises(ValueError, match='namespace'):
+        probe.verify_namespace({'method': 'item/tool/call',
+                                'params': {'namespace': 'other'}})
 
 
 def test_resume_skips_every_prior_reservation(monkeypatch, tmp_path):
