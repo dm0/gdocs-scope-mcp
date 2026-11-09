@@ -1,6 +1,7 @@
 """Validate isolated profile interventions before real diagnostic calls."""
 
 import importlib
+import json
 from pathlib import Path
 
 import pytest
@@ -45,3 +46,18 @@ def test_code_profile_removes_only_conflicting_disables(recovery,
                           '--disable', 'apps']
     assert 'features.code_mode_tool_search=true' in result
     assert 'features.code_mode_only=true' in result
+
+
+def test_replay_preserves_observed_search_shape(recovery):
+    """The regression fixture must not normalize away the real failure."""
+    del recovery
+    replay = importlib.import_module('search_format_replay')
+    item = replay.search_item(True)
+    assert item['type'] == 'function_call'
+    assert item['namespace'] == 'tool_search'
+    assert item['name'] == 'tool_search_tool'
+    assert json.loads(item['arguments']) == {'query': 'docs_get_color_palette',
+                                            'limit': 1}
+    canonical = replay.search_item(False)
+    assert canonical['type'] == 'tool_search_call'
+    assert canonical['arguments'] == json.loads(item['arguments'])
