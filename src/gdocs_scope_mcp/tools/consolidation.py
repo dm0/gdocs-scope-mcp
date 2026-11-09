@@ -1,4 +1,4 @@
-"""Static, opt-in Study 1 adapters over the unchanged baseline tools."""
+"""Typed insertion and comment-status adapters with legacy catalog support."""
 
 from inspect import getdoc
 from typing import Annotated, Literal
@@ -39,7 +39,7 @@ class AppendTarget(BaseModel):
 
 
 class AnchorTarget(BaseModel):
-    """Select a unique paragraph anchor with optional heading scope."""
+    """Select a paragraph anchor with optional heading scope."""
 
     model_config = ConfigDict(extra='forbid')
     position: Literal['before', 'after']

@@ -1,4 +1,4 @@
-"""Capture real static catalogs and validate opt-in adapters over STDIO."""
+"""Capture static default/legacy catalogs and validate adapters over STDIO."""
 
 import asyncio
 import hashlib
@@ -10,6 +10,30 @@ import pytest
 from .native_snapshot_assertions import assert_tabs_unchanged
 
 VARIANTS = ['baseline', 'insertion', 'status', 'both']
+
+
+@pytest.mark.parametrize('access_mode', ['full_drive', 'selected_files'])
+def test_default_catalog_is_consolidated(isolated_mcp, tmp_path, access_mode):
+    """Discover the real startup default without the legacy test override."""
+    async def run():
+        environment = {**os.environ,
+                       'GDOCS_SCOPE_MCP_ACCESS_MODE': access_mode}
+        environment.pop('GDOCS_SCOPE_MCP_TOOL_INTERFACE_VARIANT', None)
+        async with isolated_mcp(
+            tmp_path / 'default.stderr', environment=environment,
+        ) as (client, _info):
+            tools = {t.name for t in await client.list_tools()}
+            assert {'docs_insert', 'docs_comment_status',
+                    'docs_insert_at_heading'} <= tools
+            assert not {
+                'docs_append', 'docs_insert_before', 'docs_insert_after',
+                'docs_resolve_comment', 'docs_reopen_comment',
+            } & tools
+            assert len(tools) == (36 if access_mode == 'full_drive' else 37)
+            instructions = client.initialize_result.instructions
+            assert 'docs_comment_status' in instructions
+            assert 'docs_append' not in instructions
+    asyncio.run(run())
 
 
 @pytest.mark.parametrize('access_mode', ['full_drive', 'selected_files'])

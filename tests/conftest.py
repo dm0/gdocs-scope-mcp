@@ -16,6 +16,10 @@ import pytest
 from fastmcp import Client
 from fastmcp.client.transports import StdioTransport
 
+# Legacy behavior/contract tests exercise the executable baseline explicitly.
+# Default-catalog tests remove this override in their isolated server process.
+os.environ.setdefault('GDOCS_SCOPE_MCP_TOOL_INTERFACE_VARIANT', 'baseline')
+
 from gdocs_scope_mcp.diagnostics import capture_server_info
 from gdocs_scope_mcp.google_api import clients, credentials
 

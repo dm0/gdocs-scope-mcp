@@ -159,9 +159,10 @@ def test_comment_status_delegation(action, reply, monkeypatch):
     assert calls[0] == calls[1]
 
 
-def test_variant_configuration_rejects_typos():
+def test_variant_configuration_rejects_typos(monkeypatch):
     """Invalid variants must not silently switch interfaces."""
-    assert Settings().tool_interface_variant == 'baseline'
+    monkeypatch.delenv('GDOCS_SCOPE_MCP_TOOL_INTERFACE_VARIANT', raising=False)
+    assert Settings().tool_interface_variant == 'both'
     with pytest.raises(ValueError):
         Settings(tool_interface_variant='dynamic')
 

@@ -1,17 +1,18 @@
-# Static tool consolidation (Study 1)
+# Static tool consolidation
 
-Status: experimental; baseline remains the default. Implementation does not
-establish improved agent correctness or complete issue #59.
+Status: adopted by user decision on 2026-11-09. The default is `both`.
+See the [completion decision](../../research/tool_consolidation/DECISION.md)
+for the accepted validation and unchanged statistical limitations.
 
 Select `tool_interface_variant` in JSON configuration or set
-`GDOCS_SCOPE_MCP_TOOL_INTERFACE_VARIANT` before starting an isolated server:
+`GDOCS_SCOPE_MCP_TOOL_INTERFACE_VARIANT` before starting a server:
 
 | Variant | Insertion | Comment status |
 | --- | --- | --- |
 | `baseline` (A) | `docs_append`, `docs_insert_before`, `docs_insert_after` | `docs_resolve_comment`, `docs_reopen_comment` |
 | `insertion` (B) | `docs_insert` | Separate baseline tools |
 | `status` (C) | Separate baseline tools | `docs_comment_status` |
-| `both` (D) | `docs_insert` | `docs_comment_status` |
+| `both` (D, default) | `docs_insert` | `docs_comment_status` |
 
 All catalogs are complete and static for the server lifetime. Restart and
 reconnect after changing the variant. This setting is independent of document
@@ -52,8 +53,9 @@ and comment actions retain their existing response models. Failures keep the
 same transport conversion and recovery guidance. Tool descriptions carry the
 baseline documentation without improving only one arm's factual guidance.
 
-Existing configurations require no migration. Baseline tool names are not
-aliases in treatment catalogs, so stale clients must reconnect. Switch back to
-`baseline` to recover the original catalog. No default change, deprecation or
-removal is planned before the [required evaluation](tool-interface-evaluation.md)
-and an explicit adoption decision.
+Configurations without an explicit variant now select `both`. Reconnect clients
+to discover the new names and migrate calls as above. Legacy names are not
+aliases in the default catalog. Set `tool_interface_variant` to `baseline` to
+keep existing callers working unchanged; an explicit variant is preserved.
+The two intermediate variants remain available for study reproduction.
+No application operation, access policy, revision guard or receipt changed.
