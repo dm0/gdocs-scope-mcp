@@ -52,7 +52,7 @@ the runner must be revalidated after a Codex upgrade.
 Four isolated worktree STDIO MCP processes supplied the actual catalogs and
 initialization instructions for baseline, insertion, status and both. Discovery
 called only `server_info` and `tools/list`; no Google documents were accessed.
-Catalog fingerprints match the [implementation report](tool-consolidation-report.md).
+Catalog fingerprints match the [implementation report](IMPLEMENTATION_REPORT.md).
 
 The runner supplied each catalog's exact tool names, descriptions and input
 schemas as app-server function definitions with `deferLoading=false`. Each
@@ -115,7 +115,7 @@ before any default-adoption claim.
 After seeing preflight usage and the original 960/7200-session design, the user
 approved a reduced campaign: five pilot scenarios (120 sessions), twenty main
 scenarios (960 sessions), and a strict total cap of 1080 attempts. The active
-profile is documented in [the protocol](tool-interface-evaluation.md). The
+profile is documented in [the protocol](EVALUATION_PROTOCOL.md). The
 runner freezes dataset hashes, paired randomization, stopping rules,
 clarification policy and native controls before inference. This smaller
 campaign supports preliminary conclusions; the original larger design is not

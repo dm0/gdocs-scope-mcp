@@ -4,10 +4,10 @@ import json
 import os
 from pathlib import Path
 
+from study_catalog_server import main, mcp
 from study_fixture_api import FixtureAPI
 
 from gdocs_scope_mcp.google_api import clients
-from gdocs_scope_mcp.server import main, mcp
 
 SPECIFICATION = json.loads(Path(os.environ['GDOCS_STUDY_FIXTURE']).read_text())
 API = FixtureAPI(SPECIFICATION)

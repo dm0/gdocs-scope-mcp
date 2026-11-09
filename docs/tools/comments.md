@@ -128,7 +128,7 @@ unchanged. This interface does not promise to skip a thread already in the
 requested state. Deletion and ordinary replies remain separate tools.
 
 The two legacy names below require a catalog retaining separate status tools,
-including explicit `tool_interface_variant="baseline"`.
+selected by `toolset_version="v1"`.
 
 ## docs_resolve_comment (legacy catalog)
 

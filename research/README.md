@@ -9,7 +9,8 @@ project and this checkout's environment. The default pytest run discovers only
 the root `tests/` directory. Research model inference is an explicit command,
 never an automatic test side effect. Keep generated logs, traces and datasets
 outside tracked source. Keep study-specific reports with their study; product
-implementation documentation and shared design references belong under `docs/`.
+implementation documentation belongs under `docs/`; study protocols and
+evaluation reports belong in the study's own directory.
 
 | Study | Scope |
 | --- | --- |

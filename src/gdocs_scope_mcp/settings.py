@@ -76,9 +76,7 @@ class Settings(BaseSettings):
         str, StringConstraints(strip_whitespace=True, min_length=1),
     ] | None = None
     access_mode: Literal['full_drive', 'selected_files'] = 'full_drive'
-    tool_interface_variant: Literal[
-        'baseline', 'insertion', 'status', 'both',
-    ] = 'both'
+    toolset_version: Literal['v1', 'v2'] = 'v2'
     write_revision_mode: Literal['required', 'target'] = 'required'
     document_cache_enabled: bool = False
     document_cache_storage: Literal['disk', 'memory'] = 'disk'
@@ -153,6 +151,11 @@ class Settings(BaseSettings):
         file_secret_settings: PydanticBaseSettingsSource,  # noqa: ARG003
     ) -> tuple[PydanticBaseSettingsSource, ...]:
         """Use explicit values, environment, JSON, then field defaults."""
+        if 'GDOCS_SCOPE_MCP_TOOL_INTERFACE_VARIANT' in os.environ:
+            raise ValueError(
+                'Replace GDOCS_SCOPE_MCP_TOOL_INTERFACE_VARIANT with '
+                'GDOCS_SCOPE_MCP_TOOLSET_VERSION=v1 or v2'
+            )
         return (
             init_settings, env_settings,
             JsonConfigSettingsSource(

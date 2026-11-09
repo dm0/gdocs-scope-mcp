@@ -46,10 +46,10 @@ async def capture_catalog(variant, output):
     """Record the actual worktree STDIO contract without document access."""
     root = Path(__file__).resolve().parents[2]
     transport = StdioTransport(
-        command=str(Path(sys.executable).parent / 'gdocs-scope-mcp'),
-        args=[],
+        command=sys.executable,
+        args=[str(Path(__file__).with_name('study_catalog_server.py'))],
         cwd=str(root), env={**os.environ,
-                           'GDOCS_SCOPE_MCP_TOOL_INTERFACE_VARIANT': variant,
+                           'GDOCS_STUDY_TOOL_INTERFACE_VARIANT': variant,
                            'GDOCS_SCOPE_MCP_ACCESS_MODE': 'full_drive'},
         log_file=output / f'{variant}.stderr', keep_alive=False,
     )

@@ -314,7 +314,7 @@ and receipts follow the corresponding legacy operation documented below.
 `docs_insert_at_heading` remains separate for whole-subtree boundaries.
 
 The legacy names below are available only in variants that retain separate
-insertion tools, including explicit `tool_interface_variant="baseline"`.
+insertion tools in `toolset_version="v1"`.
 See [catalog migration](../development/tool-consolidation.md).
 
 ### docs_insert_after (legacy catalog)

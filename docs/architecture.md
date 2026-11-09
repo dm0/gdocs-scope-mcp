@@ -179,14 +179,15 @@ client, and review deliberate changes to the frozen transport contract.
 Access tools register from the startup access mode: common authorization and
 status tools are always present, while file selection is registered only for
 `selected_files`. Verify each catalog through a fresh STDIO server.
-The static `tool_interface_variant` is selected at startup (baseline, insertion,
-status or both). The default is both: `docs_insert` and `docs_comment_status`
-replace the five legacy names. Explicit baseline retains the frozen legacy
-catalog for compatibility; intermediate variants support study reproduction.
+The static `toolset_version` is selected at startup: v1 retains the frozen legacy
+catalog and default v2 uses `docs_insert` and `docs_comment_status` in place of
+the five legacy names. `create_server` constructs a complete static server;
+the research-only launcher composes all four historical study arms through
+that factory without exposing experimental variants as product settings.
 Registration removes only the corresponding legacy tools before connections
 are accepted and calls their unchanged Python adapters. It never activates
 tools per client or changes the catalog during a session. Legacy contract tests
-explicitly select baseline; isolated default discovery separately tests both.
+explicitly select v1; isolated default discovery separately tests v2.
 
 ### Add a document feature
 

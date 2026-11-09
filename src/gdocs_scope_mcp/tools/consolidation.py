@@ -128,14 +128,17 @@ def register_status(mcp, resolve, reopen):
         )
 
 
-def variant_instructions(instructions: str, variant: str) -> str:
+def toolset_instructions(
+    instructions: str, *,
+    consolidate_insertion: bool, consolidate_status: bool,
+) -> str:
     """Use active names in instructions; preserve the baseline verbatim."""
-    if variant in {'insertion', 'both'}:
+    if consolidate_insertion:
         for name in ('docs_insert_after', 'docs_insert_before', 'docs_append'):
             instructions = instructions.replace(name, 'docs_insert')
         instructions = instructions.replace('All four rich insertion tools',
                                             'Rich insertion tools')
-    if variant in {'status', 'both'}:
+    if consolidate_status:
         for name in ('docs_resolve_comment', 'docs_reopen_comment'):
             instructions = instructions.replace(name, 'docs_comment_status')
     return instructions

@@ -26,7 +26,7 @@ arguments, examples and supported behavior, start with the [document tools](../t
 
 ## Planned experiments
 
-[Tool interface evaluation](tool-interface-evaluation.md) defines separate
+[Tool interface evaluation](../../research/tool_consolidation/EVALUATION_PROTOCOL.md) defines separate
 post-implementation studies for tool consolidation and on-demand catalogs,
 using the current, weaker and stronger models of one provider and generation.
 The design is planned work, not a completed evaluation.

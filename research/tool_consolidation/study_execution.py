@@ -196,7 +196,7 @@ async def fixture_backend(case, variant, output):
         args=[str(Path(__file__).with_name('study_fixture_server.py'))],
         cwd=str(ROOT), env={
             **os.environ, 'GDOCS_STUDY_FIXTURE': str(path),
-            'GDOCS_SCOPE_MCP_TOOL_INTERFACE_VARIANT': variant,
+            'GDOCS_STUDY_TOOL_INTERFACE_VARIANT': variant,
             'GDOCS_SCOPE_MCP_ACCESS_MODE': 'full_drive',
             'GDOCS_SCOPE_MCP_DOCUMENT_CACHE_ENABLED': 'false',
             'GDOCS_SCOPE_MCP_WRITE_REVISION_MODE': 'required',

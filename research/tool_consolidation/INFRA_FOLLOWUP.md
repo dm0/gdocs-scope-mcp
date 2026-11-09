@@ -1,5 +1,9 @@
 # Infrastructure follow-up to the 1500-attempt A/D stage
 
+Current product decision (2026-11-09): the user accepted validation and
+approved completion; toolset `v2` is now the default. See [the completion decision](DECISION.md).
+The follow-up findings and statistical limitations below remain unchanged.
+
 Date: 2026-11-06. Issue: #59.
 
 The user explicitly requested rerunning the infrastructure failures and then

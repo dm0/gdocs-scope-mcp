@@ -39,6 +39,7 @@ LIVE_CASES = {'m01', 'm08', 'm11', 'm15', 'm20'}
 LEVELS = ('decision', 'end_to_end')
 EXECUTION_SOURCES = (
     'codex_study_runtime.py', 'tool_consolidation_preflight.py',
+    'study_catalog_server.py',
     'study_scenarios.py', 'study_fixture_api.py', 'study_fixture_server.py',
     'study_execution.py', 'study_live.py', 'run_reduced_study.py',
     'terminal_period_adjudication.py',
@@ -213,8 +214,7 @@ async def prepare(output, previous):
         write_json(output / 'native-conformance-errors.json', failures)
         raise RuntimeError('Native conformance failed: '
                            + json.dumps(failures))
-    protocol = (ROOT / 'docs/development/tool-interface-evaluation.md'
-                ).read_bytes()
+    protocol = Path(__file__).with_name('EVALUATION_PROTOCOL.md').read_bytes()
     (output / 'protocol.md').write_bytes(protocol)
     manifest = {
         'version': 2, 'campaign': 'restart-001', 'seed': SEED,

@@ -2,7 +2,7 @@
 
 Status: Study 1 restart preparation; the first campaign's pilot and partial
 main outcomes are preserved separately. See the
-[implementation and validation report](tool-consolidation-report.md).
+[implementation and validation report](IMPLEMENTATION_REPORT.md).
 Date: 2026-11-06.
 
 ## Restart 001 (approved 2026-11-06)
@@ -89,7 +89,7 @@ not increase the scenario count after observing outcomes. Retain a blinded
 audit packet for ambiguous intent and sampled successes/failures; do not claim
 human review before a human has actually reviewed it.
 
-[Development](../development.md) · [Implementation notes](implementation-notes.md)
+[Development](../../docs/development.md) · [Implementation notes](../../docs/development/implementation-notes.md)
 
 ## Purpose and required deliverables
 

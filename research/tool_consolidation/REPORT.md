@@ -1,5 +1,10 @@
 # Tool consolidation model study
 
+Current product decision (2026-11-09): validation accepted by the user and
+toolset `v2` adopted as default. See [completion and limitations](DECISION.md).
+The dated study results and original recommendations below are historical
+and remain unchanged; acceptance does not establish Luna noninferiority.
+
 Date: 2026-11-06. Issue: [#59](https://github.com/dm0/gdocs-scope-mcp/issues/59).
 Status: all 1080 restarted attempts finished; machine analysis complete.
 Full blinded human review and external publication remain pending.
@@ -181,7 +186,7 @@ receipts and failures. Heading-subtree insertion and other operations stay
 unchanged. Catalogs never change during a session.
 
 See [migration/configuration](../../docs/development/tool-consolidation.md)
-and [implementation validation](../../docs/development/tool-consolidation-report.md).
+and [implementation validation](IMPLEMENTATION_REPORT.md).
 Implementation commit: `ae597460e0cb161384fbdd1abc4dc94de904de2b`.
 All arms share production source fingerprint
 `24a7be585f48b91ff41368c75bbdbb2a50bc025973a9f088b8692e8444ca9990`.
@@ -327,7 +332,7 @@ separate from the model outcomes above.
 
 The manifest retains exact catalogs, source hashes, schedules, state references,
 protocol text/hash and prior-ledger lineage. See [study commands](README.md)
-and the [shared protocol](../../docs/development/tool-interface-evaluation.md).
+and the [shared protocol](EVALUATION_PROTOCOL.md).
 Run from this checkout's root Python project. Source/manifests are checked
 before inference; every attempt is reserved once before model startup. SIGINT
 and SIGTERM drain active work before exiting. Resume only unstarted jobs.

@@ -186,13 +186,14 @@ async def live_backend(case, variant, output, *, reference_mode=False):
             command=str(Path(sys.executable).parent / 'fastmcp'),
             args=['run', str(ROOT / 'tests/probes/table_server.py'),
                   '--transport', 'stdio'], cwd=str(ROOT),
-            env={**env, 'GDOCS_SCOPE_MCP_TOOL_INTERFACE_VARIANT': 'baseline'},
+            env={**env, 'GDOCS_SCOPE_MCP_TOOLSET_VERSION': 'v1'},
             log_file=output / 'control.stderr', keep_alive=False,
         )
         transport = StdioTransport(
-            command=str(Path(sys.executable).parent / 'gdocs-scope-mcp'),
-            args=[], cwd=str(ROOT), env={
-                **env, 'GDOCS_SCOPE_MCP_TOOL_INTERFACE_VARIANT': variant,
+            command=sys.executable,
+            args=[str(Path(__file__).with_name('study_catalog_server.py'))],
+            cwd=str(ROOT), env={
+                **env, 'GDOCS_STUDY_TOOL_INTERFACE_VARIANT': variant,
             }, log_file=output / 'native.stderr', keep_alive=False,
         )
         async with Client(control_transport) as control, Client(

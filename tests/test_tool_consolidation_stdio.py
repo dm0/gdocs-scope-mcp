@@ -9,7 +9,7 @@ import pytest
 
 from .native_snapshot_assertions import assert_tabs_unchanged
 
-VARIANTS = ['baseline', 'insertion', 'status', 'both']
+TOOLSETS = ['v1', 'v2']
 
 
 @pytest.mark.parametrize('access_mode', ['full_drive', 'selected_files'])
@@ -18,7 +18,7 @@ def test_default_catalog_is_consolidated(isolated_mcp, tmp_path, access_mode):
     async def run():
         environment = {**os.environ,
                        'GDOCS_SCOPE_MCP_ACCESS_MODE': access_mode}
-        environment.pop('GDOCS_SCOPE_MCP_TOOL_INTERFACE_VARIANT', None)
+        environment.pop('GDOCS_SCOPE_MCP_TOOLSET_VERSION', None)
         async with isolated_mcp(
             tmp_path / 'default.stderr', environment=environment,
         ) as (client, _info):
@@ -37,13 +37,13 @@ def test_default_catalog_is_consolidated(isolated_mcp, tmp_path, access_mode):
 
 
 @pytest.mark.parametrize('access_mode', ['full_drive', 'selected_files'])
-def test_stdio_study_catalogs(isolated_mcp, tmp_path, access_mode):
-    """Expose all four variants in fresh processes, without Google access."""
+def test_stdio_versioned_catalogs(isolated_mcp, tmp_path, access_mode):
+    """Expose both public versions in fresh processes without Google access."""
     async def run():
         catalogs = {}
-        for variant in VARIANTS:
+        for variant in TOOLSETS:
             env = {**os.environ,
-                   'GDOCS_SCOPE_MCP_TOOL_INTERFACE_VARIANT': variant,
+                   'GDOCS_SCOPE_MCP_TOOLSET_VERSION': variant,
                    'GDOCS_SCOPE_MCP_ACCESS_MODE': access_mode}
             async with isolated_mcp(
                 tmp_path / f'{variant}.stderr', environment=env,
@@ -63,15 +63,15 @@ def test_stdio_study_catalogs(isolated_mcp, tmp_path, access_mode):
                     'serialized_bytes': len(encoded),
                 }, indent=2))
                 catalogs[variant] = {t['name']: t for t in tools}
-        base = catalogs['baseline']
+        base = catalogs['v1']
         for variant, catalog in catalogs.items():
             removed = set()
             added = set()
-            if variant in {'insertion', 'both'}:
+            if variant == 'v2':
                 removed.update({'docs_append', 'docs_insert_before',
                                 'docs_insert_after'})
                 added.add('docs_insert')
-            if variant in {'status', 'both'}:
+            if variant == 'v2':
                 removed.update({'docs_resolve_comment', 'docs_reopen_comment'})
                 added.add('docs_comment_status')
             assert set(catalog) == set(base) - removed | added
@@ -81,15 +81,15 @@ def test_stdio_study_catalogs(isolated_mcp, tmp_path, access_mode):
 
 
 @pytest.mark.live
-@pytest.mark.parametrize('variant', VARIANTS)
+@pytest.mark.parametrize('variant', TOOLSETS)
 def test_live_consolidation_lifecycle(
     isolated_mcp, live_test_doc, tmp_path, variant,
 ):
     """Check native edits/status, strict revisions and tab cleanup."""
     async def run():
-        env = {**os.environ, 'GDOCS_SCOPE_MCP_TOOL_INTERFACE_VARIANT': variant}
+        env = {**os.environ, 'GDOCS_SCOPE_MCP_TOOLSET_VERSION': variant}
         control_env = {
-            **env, 'GDOCS_SCOPE_MCP_TOOL_INTERFACE_VARIANT': 'baseline',
+            **env, 'GDOCS_SCOPE_MCP_TOOLSET_VERSION': 'v1',
         }
         report = {'variant': variant, 'trace': []}
         async with isolated_mcp(
@@ -133,7 +133,7 @@ def test_live_consolidation_lifecycle(
                     target = {'position': position}
                     if position != 'append':
                         target['anchor'] = 'Distinct anchor 😀'
-                    if variant in {'insertion', 'both'}:
+                    if variant == 'v2':
                         return await call('docs_insert', {
                             **args, 'text': text, 'target': target, **options,
                         })
@@ -178,7 +178,7 @@ def test_live_consolidation_lifecycle(
                                    'comment_id': comment_id,
                                    'reply': 'Synthetic status check'}
                     name = f'docs_{action}_comment'
-                    if variant in {'status', 'both'}:
+                    if variant == 'v2':
                         name = 'docs_comment_status'
                         thread_args['action'] = action
                     receipt = await call(name, thread_args)

@@ -1,5 +1,9 @@
 # A/D noninferiority: first-stage report
 
+Current product decision (2026-11-09): [validation accepted by the user](DECISION.md),
+toolset `v2` adopted as default, no additional inference. The original stage-one
+outcomes and unmet prospective gate below remain unchanged.
+
 Date: 2026-11-06. Issue: [#59](https://github.com/dm0/gdocs-scope-mcp/issues/59).
 Status: all 1500 authorized attempts finished. The prospective first-stage
 noninferiority gate was not met for any model. Baseline remains the default.

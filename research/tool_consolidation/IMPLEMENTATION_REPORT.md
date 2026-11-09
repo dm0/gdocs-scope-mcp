@@ -1,8 +1,15 @@
 # Study 1: implementation and validation report
 
+Completion decision, 2026-11-09: the user accepted validation and requested
+completion without further model trials. The product now defaults to the fully
+consolidated catalog, with explicit baseline compatibility retained. See the
+[completion record](DECISION.md) and
+[migration guide](../../docs/development/tool-consolidation.md). The dated study history below preserves
+the original baseline decision and does not claim Luna's 2 pp noninferiority.
+
 Date: 2026-11-06.
 Status: all 1080 restarted attempts finished. The
-[study report](../../research/tool_consolidation/REPORT.md) contains final
+[study report](REPORT.md) contains final
 machine estimates, the native seeding limitation and the decision to retain
 baseline. Machine grades await the full blinded trace audit.
 Issue: [#59](https://github.com/dm0/gdocs-scope-mcp/issues/59).
@@ -40,7 +47,7 @@ the interface treatment with different application implementations.
 
 ## Implemented interfaces
 
-See [configuration and migration](tool-consolidation.md). Only append/before/
+See [configuration and migration](../../docs/development/tool-consolidation.md). Only append/before/
 after and resolve/reopen interfaces are consolidated. Heading-subtree
 insertion, replacement, destructive comment operations and table operations
 retain their existing contracts and approval hints. The selected catalog is
@@ -182,7 +189,7 @@ access to each model, and isolated app-server chats confirmed tool callbacks
 and exact requested model/settings without provider-model fallback. These are
 model identifiers, not a claim to know an immutable backend snapshot.
 
-A [12-chat complete-catalog preflight](tool-consolidation-preflight.md) passed
+A [12-chat complete-catalog preflight](PREFLIGHT.md) passed
 on one synthetic decision-only scenario. It does not establish an interface
 effect or replace the formal study. The user subsequently approved the reduced
 120-session pilot and 960-session main stage described above. The larger
@@ -195,7 +202,7 @@ pending; the pilot does not authorize a default-interface change.
 
 Before a chat-based study, verify that catalog exposure, fresh-session
 independence, unrelated-tool restrictions, agent-loop settings and trace capture
-can meet the [shared protocol](tool-interface-evaluation.md). Any host-imposed
+can meet the [shared protocol](EVALUATION_PROTOCOL.md). Any host-imposed
 limitations must be recorded before the pilot, not silently attributed to the
 interface. Keep the baseline until the required evidence supports a decision.
 

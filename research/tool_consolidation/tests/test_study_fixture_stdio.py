@@ -25,7 +25,7 @@ def test_fixture_stdio_round_trip(fixture_specification, tmp_path):  # noqa: F81
             args=[str(Path(__file__).parents[1] / 'study_fixture_server.py')],
             cwd=str(root), env={
                 **os.environ, 'GDOCS_STUDY_FIXTURE': str(path),
-                'GDOCS_SCOPE_MCP_TOOL_INTERFACE_VARIANT': 'both',
+                'GDOCS_STUDY_TOOL_INTERFACE_VARIANT': 'both',
             },
             log_file=tmp_path / 'fixture.stderr', keep_alive=False,
         )

@@ -1,5 +1,22 @@
 # Tool consolidation study (#59)
 
+## Completion
+
+On 2026-11-09 the user accepted validation and requested completion without
+further inference. Toolset `v2` (the consolidated study arm D) is now the product
+default; explicit `v1` preserves the legacy catalog. All four study arms remain
+available through the research-only launcher. See the [completion decision](DECISION.md)
+for acceptance, migration and the unchanged statistical limitations. The reports
+below preserve historical decisions and frozen evidence, not current defaults.
+
+The sole development guide is [tool consolidation](../../docs/development/tool-consolidation.md).
+Study records live here: [implementation validation](IMPLEMENTATION_REPORT.md),
+[preflight](PREFLIGHT.md), and the [evaluation protocol](EVALUATION_PROTOCOL.md).
+`study_catalog_server.py` reads the research-only
+`GDOCS_STUDY_TOOL_INTERFACE_VARIANT` selector (baseline/insertion/status/both)
+and constructs a static server through the production factory. These labels
+are not product configuration values; product servers accept only v1/v2.
+
 ## Prospective noninferiority stage
 
 The user authorized 1500 additional reservations comparing only baseline and
@@ -87,7 +104,7 @@ the restricted parent sandbox may therefore require native tool approval.
 
 `tool_consolidation_preflight.py` captures all four actual STDIO catalogs and
 runs one non-mutating decision scenario in twelve fresh chats. See the
-[preflight report](../../docs/development/tool-consolidation-preflight.md) for
+[preflight report](PREFLIGHT.md) for
 actual usage, infrastructure failures, limitations and reproduction. It is
 not a formal pilot and does not support a default-adoption claim.
 

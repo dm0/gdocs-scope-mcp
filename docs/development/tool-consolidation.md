@@ -1,22 +1,32 @@
 # Static tool consolidation
 
-Status: adopted by user decision on 2026-11-09. The default is `both`.
+Status: adopted by user decision on 2026-11-09. The default toolset is `v2`.
 See the [completion decision](../../research/tool_consolidation/DECISION.md)
 for the accepted validation and unchanged statistical limitations.
 
-Select `tool_interface_variant` in JSON configuration or set
-`GDOCS_SCOPE_MCP_TOOL_INTERFACE_VARIANT` before starting a server:
+Select `toolset_version` in JSON configuration or set
+`GDOCS_SCOPE_MCP_TOOLSET_VERSION` before starting a server:
 
-| Variant | Insertion | Comment status |
+| Toolset version | Insertion | Comment status |
 | --- | --- | --- |
-| `baseline` (A) | `docs_append`, `docs_insert_before`, `docs_insert_after` | `docs_resolve_comment`, `docs_reopen_comment` |
-| `insertion` (B) | `docs_insert` | Separate baseline tools |
-| `status` (C) | Separate baseline tools | `docs_comment_status` |
-| `both` (D, default) | `docs_insert` | `docs_comment_status` |
+| `v1` | `docs_append`, `docs_insert_before`, `docs_insert_after` | `docs_resolve_comment`, `docs_reopen_comment` |
+| `v2` (default) | `docs_insert` | `docs_comment_status` |
 
 All catalogs are complete and static for the server lifetime. Restart and
-reconnect after changing the variant. This setting is independent of document
+reconnect after changing the version. This setting is independent of document
 access mode. No dynamic discovery is introduced.
+
+```json
+{"toolset_version": "v2"}
+```
+
+The environment variable overrides JSON. Toolset versions describe the public
+tool names and argument contracts, independently of package releases. A future
+incompatible catalog change requires a new toolset version; bug fixes do not.
+The former experimental `tool_interface_variant` field and environment selector
+are removed. Replace them with v1 for the old baseline or v2 for the combined
+catalog. Old selectors fail rather than silently changing the selected catalog.
+Partial study variants are research-only, not public product versions.
 
 ## Typed calls and migration
 
@@ -53,9 +63,22 @@ and comment actions retain their existing response models. Failures keep the
 same transport conversion and recovery guidance. Tool descriptions carry the
 baseline documentation without improving only one arm's factual guidance.
 
-Configurations without an explicit variant now select `both`. Reconnect clients
+Configurations without an explicit version now select `v2`. Reconnect clients
 to discover the new names and migrate calls as above. Legacy names are not
-aliases in the default catalog. Set `tool_interface_variant` to `baseline` to
-keep existing callers working unchanged; an explicit variant is preserved.
-The two intermediate variants remain available for study reproduction.
+aliases in the default catalog. Set `toolset_version` to `v1` to
+keep existing callers working unchanged; an explicit version is preserved.
+All four historical arms remain available through the research-only launcher.
 No application operation, access policy, revision guard or receipt changed.
+
+## Evaluation records
+
+Study material is kept with [the research effort](../../research/tool_consolidation/README.md):
+
+- [Completion decision](../../research/tool_consolidation/DECISION.md).
+- [Implementation and validation](../../research/tool_consolidation/IMPLEMENTATION_REPORT.md).
+- [Preflight](../../research/tool_consolidation/PREFLIGHT.md) and
+  [evaluation protocol](../../research/tool_consolidation/EVALUATION_PROTOCOL.md).
+- [Model study](../../research/tool_consolidation/REPORT.md),
+  [trace audit](../../research/tool_consolidation/AUDIT.md),
+  [A/D stage](../../research/tool_consolidation/NI_STAGE1_REPORT.md), and
+  [infrastructure follow-up](../../research/tool_consolidation/INFRA_FOLLOWUP.md).
