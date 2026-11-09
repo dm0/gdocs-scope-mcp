@@ -156,12 +156,23 @@ async def prepare(output):
             job = {'id': f'preflight-{model}-{arm}',
                    'model': model, 'arm': arm}
             with provider('docs_get_color_palette', 'unused',
-                          search=arm == 'deferred') as (endpoint, requests):
+                          search=arm == 'deferred', call_arguments={}) as (
+                endpoint, requests,
+            ):
                 row = await trial(output / job['id'], job, manifest,
                                   endpoint=endpoint)
             write_json(output / job['id'] / 'wire.json', requests)
             if row['status'] != 'completed':
                 raise RuntimeError('Local native loading preflight failed')
+            event_path = output / job['id'] / 'events.json'
+            events = json.loads(event_path.read_text())
+            palette = [e['params']['item'] for e in events
+                       if e.get('method') == 'item/completed'
+                       and e['params']['item'].get('tool')
+                       == 'docs_get_color_palette']
+            if (len(palette) != 1 or palette[0]['status'] != 'completed'
+                    or palette[0]['arguments'] != {}):
+                raise RuntimeError('Preflight palette execution failed')
             first = requests[0]
             definitions = first['tools'] + [t for i in first['discovery_items']
                                             for t in i.get('tools', [])]

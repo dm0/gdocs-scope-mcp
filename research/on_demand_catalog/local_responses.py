@@ -59,7 +59,8 @@ def response_events(item, sequence):
 
 
 @contextmanager
-def provider(tool_name, nonce, *, repetitions=1, search=False):
+def provider(tool_name, nonce, *, repetitions=1, search=False,
+             call_arguments=None):
     """Serve one native tool proposal and then a terminal assistant message."""
     records = []
 
@@ -119,7 +120,9 @@ def provider(tool_name, nonce, *, repetitions=1, search=False):
                     'id': 'fc_fixture' + suffix,
                     'call_id': 'call_fixture' + suffix,
                     'name': name,
-                    'arguments': json.dumps({'nonce': nonce + suffix}),
+                    'arguments': json.dumps(
+                        {'nonce': nonce + suffix} if call_arguments is None
+                        else call_arguments),
                 }
                 if namespace:
                     item['namespace'] = namespace
