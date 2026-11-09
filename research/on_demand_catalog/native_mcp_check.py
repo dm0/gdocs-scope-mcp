@@ -67,6 +67,7 @@ class NativeClient(RUNTIME.StudyClient):
         super().__init__(process, timeout=60)
         self.decision = decision
         self.approvals = []
+        self.journal = None
 
     async def handle_request(self, event):
         """Answer only the expected synthetic tool approval request."""
@@ -117,8 +118,17 @@ class NativeClient(RUNTIME.StudyClient):
                 or matches[-1]['tool'] not in REPRESENTATIVES
                 or '"' + matches[-1]['tool'] + '"' not in params['message']):
             raise RuntimeError('Unrecognized native approval elicitation')
+        before = []
+        if self.journal is not None and self.journal.exists():
+            before = [json.loads(line) for line in
+                      self.journal.read_text().splitlines()]
+        nonce = metadata['tool_params']['nonce']
+        if any(row['nonce'] == nonce for row in before):
+            raise RuntimeError('Fixture executed before approval response')
         self.approvals.append({'request': params, 'decision': self.decision,
-                               'tool': matches[-1]['tool']})
+                               'tool': matches[-1]['tool'],
+                               'nonce_not_executed_before_response': True,
+                               'prior_executions': len(before)})
         await self.send({'id': event['id'], 'result': {
             'action': self.decision,
             'content': {} if self.decision == 'accept' else None,
@@ -153,6 +163,7 @@ async def connection(directory, cmd, decision='decline'):
             env={**os.environ, 'RUST_LOG': 'error'},
         )
         client = NativeClient(process, decision)
+        client.journal = directory / 'executions.jsonl'
         try:
             yield client
         finally:
@@ -183,7 +194,7 @@ async def start(client, model_provider='openai'):
         },
     )
     await client.send({'method': 'initialized', 'params': {}})
-    return await client.request(
+    started = await client.request(
         'thread/start',
         {
             'model': (
@@ -200,6 +211,9 @@ async def start(client, model_provider='openai'):
             'Only the named synthetic operation is permitted.',
         },
     )
+    if started.get('modelProvider') != model_provider:
+        raise RuntimeError('Effective provider differs before turn start')
+    return started
 
 
 async def catalog(client, thread):
@@ -262,7 +276,7 @@ async def native_production(output):
     return expected
 
 
-async def fixture_case(output, spec, mode, tool, decision):
+async def fixture_case(output, spec, mode, tool, decision, *, repetitions=1):
     """Drive the native executor with a deterministic tool proposal."""
     output.mkdir(parents=True)
     write_json(output / 'fixture.json', spec)
@@ -276,7 +290,9 @@ async def fixture_case(output, spec, mode, tool, decision):
     }
     client = None
     try:
-        with provider(tool, nonce) as (endpoint, requests):
+        with provider(tool, nonce, repetitions=repetitions) as (
+            endpoint, requests,
+        ):
             report['provider_requests'] = requests
             cmd = command(
                 sys.executable,
@@ -289,6 +305,7 @@ async def fixture_case(output, spec, mode, tool, decision):
             )
             async with connection(output, cmd, decision) as client:
                 started = await start(client, 'native_fixture')
+                report['model_provider'] = started['modelProvider']
                 thread = started['thread']['id']
                 report['native_catalog'] = await catalog(client, thread)
                 await client.request(
@@ -376,6 +393,10 @@ async def run(output):
             ),
             flush=True,
         )
+    repeated = await fixture_case(output / '8-writes-repeat-once', spec,
+                                  'writes', 'probe_write', 'accept',
+                                  repetitions=2)
+    results.append(repeated)
     write_json(
         output / 'summary.json', {'cases': results, 'external_model_turns': 0}
     )

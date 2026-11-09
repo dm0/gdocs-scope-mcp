@@ -27,14 +27,18 @@ def modules(monkeypatch):
     return result
 
 
-def test_local_provider_emits_native_call_then_terminal_message(modules):
+@pytest.mark.parametrize('repetitions', [1, 2])
+def test_local_provider_emits_native_call_then_terminal_message(
+    modules, repetitions,
+):
     """Exercise the Responses wire without any external inference provider."""
     provider, _native = modules
-    with provider.provider('probe_write', 'test-nonce') as (endpoint, records):
+    with provider.provider('probe_write', 'test-nonce',
+                           repetitions=repetitions) as (endpoint, records):
         payload = {'tools': [{'type': 'function',
                              'name': 'mcp__native_probe__probe_write'}]}
         items = []
-        for _ in range(2):
+        for _ in range(repetitions + 1):
             request = Request(endpoint + '/responses',
                               data=json.dumps(payload).encode(),
                               headers={'Content-Type': 'application/json'})
@@ -42,10 +46,11 @@ def test_local_provider_emits_native_call_then_terminal_message(modules):
                 events = [json.loads(line[6:]) for line in response.read()
                           .decode().splitlines() if line.startswith('data: ')]
             items.append(events[-1]['response']['output'][0])
-        assert len(records) == 2  # noqa: PLR2004
+        assert len(records) == repetitions + 1
         assert items[0]['type'] == 'function_call'
         assert json.loads(items[0]['arguments']) == {'nonce': 'test-nonce'}
-        assert items[1]['type'] == 'message'
+        assert items[-1]['type'] == 'message'
+        assert len({i['call_id'] for i in items[:-1]}) == repetitions
 
 
 @pytest.mark.parametrize('decision,label', [
@@ -92,7 +97,9 @@ def test_native_command_only_overrides_child_configuration(modules, monkeypatch)
 
 
 @pytest.mark.parametrize('decision', ['accept', 'decline'])
-def test_native_mcp_elicitation_is_correlated_and_one_shot(modules, decision):
+def test_native_mcp_elicitation_is_correlated_and_one_shot(
+    modules, decision, tmp_path,
+):
     """Only Codex tool-call approval for this fixture may be answered."""
     _provider, native = modules
     client = native.NativeClient(None, decision)
@@ -120,5 +127,11 @@ def test_native_mcp_elicitation_is_correlated_and_one_shot(modules, decision):
     }
     request['params']['_meta']['codex_approval_kind'] = 'unrelated'
     with pytest.raises(RuntimeError, match='Unrecognized'):
+        asyncio.run(client.handle_request(request))
+    assert len(replies) == 1
+    request['params']['_meta']['codex_approval_kind'] = 'mcp_tool_call'
+    client.journal = tmp_path / 'executions.jsonl'
+    client.journal.write_text(json.dumps({'nonce': 'local'}) + '\n')
+    with pytest.raises(RuntimeError, match='before approval response'):
         asyncio.run(client.handle_request(request))
     assert len(replies) == 1

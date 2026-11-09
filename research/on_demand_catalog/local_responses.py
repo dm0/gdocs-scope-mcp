@@ -59,7 +59,7 @@ def response_events(item, sequence):
 
 
 @contextmanager
-def provider(tool_name, nonce):
+def provider(tool_name, nonce, *, repetitions=1):
     """Serve one native tool proposal and then a terminal assistant message."""
     records = []
 
@@ -90,17 +90,18 @@ def provider(tool_name, nonce):
                     'target_matches': matches,
                 }
             )
-            if len(records) == 1:
+            if len(records) <= repetitions:
                 if len(matches) != 1:
                     self.send_error(400, 'Target tool not uniquely advertised')
                     return
                 namespace, name = matches[0]
+                suffix = '' if len(records) == 1 else '-repeat'
                 item = {
                     'type': 'function_call',
-                    'id': 'fc_fixture',
-                    'call_id': 'call_fixture',
+                    'id': 'fc_fixture' + suffix,
+                    'call_id': 'call_fixture' + suffix,
                     'name': name,
-                    'arguments': json.dumps({'nonce': nonce}),
+                    'arguments': json.dumps({'nonce': nonce + suffix}),
                 }
                 if namespace:
                     item['namespace'] = namespace
