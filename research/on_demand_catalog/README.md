@@ -7,6 +7,12 @@ authorized six compatibility canaries and all six completed. See
 [canary results](CANARY_RESULTS.md). No pilot/main budget is authorized and no
 earlier budget transfers to this effort.
 
+[Native MCP approval checks](NATIVE_MCP_APPROVALS.md) subsequently passed nine
+local deterministic scenarios, without more external model inference. The full
+36-tool native catalog matched its source descriptors; read/write/delete
+approvals, denial blocking and one-shot consent were preserved. The replay
+fixture does not replace a combined native deferred-loading approval check.
+
 ## Compatibility first
 
 The first candidate is host-side deferred loading: preserve the complete MCP
@@ -69,7 +75,7 @@ unchanged. Read-only reanalysis uses `analyze_canaries.py --output PRIVATE_ARTIF
 
 ## Next stages
 
-Verify actual deferred discovery and native MCP approval handling, then choose
+Verify joint deferred discovery and native MCP approval handling, then choose
 the implementation and core before freezing model-study scenarios. Keep all
 domain interfaces identical across arms. Include core-only, deferred,
 cross-group and no-tool tasks, separate cold/warm strata, missing results,

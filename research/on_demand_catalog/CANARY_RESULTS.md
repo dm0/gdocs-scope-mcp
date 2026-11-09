@@ -3,6 +3,10 @@
 Date: 2026-11-09. Issue: #60. Status: the authorized six attempts completed;
 no infrastructure failures or replacements. No further model sessions authorized.
 
+Later [native MCP baseline checks](NATIVE_MCP_APPROVALS.md) verified the approval
+boundary with local deterministic replay and no additional external model calls.
+The six-canary observations below retain their original scope and limitations.
+
 ## Scope and execution
 
 The user approved exactly six fresh chats: eager/deferred loading on each of
