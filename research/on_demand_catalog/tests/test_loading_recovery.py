@@ -125,3 +125,17 @@ def test_code_approval_turn_routes_native_confirmation(recovery):
                              handle_request=handle)
     assert asyncio.run(replay.native_turn(client, 'thread'))['status']
     assert handled == ['mcpServer/elicitation/request']
+
+
+def test_ordinary_paired_token_savings_and_sample_variance(recovery):
+    """Paired resampling preserves proportional savings and sample variance."""
+    del recovery
+    analysis = importlib.import_module('analyze_ordinary_loading')
+    result = analysis.saving([100, 200, 300], [50, 100, 150])
+    assert result['percent'] == pytest.approx(50)
+    assert result['ci95'] == [50, 50]
+    summary = analysis.continuous([1, 2, 3])
+    assert summary['mean'] == pytest.approx(2)
+    assert summary['variance'] == 1
+    assert summary['ci95'][0] <= summary['mean'] <= summary['ci95'][1]
+    assert analysis.saving([], [])['ci95'] is None
