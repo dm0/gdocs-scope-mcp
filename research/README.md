@@ -15,4 +15,5 @@ evaluation reports belong in the study's own directory.
 | Study | Scope |
 | --- | --- |
 | [Tool consolidation](tool_consolidation/README.md) | #59: isolated model runtime, synthetic fixtures, native calibration and paired interface evaluation. |
+| [On-demand catalog](on_demand_catalog/README.md) | #60: protocol/client compatibility, deferred discovery and matched static-catalog evaluation. |
 | [List read round-trip](list_read_roundtrip/README.md) | Synthetic Markdown/HTML list token measurements. |
