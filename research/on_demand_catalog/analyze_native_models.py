@@ -135,6 +135,11 @@ def analyze(output):
         if hashlib.sha256(Path(name).read_bytes()).hexdigest() != expected:
             raise ValueError('Frozen source changed')
     ledger = json.loads((output / 'ledger.json').read_text())
+    if (ledger['cap'] != manifest['cap']
+            or len(ledger['attempts']) != manifest['cap']
+            or {r['id'] for r in ledger['attempts']}
+            != {j['id'] for j in manifest['schedule']}):
+        raise ValueError('Expected the complete sixty-reservation schedule')
     rows, hashes = [], {}
     for row in ledger['attempts']:
         directory = output / row['id']
@@ -173,6 +178,8 @@ def analyze(output):
                            if p['deferred'][k] is not None
                            and p['eager'][k] is not None]) for k in METRICS}
     report = {'manifest_sha256': digest(manifest), 'attempts': len(rows),
+              'analysis_source_sha256': hashlib.sha256(
+                  Path(__file__).read_bytes()).hexdigest(),
               'scope': 'One repeated palette task; descriptive comparison',
               'groups': groups, 'rows': rows, 'hashes': hashes}
     write_json(output / 'native-model-analysis.json', report)
