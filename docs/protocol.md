@@ -180,12 +180,12 @@ not authorization or retry guarantees. The per-operation policy is:
 | `docs_get_tree`, `docs_read`, `docs_list`, `docs_read_comments` | true | false | true |
 | `docs_search_replace`, `docs_batch_replace` | false | true | false |
 | `docs_delete_paragraph`, `docs_delete_comment`, `docs_delete_comment_reply`, `docs_edit_comment` | false | true | true |
-| `docs_insert_before`, `docs_insert_after`, `docs_append` | false | false | false |
+| `docs_insert` (legacy: `docs_insert_before`, `docs_insert_after`, `docs_append`) | false | false | false |
 | `docs_insert_at_heading` | false | false | false |
 | `docs_create`, `docs_add_comment`, `docs_reply_to_comment` | false | false | false |
 | `docs_authorize`, `docs_authorization_complete`, `docs_select_files` (selected mode only) | false | false | false |
 | `docs_authorization_status` | true | false | true |
-| `docs_resolve_comment`, `docs_reopen_comment` | false | false | false |
+| `docs_comment_status` (legacy: `docs_resolve_comment`, `docs_reopen_comment`) | false | false | false |
 | `docs_get_entity` | true | false | true |
 | `docs_create_dropdown_definition`, `docs_select_dropdown` | false | false | false |
 | `docs_tables_list`, `docs_table_read`, `docs_table_snapshot` | true | false | true |

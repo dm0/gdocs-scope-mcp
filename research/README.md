@@ -1,17 +1,18 @@
-# Research scripts
+# Research
 
-Keep development experiments and measurement scripts here. Reports and
-implementation documentation belong under `docs/`; do not place scripts there.
+Each study lives in its own named subdirectory. Keep its scripts, synthetic
+fixtures, README and research-only `tests/` together; do not put experiment
+scripts or tests directly in this directory or the product test suite.
 
-## List token measurements
+Run study commands explicitly from the repository root using the root Python
+project and this checkout's environment. The default pytest run discovers only
+the root `tests/` directory. Research model inference is an explicit command,
+never an automatic test side effect. Keep generated logs, traces and datasets
+outside tracked source. Keep study-specific reports with their study; product
+implementation documentation belongs under `docs/`; study protocols and
+evaluation reports belong in the study's own directory.
 
-From the repository root:
-
-```bash
-uv run --locked --with tiktoken==0.12.0 python research/measure_list_tokens.py
-```
-
-The optional tokenizer is loaded into a temporary uv environment without
-changing project dependencies. Inputs are synthetic; the script does not access
-Google documents. See [the report](../docs/development/list-read-roundtrip.md)
-for methodology, character counts and limits of the token estimates.
+| Study | Scope |
+| --- | --- |
+| [Tool consolidation](tool_consolidation/README.md) | #59: isolated model runtime, synthetic fixtures, native calibration and paired interface evaluation. |
+| [List read round-trip](list_read_roundtrip/README.md) | Synthetic Markdown/HTML list token measurements. |

@@ -113,7 +113,24 @@ docs_reply_to_comment(
 Post a plain-text reply. Returns `reply_id` (the native post ID), `content`,
 and the shared mutation metadata described below.
 
-## docs_resolve_comment
+## docs_comment_status (default catalog)
+
+```text
+docs_comment_status(
+    doc_id, comment_id, action, reply='', *, expected_revision_id=None,
+)
+```
+
+`action` is `resolve` or `reopen`. Each action creates the same native action
+post as its legacy counterpart; optional `reply` belongs to that post and does
+not create a separate reply. Revisions, persistence checks and receipts are
+unchanged. This interface does not promise to skip a thread already in the
+requested state. Deletion and ordinary replies remain separate tools.
+
+The two legacy names below require a catalog retaining separate status tools,
+selected by `toolset_version="v1"`.
+
+## docs_resolve_comment (legacy catalog)
 
 ```text
 docs_resolve_comment(doc_id, comment_id, reply='', *, expected_revision_id=None)
@@ -122,7 +139,7 @@ docs_resolve_comment(doc_id, comment_id, reply='', *, expected_revision_id=None)
 Resolve a thread with one native `RESOLVE` action post. Optional closing text
 belongs to the same post. Returns `resolved=True` and its `reply_id`.
 
-## docs_reopen_comment
+## docs_reopen_comment (legacy catalog)
 
 ```text
 docs_reopen_comment(doc_id, comment_id, reply='', *, expected_revision_id=None)

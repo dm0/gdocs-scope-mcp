@@ -17,6 +17,7 @@ from gdocs_scope_mcp.tool_logging import configure_logging
 OVERRIDES = {
     'client_id': ('configured-client', 'configured-client'),
     'access_mode': ('selected_files', 'selected_files'),
+    'toolset_version': ('v1', 'v1'),
     'write_revision_mode': ('target', 'target'),
     'document_cache_enabled': ('true', True),
     'document_cache_storage': ('memory', 'memory'),

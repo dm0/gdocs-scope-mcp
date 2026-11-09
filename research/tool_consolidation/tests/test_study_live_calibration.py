@@ -1,0 +1,33 @@
+"""Compare frozen fixture trajectories with the real authorized document."""
+
+import asyncio
+import os
+import sys
+
+import pytest
+
+from .test_study_corpus import execution, load_research, scenarios
+
+
+@pytest.mark.live
+@pytest.mark.parametrize('case', scenarios.PILOT + scenarios.MAIN,
+                         ids=lambda case: case['id'])
+def test_native_fixture_calibration(case, tmp_path, monkeypatch):
+    """Use independent study-owned documents outside pytest's factory scope."""
+    monkeypatch.setitem(sys.modules, 'study_execution', execution)
+    live = load_research('study_live')
+    if os.environ.get('GDOCS_SCOPE_MCP_LIVE_TEST_FOLDER') is None:
+        pytest.skip('Opt in with the authorized development-folder ID.')
+
+    async def run():
+        native = await live.native_reference(case, tmp_path / 'live')
+        async with execution.fixture_backend(
+            case, 'baseline', tmp_path / 'fixture',
+        ) as (backend, _info):
+            semantic = [await backend.state(semantic=True)]
+            for call in case['oracle']:
+                receipt = await backend.call(call)
+                assert receipt.get('ok') is not False
+                semantic.append(await backend.state(semantic=True))
+        assert native['semantic'] == semantic
+    asyncio.run(run())

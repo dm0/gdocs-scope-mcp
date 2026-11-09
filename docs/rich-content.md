@@ -23,8 +23,8 @@ a list or code block uses its heading style. Document named styles and existing
 surrounding content are preserved. `rich=False` retains Google's native
 insertion inheritance and inserts the input literally without style resets.
 
-All rich insertion tools (`docs_append`, `docs_insert_before`,
-`docs_insert_after`, and `docs_insert_at_heading`) also accept the reader's
+Both default rich insertion tools (`docs_insert` and `docs_insert_at_heading`)
+and the explicit baseline's legacy insertion tools also accept the reader's
 HTML for bold (`b`), italic (`i`),
 underline (`u`), and paragraph alignment (`p` with `text-align: center`, `right`,
 or `justify`). Nested inline styles combine within their text ranges. Heading
@@ -85,7 +85,8 @@ Markdown table syntax has no border visibility setting; pipe and separator
 characters describe structure, not border appearance.
 
 ```python
-docs_append(doc_id="...", text="| A | B |\n| --- | --- |\n| C | D |",
+docs_insert(doc_id="...", text="| A | B |\n| --- | --- |\n| C | D |",
+            target={"position": "append"},
             table_borders=False)
 ```
 
@@ -541,13 +542,14 @@ Set `upload_local_images=True` explicitly on any of the insertion tools
 to accept absolute local paths or `file:///` URLs in Markdown and HTML:
 
 ```python
-docs_append(
+docs_insert(
     doc_id="...",
     text="Before ![Chart](file:///home/me/chart.png) after",
+    target={"position": "append"},
     upload_local_images=True,
 )
-docs_insert_before(
-    doc_id="...", anchor="Results",
+docs_insert(
+    doc_id="...", target={"position": "before", "anchor": "Results"},
     text='<img src="/home/me/chart.png" width="320">',
     upload_local_images=True,
 )

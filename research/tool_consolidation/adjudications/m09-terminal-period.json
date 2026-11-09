@@ -1,0 +1,12 @@
+{
+  "id": "m09-terminal-period-2026-11-06",
+  "reviewer": "user",
+  "case": "m09",
+  "main_corpus_sha256": "50b509596af9632ef54c5c907dafbf0ccebe152eced31471de55654a42392afb",
+  "request": "Close the Citation source discussion with closing text Verified against the original. Do not post a separate reply.",
+  "decision": "Both closing-text variants are acceptable",
+  "accepted_texts": ["Verified against the original", "Verified against the original."],
+  "scope": "Only the closing action-post text in m09; retain all target, status, post-count, content and style checks",
+  "analysis_role": "Post-hoc human-adjudicated sensitivity; preserve the frozen primary grades",
+  "review_limit": "This is one intent adjudication, not a complete blinded audit of all study traces"
+}

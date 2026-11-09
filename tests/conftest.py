@@ -16,6 +16,10 @@ import pytest
 from fastmcp import Client
 from fastmcp.client.transports import StdioTransport
 
+# Legacy behavior/contract tests exercise the executable baseline explicitly.
+# Default-catalog tests remove this override in their isolated server process.
+os.environ.setdefault('GDOCS_SCOPE_MCP_TOOLSET_VERSION', 'v1')
+
 from gdocs_scope_mcp.diagnostics import capture_server_info
 from gdocs_scope_mcp.google_api import clients, credentials
 
@@ -61,7 +65,7 @@ def isolated_mcp():
 
 
 @pytest.hookimpl(hookwrapper=True)
-def pytest_runtest_makereport(item, call):
+def pytest_runtest_makereport(item):
     """Remember setup and call failures before document finalization."""
     outcome = yield
     report = outcome.get_result()
@@ -78,14 +82,14 @@ def pytest_runtest_call(item):
 
 
 @pytest.hookimpl(hookwrapper=True, tryfirst=True)
-def pytest_runtest_teardown(item, nextitem):
+def pytest_runtest_teardown(item):
     """Clean up after all fixtures, including failed dependent teardowns."""
     outcome = yield
     try:
         _finish_documents(item, failed=(
             item.stash.get(_live_failed, False) or outcome.excinfo is not None
         ))
-    except BaseException as error:
+    except BaseException as error:  # noqa: BLE001 - retain interruption errors
         outcome.force_exception(error)
 
 
@@ -99,7 +103,7 @@ def _finish_documents(item, *, failed):
 
 
 @pytest.hookimpl(trylast=True)
-def pytest_sessionfinish(session, exitstatus):
+def pytest_sessionfinish():
     """Finalize documents when interruption bypasses runtest teardown."""
     for item in list(_pending_documents):
         _finish_documents(item, failed=True)

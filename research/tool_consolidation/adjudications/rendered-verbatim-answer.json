@@ -1,0 +1,9 @@
+{
+  "decision_date": "2026-11-06",
+  "authority": "Explicit user reply during the retrospective audit",
+  "user_reply": "Yes, if the displayed line matches",
+  "scope": "Main case m18 only; a separate post-hoc sensitivity",
+  "manifest_sha256": "e6c15741378738c86ddf71fa3840ea6529d15e5f3b278ef550f1ba82d2e80b82",
+  "main_corpus_sha256": "50b509596af9632ef54c5c907dafbf0ccebe152eced31471de55654a42392afb",
+  "rule": "Accept an exact Batch: WH-7294-Z final noop message after one HTML character-reference decode. Preserve strict read scope, no mutations, all other characters and the original raw messages and primary grades. Do not strip markup, ignore extra text or normalize other cases."
+}

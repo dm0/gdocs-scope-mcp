@@ -11,6 +11,7 @@ application operation merely to reuse one of its helpers.
 | --- | --- |
 | `server.py`, `__main__.py` | Construct the server, capture startup identity, configure middleware, register tools and start STDIO. |
 | `tools/` | Thin MCP contracts, descriptions, schemas, annotations and explicit registration functions. |
+| `tools/consolidation.py` | Default typed insertion/status adapters over existing tool functions; strict target unions, legacy catalog support, unchanged application operations and receipts. |
 | `google_api/credentials.py` | Token precedence, canonical environment overrides, legacy token-file paths, gog fallback and OAuth refresh. |
 | `google_api/access.py` | Shared access-mode scope policy, grant validation and authorization recovery guidance, independent of MCP. |
 | `google_api/authorization.py` | Desktop client selection, narrow-to-full grant upgrades, account/file verification and private atomic token installation. |
@@ -178,6 +179,15 @@ client, and review deliberate changes to the frozen transport contract.
 Access tools register from the startup access mode: common authorization and
 status tools are always present, while file selection is registered only for
 `selected_files`. Verify each catalog through a fresh STDIO server.
+The static `toolset_version` is selected at startup: v1 retains the frozen legacy
+catalog and default v2 uses `docs_insert` and `docs_comment_status` in place of
+the five legacy names. `create_server` constructs a complete static server;
+the research-only launcher composes all four historical study arms through
+that factory without exposing experimental variants as product settings.
+Registration removes only the corresponding legacy tools before connections
+are accepted and calls their unchanged Python adapters. It never activates
+tools per client or changes the catalog during a session. Legacy contract tests
+explicitly select v1; isolated default discovery separately tests v2.
 
 ### Add a document feature
 
@@ -199,6 +209,14 @@ owners. Exercise cell and body conversion independently when both support the
 feature. Unsupported input must fail before uploads or document mutations.
 
 ## Compatibility and validation
+
+Research code is outside the installed package. Each study owns a separate
+`research/<study>/` directory with its README, scripts, fixtures and `tests/`.
+Research tests run explicitly from the repository root and are excluded from
+the default product suite (`testpaths = ["tests"]`). Product behavior and
+transport contract tests remain under the root `tests/` directory. Studies use
+the root Python project and may reuse documented product/probe APIs without
+moving experiment-specific code into the production package.
 
 Preserve the MCP initialization instructions, registration order, names,
 descriptions, annotations, input/output schemas and structured failures.

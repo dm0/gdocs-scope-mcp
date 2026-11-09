@@ -12,6 +12,7 @@ An absent default file is allowed; an explicitly selected file must exist.
 {
   "client_id": null,
   "access_mode": "full_drive",
+  "toolset_version": "v2",
   "write_revision_mode": "required",
   "document_cache_enabled": false,
   "document_cache_storage": "disk",
@@ -89,6 +90,7 @@ Environment variables override individual file settings:
 |---|---|---|
 | `GDOCS_SCOPE_MCP_CLIENT_ID` | `client_id` | `null` (bundled client for new authorization) |
 | `GDOCS_SCOPE_MCP_ACCESS_MODE` | `access_mode` | `full_drive` |
+| `GDOCS_SCOPE_MCP_TOOLSET_VERSION` | `toolset_version` | `v2` |
 | `GDOCS_SCOPE_MCP_WRITE_REVISION_MODE` | `write_revision_mode` | `required` |
 | `GDOCS_SCOPE_MCP_DOCUMENT_CACHE_ENABLED` | `document_cache_enabled` | `false` |
 | `GDOCS_SCOPE_MCP_DOCUMENT_CACHE_STORAGE` | `document_cache_storage` | `disk` |
@@ -128,8 +130,7 @@ Token paths, client secrets, Drive and logging environment variables retain
 their separate handling. Our config does not
 automatically load `.env` files.
 
-`docs_append`, `docs_insert_before`, `docs_insert_after` and
-`docs_insert_at_heading` also accept optional
+The default `docs_insert` and `docs_insert_at_heading` tools also accept optional
 agent-facing `code_block_style` and `code_block_theme_background` arguments.
 The `code_block_style` input schema advertises an `enum` of available themes,
 generated from the installed Pygments version when the server starts. Agents
@@ -139,8 +140,9 @@ environment overrides. An explicit `false` disables the background even if the
 server default enables it. Each argument can be overridden independently:
 
 ```python
-docs_append(
+docs_insert(
     doc_id='...', text='```python\nprint("Hello")\n```',
+    target={'position': 'append'},
     code_block_style='monokai', code_block_theme_background=True,
 )
 ```

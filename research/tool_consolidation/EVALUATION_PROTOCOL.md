@@ -1,9 +1,95 @@
 # Tool interface evaluation design
 
-Status: planned; no model evaluation results have been collected.
-Date: 2026-11-05.
+Status: Study 1 restart preparation; the first campaign's pilot and partial
+main outcomes are preserved separately. See the
+[implementation and validation report](IMPLEMENTATION_REPORT.md).
+Date: 2026-11-06.
 
-[Development](../development.md) · [Implementation notes](implementation-notes.md)
+## Restart 001 (approved 2026-11-06)
+
+The user authorized a full restart to use parallel disposable native documents:
+**1080 new model sessions**, on top of **241 prior reserved attempts**, for a
+strict cumulative maximum of **1321**. The new schedule still contains five
+pilot scenarios (120 sessions) and twenty main scenarios (960 sessions).
+Keep the first campaign's 120 completed pilot sessions, 118 completed main
+sessions and three interrupted attempts as a separate cohort; never pool them
+into restart estimates or erase their budget consumption. The restart manifest
+binds the earlier ledger's path, count and SHA-256. No automatic replacements
+or extra sessions are authorized.
+
+Each native job creates its own uniquely named document in the explicitly
+authorized development folder through the repository's `LiveDocuments`
+fixture infrastructure. Only confirmed test-owned IDs may be trashed; verify
+trashing and process cleanup, retaining creation/cleanup reports. Run up to
+three independent jobs concurrently. There is no permanent-Doc fallback or
+shared-document lock. Stop requests drain current jobs before exiting.
+
+Before restarting inference, calibrate the native gold trajectories for **all
+25 scenarios**, in parallel, against the synthetic API. This covers every
+declared fixture, not every possible erroneous trajectory or Google API feature.
+Decision-only sessions do not need native writes. End-to-end sessions exercise
+the unchanged product MCP operations; the predeclared 60 native model sessions
+remain inside the 960-session main budget. Other sessions use the calibrated
+synthetic API seam and must be reported separately from native evidence.
+
+The user explicitly accepted an optional final period in unquoted inserted
+paragraphs and comment action text. Freeze this rule as the restart's primary
+state grading before inference, using the corpus-bound human adjudication in
+`research/tool_consolidation/adjudications/`. Keep exact-state matching as a
+diagnostic. Only new text at its gold target or action-post index may vary;
+all other symbols, styles, locations, status transitions and post counts remain
+strict. Replacement strings are outside that rule. The earlier cohort retains
+its frozen exact grades plus separately labeled post-hoc sensitivities.
+
+Native observer snapshots occur initially, after mutating calls and finally.
+Reuse the last observed state across read-only calls: each document is private
+to the job, and the product's unchanged read contracts do not mutate it.
+The final snapshot still checks the whole protected state. This reduces
+measurement overhead equally across arms. Record observer policy, budgets,
+protocol text/hash, executable source hashes and catalogs in the manifest.
+
+The scenarios have already been evaluated partially in the interrupted cohort.
+Describe the restart as a user-directed logistics/grading revision, not as an
+independent unseen confirmatory dataset. Keep the same model roster, four arms,
+paired schedule, original effect/safety thresholds and small-sample limitations.
+Complete the blinded trace audit before any default adoption claim.
+
+## Original resource-bounded profile (first campaign, superseded above)
+
+The user explicitly replaced Study 1's initial sample-size plan below with a
+maximum of **1080 new model sessions**: five pilot scenarios x three approved
+models x four variants x one repeat x two levels = 120; twenty held-out
+scenarios x three models x four variants x two repeats x two levels = 960.
+No increase beyond this cap is authorized by the original larger plan.
+
+The five pilot cases cover one scenario per stratum. Main-stage counts are six
+insertion, four comment status, four multi-step, three ambiguity/absent-target
+and three unchanged controls, with ten Russian and ten English requests.
+The corpus is `research/tool_consolidation/study_scenarios.py`; its family labels
+and templates are disjoint. It does not cover every edge case in the larger
+design: tables/cells, uploads, chips and complex list insertion are outside
+this reduced corpus and cannot be generalized from these results.
+
+All other controls below remain applicable. Freeze corpus, runtime, catalog,
+execution budgets and grading hashes before pilot model trials. Count failed
+model-session attempts against the cap; preserve them and do not silently
+replace them. Earlier access checks and the twelve-chat infrastructure preflight
+are separate, already-completed engineering checks and must be reported as such.
+Any live model confirmation sessions must be selected within the 960-session
+main schedule, not added on top. The predeclared live subset is main scenarios
+m01, m08, m11, m15 and m20, end-to-end level, second repeat, all models/variants:
+60 native confirmation sessions, serialized under the development-Doc lock.
+
+Five pilot cases are an execution/feasibility check, not a reliable power
+estimate. Twenty independent main scenarios provide preliminary evidence.
+Preserve the original effect and safety decision criteria, report paired
+intervals and their small-sample limits, and keep baseline when evidence is
+insufficient. More repeats cannot substitute for independent scenarios. Do
+not increase the scenario count after observing outcomes. Retain a blinded
+audit packet for ambiguous intent and sampled successes/failures; do not claim
+human review before a human has actually reviewed it.
+
+[Development](../../docs/development.md) · [Implementation notes](../../docs/development/implementation-notes.md)
 
 ## Purpose and required deliverables
 

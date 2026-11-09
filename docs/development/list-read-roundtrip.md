@@ -90,14 +90,14 @@ examples are not a representative document corpus.
 Reproduce from the repository root:
 
 ```bash
-uv run --locked --with tiktoken==0.12.0 python research/measure_list_tokens.py
+uv run --locked --with tiktoken==0.12.0 python research/list_read_roundtrip/measure_list_tokens.py
 ```
 
 The script renders a synthetic native document through the current reader,
 compares it with Markdown and compact HTML references, and prints character
 and token counts as JSON. The optional tokenizer uses a temporary uv environment;
-project dependencies are unchanged. Research scripts live under `research/`,
-not under `docs/`.
+project dependencies are unchanged. This study's scripts live under
+`research/list_read_roundtrip/`, separately from other studies.
 
 Final selective-rendering checks on 2026-10-30:
 
@@ -108,7 +108,8 @@ Final selective-rendering checks on 2026-10-30:
 - Global Ruff, explicit changed-test lint and `git diff --check` passed.
 - Wheel and sdist included 90 identical source modules. Both passed isolated
   CLI/auth entry-point checks and discovery of all 32 MCP tools.
-- The sdist includes `research/measure_list_tokens.py` and its usage README.
+- The sdist includes the research script and its usage README (now located in
+  `research/list_read_roundtrip/`).
   No scripts remain under `docs/`.
 - The frozen behavior snapshot remains unchanged. The MCP catalog fingerprint
   changes intentionally to describe the new list-read representation and limits.

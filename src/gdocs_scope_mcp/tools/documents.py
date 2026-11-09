@@ -30,6 +30,7 @@ from gdocs_scope_mcp.tool_inputs import (
     Replacements,
     TableBorders,
 )
+from gdocs_scope_mcp.tools.consolidation import register_insertion
 from gdocs_scope_mcp.tools.schema import tool_response_schema
 
 
@@ -175,7 +176,7 @@ def register_reading(mcp):
             heading_ids = [heading_ids]
         return reading.read(doc_id, heading_ids, tab_id=tab_id)
 
-def register_editing(mcp):
+def register_editing(mcp, *, consolidated=False):
     """Register documents tools in their established order."""
 
     @mcp.tool(
@@ -692,3 +693,7 @@ def register_editing(mcp):
                 expected_revision_id=expected_revision_id, tab_id=tab_id,
             ),
         )
+
+    if consolidated:
+        register_insertion(mcp, docs_append, docs_insert_before,
+                           docs_insert_after)

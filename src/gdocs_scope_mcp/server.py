@@ -58,17 +58,12 @@ from gdocs_scope_mcp.tools import (
     suggestions,
     tables,
 )
+from gdocs_scope_mcp.tools.consolidation import toolset_instructions
 
 SERVER_INFO = capture_server_info()
 
 
-
-
-mcp = FastMCP(
-    name='gdocs-scope-mcp',
-    version=SERVER_INFO.package_version,
-    middleware=[ToolCallLoggingMiddleware()],
-    instructions="""
+BASE_INSTRUCTIONS = """
 Surgical Google Docs editing — search by text, never by character index.
 
 ERRORS:
@@ -293,96 +288,60 @@ SURGICAL GOOGLE DOCS EDITING WORKFLOW:
 All edits preserve version history. Use short, distinctive anchor_text
 (a few unique words) for reliable text matching and combine with heading ids
 to further reduce the scope.
-""".strip(),
+""".strip()
+
+
+def create_server(
+    *,
+    consolidate_insertion: bool,
+    consolidate_status: bool,
+) -> FastMCP:
+    """Construct a complete static catalog before accepting connections."""
+    application = FastMCP(
+        name='gdocs-scope-mcp',
+        version=SERVER_INFO.package_version,
+        middleware=[ToolCallLoggingMiddleware()],
+        instructions=toolset_instructions(
+            BASE_INSTRUCTIONS,
+            consolidate_insertion=consolidate_insertion,
+            consolidate_status=consolidate_status,
+        ),
+    )
+    diagnostics.register(application, lambda: SERVER_INFO)
+    documents.register_discovery(application)
+    suggestions.register(application)
+    documents.register_reading(application)
+    tables.register(application)
+    entities.register(application)
+    documents.register_editing(application, consolidated=consolidate_insertion)
+    formatting.register(application)
+    comments.register(application, consolidated=consolidate_status)
+    files.register(application)
+    access.register(application)
+    return application
+
+
+_consolidated = get_settings().toolset_version == 'v2'
+mcp = create_server(
+    consolidate_insertion=_consolidated, consolidate_status=_consolidated
 )
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-diagnostics.register(mcp, lambda: SERVER_INFO)
-documents.register_discovery(mcp)
-suggestions.register(mcp)
-documents.register_reading(mcp)
-tables.register(mcp)
-entities.register(mcp)
-documents.register_editing(mcp)
-formatting.register(mcp)
-comments.register(mcp)
-files.register(mcp)
-access.register(mcp)
-
-def main():
-    """Run the command-line entry point for this module."""
+def run_server(application):
+    """Serve one preconstructed catalog and finalize authorization workers."""
     configure_logging()
     get_settings()
     # Our logger has its own handler; this default is for third-party loggers.
     logging.basicConfig(level=logging.WARNING, stream=sys.stderr)
     try:
-        mcp.run(transport='stdio')
+        application.run(transport='stdio')
     finally:
         selection_manager.close()
+
+
+def main():
+    """Run the command-line entry point with the configured toolset version."""
+    run_server(mcp)
 
 
 if __name__ == '__main__':

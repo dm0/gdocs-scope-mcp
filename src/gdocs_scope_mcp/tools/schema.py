@@ -1,12 +1,14 @@
 """Build the common success and failure MCP output union."""
 
+from types import UnionType
+
 from pydantic import BaseModel, TypeAdapter
 
 from gdocs_scope_mcp.contracts import EditFailedResponse
 
 
 def tool_response_schema(
-    success_model: type[BaseModel], *,
+    success_model: type[BaseModel] | UnionType, *,
     additional_failure: type[BaseModel] | None = None,
 ) -> dict:
     """Expose success/error objects without FastMCP's result wrapper."""

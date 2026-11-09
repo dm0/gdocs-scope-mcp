@@ -129,8 +129,8 @@ Typical workflow:
 
 1. Call `docs_get_tree(doc_id)` to discover headings and their IDs.
 2. Call `docs_read(doc_id, heading_ids=[...])` to read selected section subtrees.
-3. Use `heading_id` with `docs_search_replace`, `docs_insert_before`, or
-   `docs_insert_after` to restrict the edit to the chosen subtree.
+3. Use `heading_id` with `docs_search_replace`, or inside the `docs_insert`
+   before/after target, to restrict the edit to the chosen subtree.
 4. Read that section again to verify the result.
 
 To insert at a section boundary without a text anchor, use

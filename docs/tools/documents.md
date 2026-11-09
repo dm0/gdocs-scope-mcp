@@ -58,7 +58,8 @@ server defaults. Theme/background nulls inherit their server defaults.
 ## Revision preconditions
 
 `docs_search_replace`, `docs_batch_replace`, `docs_delete_paragraph`,
-`docs_append`, `docs_insert_before`, `docs_insert_after`,
+`docs_insert` (or the explicit baseline's `docs_append`, `docs_insert_before`,
+`docs_insert_after`),
 `docs_insert_at_heading`, `docs_format_text` and `docs_format_paragraph` accept
 optional `expected_revision_id`. Omitting it uses the configured write policy,
 except heading-boundary insertion always uses required revisions. Providing it
@@ -286,7 +287,37 @@ are null. Replace-all requires `regex=False` and `heading_id=None`.
 
 ---
 
-### docs_insert_after
+### docs_insert (default catalog)
+
+```text
+docs_insert(
+    doc_id, text, target, rich=True, *, tab_id=None,
+    upload_local_images=False, table_borders=True,
+    code_block_style=None, code_block_theme_background=None,
+    expected_revision_id=None,
+)
+```
+
+Use a typed target to select the insertion position:
+
+```python
+docs_insert(doc_id="...", text="Final note", target={"position": "append"})
+docs_insert(doc_id="...", text="New paragraph", target={
+    "position": "after", "anchor": "Distinct paragraph", "heading_id": "h.id",
+})
+```
+
+`before` and `after` require a nonempty anchor and accept optional heading scope.
+`append` selects the current tab end and forbids anchor/heading selectors.
+Unknown target fields are rejected. Content, matching, revision guards, errors
+and receipts follow the corresponding legacy operation documented below.
+`docs_insert_at_heading` remains separate for whole-subtree boundaries.
+
+The legacy names below are available only in variants that retain separate
+insertion tools in `toolset_version="v1"`.
+See [catalog migration](../development/tool-consolidation.md).
+
+### docs_insert_after (legacy catalog)
 
 ```text
 docs_insert_after(
@@ -389,7 +420,7 @@ not be repeated to clean up temporary uploads.
 
 ---
 
-### docs_insert_before
+### docs_insert_before (legacy catalog)
 
 ```text
 docs_insert_before(
@@ -452,7 +483,7 @@ final paragraph is skipped.
 
 ---
 
-### docs_append
+### docs_append (legacy catalog)
 
 ```text
 docs_append(
@@ -588,7 +619,7 @@ verify Drive state before deciding whether to create again.
 2. docs_add_comment  — flag issues with anchor_text pointing to specific clauses
 3. docs_read_comments — audit what's been flagged
 4. docs_search_replace — fix straightforward issues directly
-5. docs_resolve_comment — close comments as they're addressed
+5. docs_comment_status(action="resolve") — close comments as they're addressed
 ```
 
 ### Bulk document update
@@ -602,5 +633,5 @@ verify Drive state before deciding whether to create again.
 ```
 1. docs_add_comment  — add review notes
 2. docs_reply_to_comment — respond to collaborator comments
-3. docs_resolve_comment  — close resolved threads
+3. docs_comment_status(action="resolve") — close resolved threads
 ```

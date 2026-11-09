@@ -2,7 +2,7 @@
 
 Run from the repository root with:
 uv run --locked --with tiktoken==0.12.0 python \
-research/measure_list_tokens.py
+research/list_read_roundtrip/measure_list_tokens.py
 """
 
 import json
