@@ -81,4 +81,7 @@ automatically approved for Study 2.
 - [Codex MCP support](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
 - [FastMCP tool search](https://gofastmcp.com/servers/transforms/tool-search).
 
-Local discovery findings and their limits will be recorded in `COMPATIBILITY.md`.
+See [initial compatibility findings](COMPATIBILITY.md) for observed behavior,
+the retained failed attempt, frozen successful manifest and remaining gates.
+The probe requires Python 3.11+ like the reused app-server transport; it does
+not change the product's supported Python versions.
