@@ -59,7 +59,7 @@ def response_events(item, sequence):
 
 
 @contextmanager
-def provider(tool_name, nonce, *, repetitions=1):
+def provider(tool_name, nonce, *, repetitions=1, search=False):
     """Serve one native tool proposal and then a terminal assistant message."""
     records = []
 
@@ -71,13 +71,19 @@ def provider(tool_name, nonce, *, repetitions=1):
 
         def do_POST(self):
             """Return a scripted tool call over the provider wire API."""
-            if self.path != '/v1/responses' or len(records) >= MAX_REQUESTS:
+            if (self.path != '/v1/responses'
+                    or len(records) >= MAX_REQUESTS + int(search)):
                 self.send_error(400, 'Unexpected fixture request')
                 return
             body = json.loads(
                 self.rfile.read(int(self.headers['Content-Length']))
             )
-            names = callable_names(body.get('tools', []))
+            discovery = [i for i in body.get('input', [])
+                         if i.get('type') in ('tool_search_output',
+                                              'additional_tools')]
+            tools = body.get('tools', []) + [
+                t for i in discovery for t in i.get('tools', [])]
+            names = callable_names(tools)
             matches = [
                 (ns, name)
                 for ns, name in names
@@ -89,18 +95,25 @@ def provider(tool_name, nonce, *, repetitions=1):
                     'functions': names,
                     'target_matches': matches,
                     'tools': body.get('tools', []),
-                    'discovery_items': [i for i in body.get('input', [])
-                                        if i.get('type') in (
-                                            'tool_search_output',
-                                            'additional_tools')],
+                    'discovery_items': discovery,
                 }
             )
-            if len(records) <= repetitions:
+            step = len(records) - int(search)
+            if search and len(records) == 1:
+                if matches or not any(t.get('type') == 'tool_search'
+                                      for t in tools):
+                    self.send_error(400, 'Native tool was not deferred')
+                    return
+                item = {'type': 'tool_search_call', 'id': 'search_fixture',
+                        'call_id': 'search_fixture', 'execution': 'client',
+                        'status': 'completed',
+                        'arguments': {'query': tool_name, 'limit': 1}}
+            elif step <= repetitions:
                 if len(matches) != 1:
                     self.send_error(400, 'Target tool not uniquely advertised')
                     return
                 namespace, name = matches[0]
-                suffix = '' if len(records) == 1 else '-repeat'
+                suffix = '' if step == 1 else '-repeat'
                 item = {
                     'type': 'function_call',
                     'id': 'fc_fixture' + suffix,

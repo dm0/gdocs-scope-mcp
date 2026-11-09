@@ -158,3 +158,34 @@ def test_report_rejects_execution_after_decline(modules):
     row['executions'].append({'nonce': 'should-not-run'})
     with pytest.raises(RuntimeError, match='invariant failed'):
         native.verify_case(row, spec)
+
+
+def test_search_replay_waits_for_runtime_loaded_schema(modules):
+    """The provider discovers a target instead of injecting its definition."""
+    provider, _native = modules
+    with provider.provider('probe_write', 'nonce', search=True) as (url, rows):
+        payload = {'input': [{'type': 'additional_tools', 'tools': [
+            {'type': 'tool_search', 'execution': 'client'},
+        ]}]}
+
+        def post():
+            request = Request(url + '/responses',
+                              data=json.dumps(payload).encode(),
+                              headers={'Content-Type': 'application/json'})
+            with urlopen(request, timeout=5) as response:
+                events = [json.loads(line[6:]) for line in response.read()
+                          .decode().splitlines() if line.startswith('data: ')]
+            return events[-1]['response']['output'][0]
+
+        assert post()['type'] == 'tool_search_call'
+        assert not rows[0]['target_matches']
+        payload['input'].append({'type': 'tool_search_output', 'tools': [
+            {'type': 'namespace', 'name': 'mcp__native_probe', 'tools': [
+                {'type': 'function', 'name': 'probe_write',
+                 'defer_loading': True},
+            ]},
+        ]})
+        call = post()
+        assert call['type'] == 'function_call'
+        assert call['namespace'] == 'mcp__native_probe'
+        assert post()['type'] == 'message'

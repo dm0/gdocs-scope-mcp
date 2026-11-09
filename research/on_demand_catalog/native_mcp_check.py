@@ -277,7 +277,7 @@ async def native_production(output):
 
 
 async def fixture_case(output, spec, mode, tool, decision, *, repetitions=1,
-                       model=None, catalog_path=None):
+                       model=None, catalog_path=None, search=False):
     """Drive the native executor with a deterministic tool proposal."""
     output.mkdir(parents=True)
     write_json(output / 'fixture.json', spec)
@@ -291,7 +291,7 @@ async def fixture_case(output, spec, mode, tool, decision, *, repetitions=1,
     }
     client = None
     try:
-        with provider(tool, nonce, repetitions=repetitions) as (
+        with provider(tool, nonce, repetitions=repetitions, search=search) as (
             endpoint, requests,
         ):
             report['provider_requests'] = requests
@@ -356,7 +356,7 @@ async def fixture_case(output, spec, mode, tool, decision, *, repetitions=1,
     return report
 
 
-def verify_case(result, spec, *, repetitions=1):
+def verify_case(result, spec, *, repetitions=1, search=False):
     """Reject lost approvals, premature execution or annotation changes."""
     read = result['tool'] == 'probe_read'
     approvals = 0 if read else repetitions
@@ -366,20 +366,44 @@ def verify_case(result, spec, *, repetitions=1):
             or not result['codex_reaped'] or not result['mcp_reaped']
             or len(result['approvals']) != approvals
             or len(result['executions']) != executions
-            or len(result['provider_requests']) != repetitions + 1):
+            or result.get('turn', {}).get('status', 'completed') != 'completed'
+            or len(result['provider_requests'])
+            != repetitions + 1 + int(search)):
         raise RuntimeError('Native approval or cleanup invariant failed')
     for name, definition in result['native_catalog']['tools'].items():
         if definition['annotations'] != spec[name]['annotations']:
             raise RuntimeError('Native fixture annotations changed')
+    if search:
+        requests = result['provider_requests']
+        loaded = [i for i in requests[1]['discovery_items']
+                  if i['type'] == 'tool_search_output'
+                  and i.get('call_id') == 'search_fixture']
+        if (requests[0]['target_matches'] or len(loaded) != 1
+                or loaded[0].get('status') != 'completed'
+                or len(requests[1]['target_matches']) != 1):
+            raise RuntimeError('Native deferred discovery was not verified')
     if not all(a.get('nonce_not_executed_before_response')
                for a in result['approvals']):
         raise RuntimeError('Pre-approval execution was not checked')
 
 
-async def run(output):
+async def run(output, *, deferred=False):
     """Characterize native transport and configured approval decisions."""
     output.mkdir(parents=True, exist_ok=True, mode=0o700)
     original = await native_production(output)
+    catalog_path = None
+    if deferred:
+        cache_path = Path.home() / '.codex/models_cache.json'
+        cache = json.loads(cache_path.read_text())
+        model = next(m for m in cache['models']
+                     if m['slug'] == 'gpt-6.1-sol')
+        # Retain the real discovery capability while disabling code-mode
+        # routing, which this native function-call characterization excludes.
+        model = {k: v for k, v in model.items() if k != 'tool_mode'}
+        catalog_path = output / 'models.json'
+        write_json(catalog_path, {'models': [model]})
+    options = {'search': deferred, 'catalog_path': catalog_path,
+               'model': 'gpt-6.1-sol' if deferred else None}
     spec = {
         name: {
             'source_tool': source,
@@ -402,8 +426,9 @@ async def run(output):
             mode,
             tool,
             decision,
+            **options,
         )
-        verify_case(result, spec)
+        verify_case(result, spec, search=deferred)
         results.append(result)
         print(
             json.dumps(
@@ -419,8 +444,8 @@ async def run(output):
         )
     repeated = await fixture_case(output / '8-writes-repeat-once', spec,
                                   'writes', 'probe_write', 'accept',
-                                  repetitions=2)
-    verify_case(repeated, spec, repetitions=2)
+                                  repetitions=2, **options)
+    verify_case(repeated, spec, repetitions=2, search=deferred)
     results.append(repeated)
     write_json(
         output / 'summary.json', {'cases': results, 'external_model_turns': 0}
@@ -431,7 +456,9 @@ def main():
     """Run native-MCP checks without external models or document access."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', required=True, type=Path)
-    asyncio.run(run(parser.parse_args().output))
+    parser.add_argument('--deferred', action='store_true')
+    args = parser.parse_args()
+    asyncio.run(run(args.output, deferred=args.deferred))
 
 
 if __name__ == '__main__':
