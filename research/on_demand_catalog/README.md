@@ -77,6 +77,29 @@ unchanged. Read-only reanalysis uses `analyze_canaries.py --output PRIVATE_ARTIF
 
 ## Next stages
 
+### Native real-model loading comparison
+
+The separately authorized native comparison uses ten repeats per model/arm,
+sixty reservations total, exact approved models at medium effort. See
+[the frozen protocol](NATIVE_MODEL_PROTOCOL.md). The native runner keeps the
+full product catalog and a server-side execution guard; it injects no dynamic
+functions. Its eager/deferred profiles differ only in search capability.
+Raw Responses events retain actual exposure and search representations.
+Preparation uses loopback replay and consumes no real-model sessions.
+
+```bash
+uv run --locked python research/on_demand_catalog/native_model_study.py prepare --output NEW_PRIVATE_ARTIFACTS
+uv run --locked python research/on_demand_catalog/native_model_study.py run --output NEW_PRIVATE_ARTIFACTS --authorized-sessions 60
+uv run --locked python research/on_demand_catalog/analyze_native_models.py --output NEW_PRIVATE_ARTIFACTS
+```
+
+Run analysis after the active batch drains. Reservations, including failures,
+consume the cap and cannot be replaced automatically. Repeated runs resume
+only unstarted jobs. Keep generated traces, measurements and execution reports
+outside the source checkout; they are not product documentation or releases.
+
+### Broader evaluation
+
 Joint native discovery/approval plumbing passed the local replay matrix.
 Choose the implementation and core before freezing model-study scenarios;
 real-model discovery behavior still requires evaluation. Keep all

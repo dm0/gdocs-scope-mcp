@@ -53,3 +53,23 @@ def test_native_success_requires_tool_result_and_final_answer(analysis):
     assert summary['search_calls'] == 1
     row['server_calls'].append({'allowed': False})
     assert not analysis.summarize(row, events)['success']
+
+
+def test_unsupported_search_is_distinct_from_native_search(analysis):
+    """An unsupported function representation is an attempt, not discovery."""
+    row = {'id': 'case', 'model': 'gpt-6-luna', 'arm': 'deferred',
+           'repeat': 0, 'status': 'completed', 'server_calls': [],
+           'result': {'messages': ['#0000FF']}}
+    items = [
+        {'type': 'additional_tools', 'id': 'initial', 'tools': []},
+        {'type': 'function_call', 'id': 'bad-search',
+         'namespace': 'tool_search', 'name': 'tool_search_tool'},
+    ]
+    events = [{'method': 'rawResponseItem/completed', 'params': {'item': i}}
+              for i in items]
+    summary = analysis.summarize(row, events)
+    assert summary['search_calls'] == 1
+    assert summary['unsupported_search_calls'] == 1
+    assert summary['native_search_calls'] == 0
+    assert not summary['exposure_verified']
+    assert not summary['success']
