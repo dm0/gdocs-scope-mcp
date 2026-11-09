@@ -181,7 +181,7 @@ async def connection(directory, cmd, decision='decline'):
             write_json(directory / 'events.json', client.events)
 
 
-async def start(client, model_provider='openai'):
+async def start(client, model_provider='openai', model=None):
     """Create an ephemeral native-MCP thread with no dynamic tools."""
     await client.request(
         'initialize',
@@ -197,7 +197,7 @@ async def start(client, model_provider='openai'):
     started = await client.request(
         'thread/start',
         {
-            'model': (
+            'model': model or (
                 'native-fixture'
                 if model_provider == 'native_fixture'
                 else 'gpt-6.1-sol'
@@ -276,7 +276,8 @@ async def native_production(output):
     return expected
 
 
-async def fixture_case(output, spec, mode, tool, decision, *, repetitions=1):
+async def fixture_case(output, spec, mode, tool, decision, *, repetitions=1,
+                       model=None, catalog_path=None):
     """Drive the native executor with a deterministic tool proposal."""
     output.mkdir(parents=True)
     write_json(output / 'fixture.json', spec)
@@ -303,8 +304,10 @@ async def fixture_case(output, spec, mode, tool, decision, *, repetitions=1):
                 mode,
                 endpoint,
             )
+            if catalog_path:
+                cmd.extend(override('model_catalog_json', str(catalog_path)))
             async with connection(output, cmd, decision) as client:
-                started = await start(client, 'native_fixture')
+                started = await start(client, 'native_fixture', model)
                 report['model_provider'] = started['modelProvider']
                 thread = started['thread']['id']
                 report['native_catalog'] = await catalog(client, thread)

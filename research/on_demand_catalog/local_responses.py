@@ -88,6 +88,11 @@ def provider(tool_name, nonce, *, repetitions=1):
                     'path': self.path,
                     'functions': names,
                     'target_matches': matches,
+                    'tools': body.get('tools', []),
+                    'discovery_items': [i for i in body.get('input', [])
+                                        if i.get('type') in (
+                                            'tool_search_output',
+                                            'additional_tools')],
                 }
             )
             if len(records) <= repetitions:
