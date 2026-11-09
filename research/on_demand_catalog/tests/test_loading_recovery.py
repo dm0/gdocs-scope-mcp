@@ -14,7 +14,8 @@ def recovery(monkeypatch):
 
 
 @pytest.mark.parametrize('profile', [
-    'function-lite', 'function-full', 'code-native', 'code-local',
+    'function-lite', 'function-full', 'model-default',
+    'code-native', 'code-local',
 ])
 def test_profiles_change_only_loading_between_arms(recovery, profile):
     """Both arms preserve the same routing, reasoning and backend metadata."""
@@ -26,7 +27,7 @@ def test_profiles_change_only_loading_between_arms(recovery, profile):
     assert deferred.pop('supports_search_tool') is True
     assert eager == deferred
     assert models[0]['supports_search_tool'] is True
-    if profile.startswith('code-'):
+    if profile.startswith('code-') or profile == 'model-default':
         assert eager['tool_mode'] == 'code_mode_only'
     else:
         assert 'tool_mode' not in eager

@@ -14,7 +14,8 @@ from native_model_study import PROMPT, reject_dynamic, start, verify_snapshot
 from probe_client import MODELS, write_json
 
 CAP = 600
-PROFILES = ('function-lite', 'function-full', 'code-native', 'code-local')
+PROFILES = ('function-lite', 'function-full', 'model-default',
+            'code-native', 'code-local')
 
 
 def metadata(models, profile, arm):
@@ -40,7 +41,7 @@ def native_command(directory, profile, endpoint=None):
          'GDOCS_SCOPE_MCP_ACCESS_MODE': 'full_drive'}, 'writes', endpoint)
     result.extend(override('model_catalog_json',
                            str((directory / 'models.json').resolve())))
-    if profile.startswith('code-'):
+    if profile.startswith('code-') or profile == 'model-default':
         # The original runtime intentionally disables these features. Remove
         # only those pairs so the model's native code-mode profile can apply.
         result = [part for index, part in enumerate(result)
@@ -49,6 +50,7 @@ def native_command(directory, profile, endpoint=None):
                                                     'code_mode_only'))
                   and not (index > 0 and result[index - 1] == '--disable'
                            and part in ('code_mode', 'code_mode_only'))]
+    if profile.startswith('code-'):
         for name, value in {'code_mode': True, 'code_mode_only': True,
                             'code_mode_tool_search': profile == 'code-local'
                             }.items():
