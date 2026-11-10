@@ -2,6 +2,15 @@
 
 Issue: [#60](https://github.com/dm0/gdocs-scope-mcp/issues/60).
 Baseline: local main merge `6c42a4e`, toolset v2, full static catalog.
+
+Final decision (2026-11-10): close the server-side catalog reorganization as
+not planned and retain the full static MCP catalog. Ordinary Codex model
+profiles already provide client-side deferred exposure. See #60 for the
+research conclusions and limitations. The launchers, fixtures and isolated
+tests remain available for reproduction; production MCP code is unchanged.
+The experiment stages and original broader study plan below are historical,
+not pending implementation work.
+
 This study is independent of the completed tool-consolidation study. The user
 authorized six compatibility canaries and all six completed. See
 [canary results](CANARY_RESULTS.md). No pilot/main budget is authorized and no
@@ -75,7 +84,7 @@ observable search does not alone establish the desired exposure mechanism.
 No adoption or default change follows from canaries. Full static v2 remains
 unchanged. Read-only reanalysis uses `analyze_canaries.py --output PRIVATE_ARTIFACTS`.
 
-## Next stages
+## Historical experiment stages
 
 ### Native real-model loading comparison
 
@@ -127,7 +136,7 @@ intervals, sample variances and complete-turn usage including discovery.
 Retain earlier cohorts separately when correcting a prompt ambiguity or
 changing a routing profile; never pool them with the frozen measurement cohort.
 
-### Broader evaluation
+### Original broader evaluation plan (not pursued)
 
 Joint native discovery/approval plumbing passed the local replay matrix.
 Choose the implementation and core before freezing model-study scenarios;
