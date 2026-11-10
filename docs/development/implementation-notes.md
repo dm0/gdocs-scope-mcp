@@ -24,12 +24,15 @@ arguments, examples and supported behavior, start with the [document tools](../t
 | [Table discovery](../table-discovery.md) | Selected-tab traversal, physical/logical geometry, pagination and bounds | [Tests and reproduction](../table-discovery.md#validation) |
 | [Cell merge/unmerge](table-cell-merging.md) | Logical heads, complete rectangles, content rules and safe reference readback | [Tests and reproduction](table-cell-merging.md#verification) |
 
-## Planned experiments
+## Tool-interface research
 
-[Tool interface evaluation](../../research/tool_consolidation/EVALUATION_PROTOCOL.md) defines separate
-post-implementation studies for tool consolidation and on-demand catalogs,
-using the current, weaker and stronger models of one provider and generation.
-The design is planned work, not a completed evaluation.
+[Tool interface evaluation](../../research/tool_consolidation/EVALUATION_PROTOCOL.md)
+records the original study designs for tool consolidation and on-demand
+catalogs. [#60](https://github.com/dm0/gdocs-scope-mcp/issues/60) concluded with
+a decision to retain the full static MCP catalog and use Codex's existing
+client-side deferred exposure. Server-side reorganization and its proposed
+broad post-implementation study are not planned. Reproduction tools remain in
+[the named research directory](../../research/on_demand_catalog/README.md).
 
 ## API research
 
