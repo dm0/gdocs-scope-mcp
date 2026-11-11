@@ -11,6 +11,12 @@ import zipfile
 from email.parser import BytesParser
 from pathlib import Path
 
+TOOLSET_SPECIFIC_TOOLS = {
+    'v1': {'docs_append', 'docs_insert_before', 'docs_insert_after',
+           'docs_resolve_comment', 'docs_reopen_comment'},
+    'v2': {'docs_insert', 'docs_comment_status'},
+}
+
 
 def run(*command, env=None):
     """Run a bounded CLI command and retain diagnostics on failure."""
@@ -55,7 +61,38 @@ def check_contents(wheel, sdist):
     return package_version
 
 
-def check_installation(artifact, directory, constraints, tools, env, *,
+def run_mcp(client, server, action, *arguments, env):
+    """Pass application settings explicitly to the CLI's child server."""
+    with tempfile.TemporaryDirectory(prefix='gdocs-mcp-config-') as temporary:
+        config = Path(temporary) / 'mcp.json'
+        config.write_text(json.dumps({'mcpServers': {'artifact': {
+            'command': server,
+            'env': {key: value for key, value in env.items()
+                    if key.startswith('GDOCS_SCOPE_MCP_')},
+        }}}))
+        return run(client, action, str(config), *arguments, env=env)
+
+
+def discover_catalogs(client, server, env):
+    """Discover both explicit toolsets and reject missing or mixed tools."""
+    catalogs = {}
+    for version, required in TOOLSET_SPECIFIC_TOOLS.items():
+        selected_env = {**env, 'GDOCS_SCOPE_MCP_TOOLSET_VERSION': version}
+        tools = json.loads(run_mcp(client, server, 'list', '--json',
+                                   env=selected_env))['tools']
+        names = {tool['name'] for tool in tools}
+        missing = ({'server_info', 'docs_read'} | required) - names
+        unexpected = {name for other, tools in TOOLSET_SPECIFIC_TOOLS.items()
+                      if other != version for name in tools} & names
+        assert not missing and not unexpected, (
+            f'{version}: missing={sorted(missing)}, '
+            f'unexpected={sorted(unexpected)}'
+        )
+        catalogs[version] = tools
+    return catalogs
+
+
+def check_installation(artifact, directory, constraints, catalogs, env, *,
                        package_version):
     """Install one artifact and discover tools through its own STDIO server."""
     environment = directory / artifact.suffix.removeprefix('.')
@@ -66,17 +103,21 @@ def check_installation(artifact, directory, constraints, tools, env, *,
     run(executable(environment, 'gdocs-scope-mcp-auth'), '--help', env=env)
     client = executable(environment, 'fastmcp')
     server = executable(environment, 'gdocs-scope-mcp')
-    identity = json.loads(run(client, 'call', '--command', server, '--target',
-                              'server_info', '--json', env=env))
+    identity = json.loads(run_mcp(client, server, 'call', '--target',
+                                  'server_info', '--json', env=env))
     assert not identity['is_error'], identity
     info = identity['structured_content']
     assert Path(info['package_path']).resolve().is_relative_to(
         environment.resolve()), info['package_path']
     assert info['package_version'] == package_version
-    discovered = json.loads(run(client, 'list', '--command', server,
-                                '--json', env=env))['tools']
-    assert discovered == tools, 'Installed catalog differs from source.'
-    print(f'{artifact.name}: isolated CLI/auth and {len(tools)} MCP tools OK.')
+    discovered = discover_catalogs(client, server, env)
+    for version, tools in catalogs.items():
+        assert discovered[version] == tools, (
+            f'{artifact.name}: installed {version} catalog '
+            'differs from source.'
+        )
+        print(f'{artifact.name}: {version} catalog ({len(tools)} tools) OK.')
+    print(f'{artifact.name}: isolated CLI/auth and identity OK.')
 
 
 def main():
@@ -94,17 +135,18 @@ def main():
                if not key.startswith(('GOOGLE_DOCS_', 'GOOGLE_DRIVE_',
                                       'GDOCS_SCOPE_MCP_', 'GOG_'))}
         env['GDOCS_SCOPE_MCP_TOKEN'] = str(directory / 'missing-token.json')
+        config = directory / 'config.json'
+        config.write_text('{}\n')
+        env['GDOCS_SCOPE_MCP_CONFIG'] = str(config)
         source_scripts = Path(sys.executable).parent
-        tools = json.loads(run(str(source_scripts / 'fastmcp'), 'list',
-            '--command', str(source_scripts / 'gdocs-scope-mcp'),
-            '--json', env=env))['tools']
-        assert {'server_info', 'docs_read', 'docs_append'} <= {
-            tool['name'] for tool in tools}
+        catalogs = discover_catalogs(str(source_scripts / 'fastmcp'),
+                                     str(source_scripts / 'gdocs-scope-mcp'),
+                                     env)
         constraints = directory / 'constraints.txt'
         run('uv', 'export', '--frozen', '--no-dev', '--no-emit-project',
             '--no-hashes', '--output-file', str(constraints))
         for artifact in (wheels[0], sdists[0]):
-            check_installation(artifact, directory, constraints, tools, env,
+            check_installation(artifact, directory, constraints, catalogs, env,
                                package_version=package_version)
 
 
