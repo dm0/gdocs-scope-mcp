@@ -2,7 +2,9 @@
 
 [README](../README.md) · [Getting started](getting-started.md) · [Result contracts](protocol.md)
 
-An optional JSON config sets the OAuth client, editing and formatting. By default, the
+## Configuration file
+
+An optional JSON config sets authorization, tools, editing, caching and formatting. By default, the
 server reads `~/.config/gdocs-scope-mcp/config.json`, or
 `$XDG_CONFIG_HOME/gdocs-scope-mcp/config.json` when `XDG_CONFIG_HOME` is set.
 Select another file with `GDOCS_SCOPE_MCP_CONFIG=/absolute/path/config.json`.
@@ -42,47 +44,170 @@ An absent default file is allowed; an explicitly selected file must exist.
 }
 ```
 
-All fields are optional; the example shows the built-in defaults.
-`client_id` overrides the bundled Desktop OAuth client for new authorization;
-`null` selects the bundled client. CLI options and OAuth client environment
-variables take precedence. Existing token files retain their originating
-client ID regardless of this setting.
-`write_revision_mode` selects `required` (validated retries, default) or
-`target` (Google merges concurrent changes, including overlaps). Target mode
-does not provide our local unchanged-target guarantee and never retries a
-rejected/expired target revision. `expected_revision_id` always forces strict
-required mode without retries. Multi-stage table insertion always retains
-required revisions to avoid using stale cursors after a transformed stage.
-`docs_table_patch`, `docs_table_format` and `docs_table_structure` also always
-use strict required revisions, independently of this general setting.
-See [concurrent edit policies and limitations](concurrent-edits.md).
+All fields are optional; the example shows the built-in defaults. Unknown JSON
+fields and invalid values fail validation rather than silently falling back to
+defaults. The reference below groups settings by purpose; the
+[environment variable table](#environment-overrides) maps each JSON field to its
+environment override.
 
-`table_snapshot_ttl_seconds` sets the lifetime of selective table expectations,
-from 1 to 604800 seconds (default: 86400). Table position refs have no time expiry.
+## Settings reference
 
-The font applies to inline code and blocks; `inline_code_color` applies only
-to inline code.
-Set `code_block_highlighting` to `false` to keep language-labelled blocks plain
-monospace. `code_block_style` selects a Pygments theme such as `default`,
-`friendly` or `monokai`; an unknown theme fails startup validation. Themes can
-be previewed in the [Pygments gallery](https://pygments.org/styles/).
-`code_block_line_spacing` sets a positive finite line-height multiplier, default
-`1.15`: `1.0` is single spacing, `1.5` is one-and-a-half spacing. It applies to
-all code blocks,
-including unlabelled/unknown languages and blocks with highlighting disabled;
-inline code and surrounding prose are unaffected. Google Docs stores this as
-a percentage (`1.15` becomes `115`). Explicit JSON/environment values still
-override the default. The reading heuristic's `read_code_block_line_spacing`
-also defaults to `1.15`; configure it separately to recognize unmarked blocks
-with other spacing (for example `1.0` for older single-spaced blocks).
-Named-range code metadata does not depend on line spacing.
-`code_block_theme_background` controls both
-the theme's base background and token-specific backgrounds; it takes effect only
-when syntax highlighting is active for a recognised language.
-Font names must be nonempty, and colors must use six-digit RGB hex syntax
-(`#RRGGBB`). Choose a font supported by Google Docs; the server validates the
-name's syntax but does not query font availability. Unknown JSON fields and
-invalid values fail validation, rather than silently falling back to defaults.
+### Authorization and tool catalog
+
+- **`client_id`** — Selects the Desktop OAuth client for new authorization.
+  Default: `null`, which uses the bundled client. CLI options and OAuth client
+  environment variables take precedence. Existing token files retain their
+  originating client ID regardless of this setting. See
+  [auth environment variables](#auth-environment-variables) for client secrets
+  and credential precedence.
+- **`access_mode`** — Controls the requested Google access scope and available
+  file-selection tools. Default: `"full_drive"`, for broad Drive access.
+  `"selected_files"` uses `drive.file` for files granted to or created by the
+  application. Changing this setting requires a server restart and may require
+  authorization; it does not revoke existing Google grants. See
+  [document access modes](#document-access-modes).
+- **`toolset_version`** — Selects the MCP tool catalog at startup. Default:
+  `"v2"`, which exposes the consolidated `docs_insert` and
+  `docs_comment_status` tools. Use `"v1"` for the legacy tool names. Restart the
+  server to change the catalog.
+
+### Concurrent editing and table expectations
+
+- **`write_revision_mode`** — Selects how writes handle concurrent document
+  changes. Default: `"required"`, with validated retries. `"target"` lets
+  Google merge concurrent changes, including overlaps; it does not provide our
+  local unchanged-target guarantee and never retries a rejected or expired
+  target revision. An explicit `expected_revision_id` always forces strict
+  required mode without retries. Multi-stage table insertion always retains
+  required revisions to avoid stale cursors after a transformed stage.
+  `docs_table_patch`, `docs_table_format` and `docs_table_structure` also always
+  use strict required revisions, independently of this setting. See
+  [concurrent edit policies and limitations](concurrent-edits.md).
+- **`table_snapshot_ttl_seconds`** — Sets how long selective table expectations
+  remain valid. Default: `86400` seconds (24 hours). Accepts integers from `1`
+  to `604800` seconds (7 days). Table position refs have no time expiry.
+
+### Document snapshot cache settings
+
+These settings control reuse of native document downloads. See
+[document snapshot cache](#document-snapshot-cache) for revision checks,
+invalidation, privacy and performance details.
+
+- **`document_cache_enabled`** — Enables document snapshot caching when `true`.
+  Default: `false`, which bypasses both storage backends.
+- **`document_cache_storage`** — Selects where enabled caching stores snapshots.
+  Default: `"disk"`, shared across local MCP processes using the same cache
+  directory. `"memory"` keeps snapshots only within the current process.
+- **`document_cache_directory`** — Sets the disk cache directory. Default:
+  `null`, which uses the platform user cache directory, such as
+  `~/.cache/gdocs-scope-mcp` on Linux (respecting `XDG_CACHE_HOME`). Applies only
+  to disk storage. Use a local filesystem supporting native file locks.
+- **`document_cache_database_max_bytes`** — Caps the main SQLite database file,
+  including database pages. Default: `67108864` bytes (64 MiB); minimum:
+  `1048576` bytes (1 MiB). Applies only to disk storage and is rounded down to a
+  4096-byte boundary. Small lock files and transient rollback journals are
+  outside this limit; reducing it may discard snapshots.
+- **`document_cache_ttl_seconds`** — Sets how long a cached snapshot can be
+  retained before it expires and needs a full download. Default: `300` seconds
+  (5 minutes). Accepts integers from `1` to `86399`. An unexpired entry still
+  requires a Google revision check before reuse.
+- **`document_cache_max_entries`** — Caps the number of cached snapshots.
+  Default: `128`. Must be a positive integer; least recently used entries are
+  evicted when necessary.
+- **`document_cache_max_bytes`** — Caps the total serialized snapshot payloads.
+  Default: `33554432` bytes (32 MiB). Must be a positive integer. Oversized
+  documents are returned without being cached; least recently used entries are
+  evicted when necessary. This is separate from the disk database file limit.
+
+### Code insertion and formatting
+
+- **`code_font_family`** — Sets the font used when inserting inline code and
+  code blocks. Default: `"Roboto Mono"`. Also supplies the default font for
+  code recognition when the corresponding read-font list is `null`. The name
+  must be nonempty; choose a font supported by Google Docs, since the server
+  validates syntax without querying font availability.
+- **`inline_code_color`** — Sets the foreground color used when inserting
+  inline code. Default: `"#188038"`. Does not set code-block colors. Also
+  supplies the default inline-code recognition color when
+  `read_inline_code_colors` is `null`. Use six-digit RGB hex syntax (`#RRGGBB`).
+- **`code_block_highlighting`** — Enables syntax highlighting for code blocks
+  with a recognized language label. Default: `true`. Set to `false` to keep
+  language-labelled blocks plain monospace. A theme choice alone does not
+  enable highlighting or identify a missing or unknown language.
+- **`code_block_style`** — Selects the Pygments syntax-highlighting theme.
+  Default: `"default"`; examples include `"friendly"` and `"monokai"`. An
+  unknown theme fails startup validation. Preview themes in the
+  [Pygments gallery](https://pygments.org/styles/). Can be overridden
+  [per insertion call](#per-call-formatting-overrides).
+- **`code_block_line_spacing`** — Sets the line-height multiplier for all
+  inserted code blocks, including blocks with unknown languages or highlighting
+  disabled. Default: `1.15`; `1.0` is single spacing and `1.5` is one-and-a-half
+  spacing. Must be positive and finite. Google Docs stores it as a percentage
+  (`1.15` becomes `115`). Inline code and surrounding prose are unaffected.
+  Configure reading spacing separately with `read_code_block_line_spacing`.
+- **`code_block_theme_background`** — Applies the theme's base background and
+  token-specific backgrounds when `true`. Default: `false`. Takes effect only
+  when syntax highlighting is active for a recognized language. Can be
+  overridden [per insertion call](#per-call-formatting-overrides).
+- **`code_block_named_ranges`** — Writes invisible named-range metadata for
+  inserted code blocks and uses that metadata when reading them back. Default:
+  `true`. The metadata preserves block boundaries and language labels without
+  depending on line spacing. Set to `false` to disable both writing and reading
+  these markers; native-block recognition and formatting heuristics have their
+  own controls below.
+
+### Reading inline code
+
+These settings recognize formatted text as inline code in read results; they
+do not change the document's formatting.
+
+- **`read_inline_code`** — Enables recognition of inline code using the font
+  and color rules below. Default: `true`. Set to `false` to disable this
+  recognition.
+- **`read_inline_code_fonts`** — Lists font names accepted for inline-code
+  recognition, matched case-insensitively. Default: `null`, which uses
+  `code_font_family`. An explicit list replaces that fallback; names must be
+  nonempty.
+- **`read_inline_code_colors`** — Lists foreground colors accepted for
+  inline-code recognition. Default: `null`, which uses `inline_code_color`.
+  An explicit list replaces that fallback. Use six-digit RGB hex strings
+  (`#RRGGBB`); hex letter case does not affect matching.
+- **`read_inline_code_match`** — Selects which formatting must match to
+  recognize inline code. Default: `"both"`, requiring both an accepted font
+  and an accepted color. `"font"` checks only the font; `"color"` checks only
+  the foreground color.
+
+### Reading code blocks
+
+Named-range metadata, native Google Docs code-block recognition and formatting
+heuristics are separate recognition paths. Heuristic thresholds below do not
+restrict blocks recovered from named-range metadata or native delimiters.
+
+- **`read_code_block_heuristic`** — Enables recognition of unmarked code blocks
+  from their font, paragraph line spacing and optional background. Default:
+  `true`. Set to `false` to disable formatting-based guesses while retaining
+  independently enabled named-range and native-block recognition.
+- **`read_native_code_blocks`** — Enables recognition of Google Docs UI code
+  blocks from observed native delimiters and accepted code fonts. Default:
+  `true`. Set to `false` to leave those blocks as ordinary text in read results.
+  Recognition relies on observed UI formatting, not a documented API contract.
+- **`read_code_block_fonts`** — Lists font names accepted by both native-block
+  recognition and the formatting heuristic, matched case-insensitively.
+  Default: `null`, which uses `code_font_family`. An explicit list replaces
+  that fallback; names must be nonempty.
+- **`read_code_block_line_spacing`** — Sets the paragraph line-height multiplier
+  required by the formatting heuristic. Default: `1.15`. Must be positive and
+  finite. Set to `1.0`, for example, to recognize older single-spaced blocks.
+  This is independent of insertion spacing and does not affect named-range
+  metadata recognition.
+- **`read_code_block_require_background`** — Requires a paragraph background
+  color for formatting-based block recognition when `true`. Default: `false`,
+  so matching font and line spacing can suffice without a background.
+- **`read_code_block_min_lines`** — Sets the minimum number of consecutive
+  matching paragraphs for formatting-based block recognition after trimming
+  blank edges. Default: `2`. Must be an integer of at least `1`.
+
+## Environment overrides
 
 Environment variables override individual file settings:
 
@@ -130,6 +255,8 @@ Token paths, client secrets, Drive and logging environment variables retain
 their separate handling. Our config does not
 automatically load `.env` files.
 
+## Per-call formatting overrides
+
 The default `docs_insert` and `docs_insert_at_heading` tools also accept optional
 agent-facing `code_block_style` and `code_block_theme_background` arguments.
 The `code_block_style` input schema advertises an `enum` of available themes,
@@ -154,6 +281,8 @@ with `rich=False`. Highlighting enablement, font, inline color and line spacing
 remain server settings; choosing a theme does not enable disabled highlighting
 or guess a missing/unknown language.
 
+### Passing settings to an isolated server
+
 Set environment overrides in the MCP client's server `env` configuration.
 For isolated FastMCP CLI tests, pass them explicitly to the child command:
 
@@ -170,10 +299,10 @@ the STDIO server; FastMCP's subprocess environment is filtered.
 
 | Variable | Description |
 |----------|-------------|
-| `GDOCS_SCOPE_MCP_TOKEN` | Path to token file (preferred for standalone use) |
-| `GDOCS_SCOPE_MCP_CLIENT_ID` | Optional OAuth client ID override |
-| `GDOCS_SCOPE_MCP_CLIENT_SECRET` | Optional OAuth client secret override |
-| `GOG_KEYRING_PASSWORD` | Auto-export from gog CLI (for personal/OpenClaw use) |
+| **`GDOCS_SCOPE_MCP_TOKEN`** | Selects the token file to read and the destination for new authorization. Overrides default token paths; preferred for standalone use. |
+| **`GDOCS_SCOPE_MCP_CLIENT_ID`** | Overrides JSON `client_id` for new authorization. Existing token-stored client credentials take precedence. |
+| **`GDOCS_SCOPE_MCP_CLIENT_SECRET`** | Supplies the matching secret for an explicitly selected custom client. Public-client tokens do not use it. |
+| **`GOG_KEYRING_PASSWORD`** | Unlocks the gog CLI keyring for automatic token export in personal/OpenClaw setups. The gog fallback is available only in `full_drive` mode. |
 
 In `full_drive` mode, token resolution checks `GDOCS_SCOPE_MCP_TOKEN`, then
 `$XDG_CONFIG_HOME/gdocs-scope-mcp/token.json`
@@ -290,8 +419,8 @@ server settings and must remain unchanged while following a pagination token:
 
 | Variable | Default | Effect |
 | --- | --- | --- |
-| `GDOCS_SCOPE_MCP_USE_DRIVE` | `false` | Set to `true` to include shared-drive items |
-| `GDOCS_SCOPE_MCP_DRIVE_ID` | Unset | Select one shared-drive corpus and enable shared-drive support |
+| **`GDOCS_SCOPE_MCP_USE_DRIVE`** | `false` | Set to `true` to include shared-drive items |
+| **`GDOCS_SCOPE_MCP_DRIVE_ID`** | Unset | Select one shared-drive corpus and enable shared-drive support |
 
 `USE_DRIVE` accepts `true` or `false` case-insensitively; other nonempty values
 fail before authentication. A nonempty `DRIVE_ID` enables shared-drive support
@@ -376,13 +505,21 @@ these timings. See the [Google Docs revision contract](https://developers.google
 
 ## Logging
 
-Set `GDOCS_SCOPE_MCP_LOG_LEVEL` to `DEBUG`, `INFO` (default), `WARNING`, `ERROR` or `CRITICAL`. Restart after changing it. See [diagnostics and logging](development.md#server-diagnostics-and-logging).
+- **`GDOCS_SCOPE_MCP_LOG_LEVEL`** — Controls application log verbosity. Accepts
+  `DEBUG`, `INFO` (default), `WARNING`, `ERROR` or `CRITICAL`, case-insensitively.
+  Surrounding whitespace is ignored; empty or unknown values fail. Restart
+  after changing it. See
+  [diagnostics and logging](development.md#server-diagnostics-and-logging).
 
 ## Live-test target
 
-`GDOCS_SCOPE_MCP_LIVE_TEST_FOLDER` enables live tests and selects the folder for
-uniquely named, per-test disposable documents. Without it, live tests skip.
-`GDOCS_SCOPE_MCP_LIVE_KEEP_ON_FAILURE=1` retains documents after test failures;
-otherwise the fixture moves them to trash. These are test-run settings, not
-MCP tool arguments or ordinary server settings.
+These are test-run settings, not MCP tool arguments or ordinary server settings.
+
+- **`GDOCS_SCOPE_MCP_LIVE_TEST_FOLDER`** — Enables live tests and selects the
+  folder for uniquely named, per-test disposable documents. Unset by default;
+  without it, live tests skip.
+- **`GDOCS_SCOPE_MCP_LIVE_KEEP_ON_FAILURE`** — Set to `1` to retain disposable
+  test documents after failures for inspection. Otherwise the fixture moves
+  them to trash.
+
 See [live verification](development.md#live-verification).
