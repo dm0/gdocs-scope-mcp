@@ -39,6 +39,12 @@ The Ubuntu 24.04 matrix covers every stable minor version from Python 3.10
 Each job installs runtime and development dependencies from
 `uv.lock`, runs the complete offline suite including architecture/MCP contract
 checks, builds wheel and sdist, and verifies isolated installations of both.
+The artifact helper explicitly discovers both static catalogs, `v1` and `v2`,
+from source and from each installation. It checks the required and excluded
+tool names for each version and compares each installed catalog with source.
+Temporary MCP configurations pass the selected toolset, an empty application
+config, and a missing token path directly to each child server, isolating the
+checks from user settings and the CLI's filtered environment inheritance.
 Checkout fetches full history and tags for setuptools-scm version discovery.
 Third-party actions are pinned to full commit SHAs, uv to 0.12.18, and Ruff
 to 0.17.3. Update pins deliberately and repeat the commands below.

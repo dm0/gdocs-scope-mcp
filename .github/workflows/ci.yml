@@ -52,5 +52,5 @@ jobs:
         run: uv run --locked pytest -q -m "not live" --strict-markers --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,::1
       - name: Build wheel and source distribution
         run: uv build
-      - name: Verify artifact contents and isolated installations
+      - name: Verify artifacts and isolated v1/v2 catalogs
         run: uv run --locked python .github/scripts/check_artifacts.py dist
